@@ -14,14 +14,16 @@ package node
 //     those role names, backed by the full-pipeline role handlers (fast.Wrappers
 //     is the identity delegation map that documents this).
 //
-// Tags: the Go port registers under a distinct identity from the Python node
-// (swe-planner-go / swe-fast-go) so both stacks can run against one control
-// plane. Role reasoners carry ["swe-planner-go"] on BOTH nodes — mirroring the
-// Python structure where they are registered through the swe-planner-tagged
-// AgentRouter, but grouped under the Go node's -go identity. The four fast-node
-// reasoners carry ["swe-fast-go"] (Python: fast_router tags=["swe-fast"]). The
-// five orchestrators carry ["swe-planner-go"] to group them with the node in the
-// control-plane UI (design §8).
+// Tags match the Python node's exactly, because this registers under the same
+// identity: a caller's trigger does not change when the implementation does.
+// Role reasoners carry ["swe-planner"] on BOTH nodes — mirroring the Python
+// structure where they are registered through the swe-planner-tagged
+// AgentRouter. The four fast-node reasoners carry ["swe-fast"] (Python:
+// fast_router tags=["swe-fast"]). The five orchestrators carry ["swe-planner"]
+// to group them with the node in the control-plane UI (design §8).
+//
+// Running this alongside the Python node against one control plane therefore
+// needs an explicit NODE_ID on one of them; docker-compose.go.yml does that.
 
 import (
 	"context"
@@ -39,11 +41,12 @@ import (
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fast"
 	"github.com/Agent-Field/SWE-AF/go/internal/issue"
+	"github.com/Agent-Field/SWE-AF/go/internal/pro"
 )
 
 const (
-	tagPlanner = "swe-planner-go"
-	tagFast    = "swe-fast-go"
+	tagPlanner = "swe-planner"
+	tagFast    = "swe-fast"
 )
 
 // RegisterPlanner registers the full swe-planner surface: 25 role reasoners +
@@ -52,6 +55,9 @@ func (n *Node) RegisterPlanner() {
 	n.registerRoles()
 	n.registerOrchestrators()
 	n.registerIssueReasoner()
+	if pro.Available() {
+		n.registerProReasoners()
+	}
 }
 
 // RegisterFast registers the swe-fast surface: the same 25 role reasoners + the
@@ -70,7 +76,7 @@ func (n *Node) RegisterFast() {
 
 // registerRoles wires the 25 execution/planning role reasoners, each backed by
 // its package handler and threaded with the Deps built from the agent. All are
-// tagged ["swe-planner-go"] (Python groups them under the swe-planner router).
+// tagged ["swe-planner"] (Python groups them under the swe-planner router).
 func (n *Node) registerRoles() {
 	tag := agent.WithReasonerTags(tagPlanner)
 
@@ -129,6 +135,16 @@ func (n *Node) registerOrchestrators() {
 		AgentFieldServer: n.AgentFieldServer,
 		CIGate:           orch.RunCIGate,
 		ApprovalGate:     orch.PlanApprovalGate,
+	}
+	// Engine default routing (seamless path): with the flag truthy AND the
+	// binary present, builds and execute calls that name no execute_fn_target
+	// route per-issue coding through pro_execute on this node. Callers that pass
+	// a target keep full control. Flag-on with a missing binary degrades to the
+	// classic loop
+	// (pro.Start logs the warning) instead of routing to a node that never
+	// joined.
+	if pro.Available() {
+		deps.DefaultExecuteFnTarget = n.NodeID + ".pro_execute"
 	}
 
 	handlers := orch.Handlers() // {"build": Build}
@@ -240,6 +256,35 @@ func (n *Node) registerIssueReasoner() {
 }
 
 // ---------------------------------------------------------------------------
+// Pro-engine surface (SWE_PRO_ENGINE-gated, swe-planner only)
+// ---------------------------------------------------------------------------
+
+// registerProReasoners wires the pro-engine adapter. Called only when
+// pro.Available(), so the classic surface — and the parity test asserting it —
+// is unchanged whenever SWE_PRO_ENGINE is falsy or the binary is missing.
+func (n *Node) registerProReasoners() {
+	deps := &pro.Deps{
+		Call:       newCallFn(n.App),
+		Note:       n.App,
+		EngineNode: pro.NodeID(),
+	}
+	for name, h := range pro.Handlers() {
+		opts := []agent.ReasonerOption{
+			agent.WithReasonerTags(tagPlanner),
+			agent.WithDescription(
+				"Pro-engine executor: implements ONE fully-scoped issue via the " +
+					"bundled pro coding engine. Matches the execute_fn_target contract — " +
+					"set config.execute_fn_target to \"<node>.pro_execute\" on build/execute " +
+					"to route per-issue coding through it."),
+		}
+		if s, ok := proSchemas[name]; ok {
+			opts = append(opts, agent.WithInputSchema(s))
+		}
+		regHandler(n, name, deps, h, opts...)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Registration helper
 // ---------------------------------------------------------------------------
 
@@ -322,6 +367,13 @@ var issueSchemas = map[string]json.RawMessage{
 	"implement_issue": schema(`{"type":"object","additionalProperties":true,"required":["issue","repo_path"],"properties":{` +
 		`"issue":{"type":"object"},"repo_path":{"type":"string"},"base_branch":{"type":"string"},` +
 		`"artifacts_dir":{"type":"string"},"additional_context":{"type":"string"},"config":{"type":"object"}}}`),
+}
+
+// proSchemas maps the opt-in pro-engine reasoners to their input schemas.
+var proSchemas = map[string]json.RawMessage{
+	// pro_execute(issue, repo_path) — the execute_fn_target calling convention.
+	"pro_execute": schema(`{"type":"object","additionalProperties":true,"required":["issue","repo_path"],"properties":{` +
+		`"issue":{"type":"object"},"repo_path":{"type":"string"}}}`),
 }
 
 // fastSchemas maps the 4 fast reasoner names to their input schemas.

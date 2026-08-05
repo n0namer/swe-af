@@ -69,7 +69,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 # OpenCode CLI (open_code runtime), Codex CLI (codex runtime), Claude Code CLI
 # (claude_code runtime).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ca-certificates openssh-client jq nodejs npm && \
+    git curl ca-certificates openssh-client jq nodejs npm \
+    # Python test tooling: repos under build are frequently Python, and both
+    # the verifier role and evidence-based audits need a runnable pytest —
+    # without it, Python-repo verification is impossible in this image.
+    python3 python3-pytest && \
     # GitHub CLI
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
         | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
@@ -146,19 +150,26 @@ RUN git config --global user.name "SWE-AF" && \
 COPY --from=builder /out/swe-planner /usr/local/bin/swe-planner
 COPY --from=builder /out/swe-fast /usr/local/bin/swe-fast
 
+# Prebuilt pro-engine binary (static, vendored at go/bin). go/bin carries one
+# build per supported platform; this image is linux/amd64 only, so the amd64
+# one is copied to the unsuffixed path the supervisor's default SWE_PRO_BIN
+# already points at. Inert unless the node is started with SWE_PRO_ENGINE=1
+# (see go/docs/pro-engine.md).
+COPY go/bin/swe-pro-linux-amd64 /usr/local/bin/swe-pro
+
 # Pre-create /workspaces so named-volume mounts inherit correct permissions
 # (without this, Docker creates it as root read-only on fresh deployments).
 RUN mkdir -p /workspaces && chmod 777 /workspaces
 
 EXPOSE 8005
 
-# Defaults register the Go planner as "swe-planner-go" on :8005 — a distinct
-# identity from the Python swe-planner node (:8003) so both stacks can run
-# against one control plane. The swe-fast service overrides NODE_ID/PORT to
-# swe-fast-go/:8006 via compose.
+# Defaults register this as "swe-planner" on :8005 — the product's node id, so
+# callers' triggers are the same whichever implementation is serving them. The
+# compose files override NODE_ID where two stacks share one control plane and
+# need distinct identities, and the swe-fast service overrides NODE_ID/PORT.
 ENV PORT=8005 \
     AGENTFIELD_SERVER=http://control-plane:8080 \
-    NODE_ID=swe-planner-go
+    NODE_ID=swe-planner
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
