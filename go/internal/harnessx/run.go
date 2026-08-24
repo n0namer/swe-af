@@ -3,6 +3,7 @@ package harnessx
 import (
 	"context"
 	"encoding/json"
+	"os"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
@@ -136,14 +137,23 @@ type RoleOptions struct {
 // ToOptions converts a RoleOptions into a harness.Options. Run injects scoped
 // credentials into Env afterwards, so callers leave Env as the base env only.
 func (r RoleOptions) ToOptions() harness.Options {
+	binPath := ""
+	if r.Provider == "opencode" {
+		binPath = os.Getenv("SWE_OPENCODE_BIN")
+		if binPath == "" {
+			binPath = os.Getenv("SEC_AF_OPENCODE_BIN")
+		}
+	}
 	return harness.Options{
 		Provider:       r.Provider,
+		BinPath:        binPath,
 		Model:          r.Model,
 		MaxTurns:       r.MaxTurns,
 		Tools:          r.Tools,
 		PermissionMode: r.PermissionMode,
 		SystemPrompt:   r.SystemPrompt,
 		Cwd:            r.Cwd,
+		ProjectDir:     r.Cwd,
 		Env:            r.Env,
 	}
 }

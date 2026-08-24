@@ -12,6 +12,8 @@ import (
 	"github.com/Agent-Field/SWE-AF/go/internal/prompts/coding"
 	"github.com/Agent-Field/SWE-AF/go/internal/runtimex"
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
+	"os"
+	"strconv"
 )
 
 // ---------------------------------------------------------------------------
@@ -239,6 +241,13 @@ type issueWriterOutput struct {
 
 // RunIssueWriter writes a lean issue-*.md file for a new or updated issue. Ports
 // run_issue_writer. On agent failure it returns success=false without blocking.
+func issueWriterPlanningMaxTurnsDefault() int {
+	if n, err := strconv.Atoi(os.Getenv("SWE_PLANNING_MAX_TURNS")); err == nil && n > 0 {
+		return n
+	}
+	return 2
+}
+
 func RunIssueWriter(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	in := issueWriterInput{Model: "sonnet", AIProvider: "claude"}
 	if err := decodeInput(input, &in); err != nil {
@@ -272,7 +281,7 @@ func RunIssueWriter(ctx context.Context, deps *Deps, input map[string]any) (any,
 	opts := harnessx.RoleOptions{
 		Provider:       provider,
 		Model:          in.Model,
-		MaxTurns:       config.DefaultAgentMaxTurns,
+		MaxTurns:       issueWriterPlanningMaxTurnsDefault(),
 		Tools:          []string{"Read", "Write", "Glob", "Grep"},
 		PermissionMode: in.PermissionMode,
 		SystemPrompt:   coding.IssueWriterSystemPrompt,
