@@ -151,7 +151,7 @@ func TestProductManagerHarnessOptions(t *testing.T) {
 	if strings.Join(h.lastOpts.Tools, ",") != "Read,Write,Glob,Grep,Bash" {
 		t.Fatalf("unexpected tools: %v", h.lastOpts.Tools)
 	}
-	if h.lastOpts.Model != "sonnet" || h.lastOpts.MaxTurns != 150 {
+	if h.lastOpts.Model != "sonnet" || h.lastOpts.MaxTurns != 2 {
 		t.Fatalf("unexpected model/max_turns: %q/%d", h.lastOpts.Model, h.lastOpts.MaxTurns)
 	}
 }
@@ -208,7 +208,7 @@ func TestProductManagerParseFailureRaises(t *testing.T) {
 	}}
 	deps, _ := newDeps(h)
 	_, err := RunProductManager(context.Background(), deps, map[string]any{"repo_path": t.TempDir()})
-	if err == nil || !strings.Contains(err.Error(), "Product manager failed to produce a valid PRD") {
+	if err == nil || !strings.Contains(err.Error(), "PM harness diagnostic") {
 		t.Fatalf("expected PRD failure error, got %v", err)
 	}
 }

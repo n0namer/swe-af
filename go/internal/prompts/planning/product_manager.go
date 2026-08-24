@@ -141,7 +141,7 @@ Write acceptance criteria as test assertions, not human briefings.
 Produce a PRD for this goal. Read the codebase first — understand the current
 state deeply before defining what needs to change.
 
-Write your full PRD to: %s
+Return the PRD only through the runtime structured-output contract. Do not write the PRD artifact yourself; the runner persists the validated PRD to: %s
 
 The bar: an engineering team of autonomous agents can execute this PRD without
 asking a single clarifying question. Every acceptance criterion is a test they

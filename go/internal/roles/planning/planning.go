@@ -34,6 +34,7 @@ import (
 	prompts "github.com/Agent-Field/SWE-AF/go/internal/prompts/planning"
 	"github.com/Agent-Field/SWE-AF/go/internal/runtimex"
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
+	"strconv"
 )
 
 // Handler is the exported reasoner-handler shape every planning role satisfies.
@@ -78,6 +79,13 @@ func Handlers() map[string]Handler {
 // ---------------------------------------------------------------------------
 
 // RunProductManager scopes a goal into a PRD. Ports pipeline.py:158-237.
+func planningMaxTurnsDefault() int {
+	if n, err := strconv.Atoi(os.Getenv("SWE_PLANNING_MAX_TURNS")); err == nil && n > 0 {
+		return n
+	}
+	return 2
+}
+
 func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	deps.App.Note(ctx, "PM starting", "pm", "start")
 
@@ -86,7 +94,7 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 	artifactsDir := getString(input, "artifacts_dir", ".artifacts")
 	additionalContext := getString(input, "additional_context", "")
 	model := orResolvedDefault(getString(input, "model", ""), config.DefaultPlanningModel())
-	maxTurns := getInt(input, "max_turns", config.DefaultAgentMaxTurns)
+	maxTurns := getInt(input, "max_turns", planningMaxTurnsDefault())
 	permissionMode := getString(input, "permission_mode", "")
 	aiProvider := orResolvedDefault(getString(input, "ai_provider", ""), config.DefaultRuntime())
 	initialPrior := getPriorResponses(input)
@@ -138,11 +146,23 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 			return nil, err
 		}
 		if res == nil || res.Parsed == nil {
-			// Parse failure: Python's _invoke_pm returns None. Signal that to
-			// the wrapper with a nil map (run_with_ask_user then returns nil).
-			return nil, nil
+			if res == nil {
+				return nil, errors.New("PM harness diagnostic: nil result")
+			}
+			return nil, fmt.Errorf("PM harness diagnostic: is_error=%v failure=%v err=%q result=%q turns=%d duration_ms=%d messages=%d", res.IsError, res.FailureType, res.ErrorMessage, res.Result, res.NumTurns, res.DurationMS, len(res.Messages))
 		}
-		return toMap(parsed)
+		prdMap, err := toMap(parsed)
+		if err != nil {
+			return nil, err
+		}
+		blob, err := json.MarshalIndent(prdMap, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(paths["prd"], blob, 0o644); err != nil {
+			return nil, err
+		}
+		return prdMap, nil
 	}
 
 	ec := executionContextFrom(ctx)
@@ -303,7 +323,7 @@ func RunArchitect(ctx context.Context, deps *Deps, input map[string]any) (any, e
 	artifactsDir := getString(input, "artifacts_dir", ".artifacts")
 	feedback := getString(input, "feedback", "")
 	model := orResolvedDefault(getString(input, "model", ""), config.DefaultPlanningModel())
-	maxTurns := getInt(input, "max_turns", config.DefaultAgentMaxTurns)
+	maxTurns := getInt(input, "max_turns", planningMaxTurnsDefault())
 	permissionMode := getString(input, "permission_mode", "")
 	aiProvider := orResolvedDefault(getString(input, "ai_provider", ""), config.DefaultRuntime())
 
@@ -375,7 +395,7 @@ func RunTechLead(ctx context.Context, deps *Deps, input map[string]any) (any, er
 	artifactsDir := getString(input, "artifacts_dir", ".artifacts")
 	revisionNumber := getInt(input, "revision_number", 0)
 	model := orResolvedDefault(getString(input, "model", ""), config.DefaultPlanningModel())
-	maxTurns := getInt(input, "max_turns", config.DefaultAgentMaxTurns)
+	maxTurns := getInt(input, "max_turns", planningMaxTurnsDefault())
 	permissionMode := getString(input, "permission_mode", "")
 	aiProvider := orResolvedDefault(getString(input, "ai_provider", ""), config.DefaultRuntime())
 
@@ -461,7 +481,7 @@ func RunSprintPlanner(ctx context.Context, deps *Deps, input map[string]any) (an
 	repoPath := getString(input, "repo_path", "")
 	artifactsDir := getString(input, "artifacts_dir", ".artifacts")
 	model := orResolvedDefault(getString(input, "model", ""), config.DefaultPlanningModel())
-	maxTurns := getInt(input, "max_turns", config.DefaultAgentMaxTurns)
+	maxTurns := getInt(input, "max_turns", planningMaxTurnsDefault())
 	permissionMode := getString(input, "permission_mode", "")
 	aiProvider := orResolvedDefault(getString(input, "ai_provider", ""), config.DefaultRuntime())
 
