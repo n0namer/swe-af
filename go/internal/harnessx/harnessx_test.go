@@ -236,6 +236,22 @@ func TestRunPropagatesTransportError(t *testing.T) {
 
 // --- RoleOptions mapping -----------------------------------------------------
 
+func TestRoleOptionsOpenCodeUsesOnlySWEOwnedBinary(t *testing.T) {
+	t.Setenv("SWE_OPENCODE_BIN", "/opt/swe/opencode")
+	t.Setenv("SEC_AF_OPENCODE_BIN", "/opt/sec/opencode")
+
+	o := (RoleOptions{Provider: "opencode"}).ToOptions()
+	if o.BinPath != "/opt/swe/opencode" {
+		t.Fatalf("expected SWE-owned binary, got %q", o.BinPath)
+	}
+
+	t.Setenv("SWE_OPENCODE_BIN", "")
+	o = (RoleOptions{Provider: "opencode"}).ToOptions()
+	if o.BinPath != "" {
+		t.Fatalf("SEC-AF binary must not leak into SWE options, got %q", o.BinPath)
+	}
+}
+
 func TestRoleOptionsToOptions(t *testing.T) {
 	ro := RoleOptions{
 		Provider:       "claude-code",
