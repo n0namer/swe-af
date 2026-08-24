@@ -139,10 +139,10 @@ type RoleOptions struct {
 func (r RoleOptions) ToOptions() harness.Options {
 	binPath := ""
 	if r.Provider == "opencode" {
+		// SWE owns its harness binary contract. Cross-component fallbacks (for
+		// example SEC_AF_OPENCODE_BIN) couple independently deployable agents and
+		// belong in fleet orchestration, not SWE source.
 		binPath = os.Getenv("SWE_OPENCODE_BIN")
-		if binPath == "" {
-			binPath = os.Getenv("SEC_AF_OPENCODE_BIN")
-		}
 	}
 	return harness.Options{
 		Provider:       r.Provider,
