@@ -1008,3 +1008,5 @@ and the full env surface are documented in
 ---
 
 SWE-AF is built on [AgentField](https://github.com/Agent-Field/agentfield) as a first step from single-agent harnesses to autonomous software engineering factories. [See what else we're building →](https://github.com/Agent-Field)
+
+<!-- agentfield-runtime-capture-canary: 2026-08-26 -->
