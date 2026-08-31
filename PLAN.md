@@ -29,10 +29,10 @@ For well-scoped work, `swe-planner.implement_issue` is the preferred acceptance 
 
 Reconciled from live readback on 2026-08-31.
 
-- Permanent AgentField DEV Coolify application: `edshqtkwskg3lrczekhcmd71`; repo `n0namer/universal-solver`; deployed orchestrator SHA `75652b4b1f0bf18dbcdd6af9abfef40bfa068cd7`.
-- Current workforce container: `workforce-edshqtkwskg3lrczekhcmd71-184945561237`; created 2026-08-30T18:50:28Z; running and healthy; Docker restart_count = 0. Coolify app history records a crash-type restart on 2026-08-30.
-- `/src` is a writable persistent runtime-source volume in workforce.
-- Accepted SWE-AF runtime seed in that generation: `da9228f6dcaeffa2aca3cf781f04d2ea720b5294`.
+- Permanent AgentField DEV Coolify application: `edshqtkwskg3lrczekhcmd71`; repo `n0namer/universal-solver`; CURRENT configured orchestrator SHA `b78866efd17cfdca232019e66e902e16c778c152`.
+- CURRENT `swe-af:dev` HEAD is `58c4e0d19081bc52363c120b7963a34cebb1e894`. This commit only reverted an out-of-scope `PLAN.md` write-back; SWE product code did not change in that commit.
+- The exact compose at `b78866...` pins workforce `ensure_exact swe-af 58c4e0... /src` and the provenance record to the same SHA.
+- `/src` remains the writable persistent runtime-source lane for SWE-AF. Product debugging for this phase must edit `/src/swe-af` directly; GitHub/redeploy is not the inner coding loop.
 - SourceLoop SWE canary has already passed at least once: runtime → capture → Git; accepted SWE dev SHA is recorded in Universal Solver fleet lock.
 - `runtime-capture` is currently running and has recent successful capture activity for Deep Research.
 - `meta_deep_research` is currently `active/ready`.
