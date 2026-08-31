@@ -48,28 +48,29 @@ Reconciled from live readback on 2026-08-31.
 
 ## Current Stage
 
-BROWNFIELD RECOVERY / SEMANTIC ACCEPTANCE.
+BROWNFIELD RECOVERY / PROVIDER ENABLEMENT / SEMANTIC ACCEPTANCE.
 
-Infrastructure bootstrap, exact-SHA reconciliation, discovery, and one real SWE SourceLoop capture are already proven. The next mandatory gate is to restore a live `swe-planner` node in the existing permanent DEV generation, prove liveness independently of the workforce healthcheck, and then run the smallest discriminating `implement_issue` canary.
+Infrastructure bootstrap, exact-SHA reconciliation, discovery, and one real SWE SourceLoop capture are already proven. The first failed prerequisite in CURRENT permanent DEV is provider/bootstrap enablement: SWE is intentionally not started because its declared Anthropic/OpenRouter provider gate is unsatisfied. The evidence ladder is therefore provider contract -> SWE active/ready -> non-mutating smoke -> bounded `implement_issue`.
 
 ## Bounded Development Batches
 
-Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file.
+Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
 
-### Batch 1 — Restore SWE liveness and establish baseline
+### Batch 1 — Provider/bootstrap gate and SWE liveness
 
 Status: IN PROGRESS
 
 DoD:
-1. Identify why the current materialized generation has no live `swe-planner` despite a healthy workforce.
-2. Restore only the SWE process/node (or the smallest owning target) without whole-fleet redeploy/recreation.
-3. Verify AgentField discovery shows `active/ready` for `swe-planner`.
-4. Run a non-mutating reasoner smoke or minimal schema/health call and record execution_id/status.
-5. Confirm `implement_issue` schema and live callability for the next batch.
-6. Ensure the workforce readiness/acceptance gate cannot report SWE-ready solely from provenance HTTP health.
-7. Update `PLAN.md` with exact evidence and next move.
+1. Reconcile CURRENT topology/provider contract. **PASS**: legacy standalone SWE is removed; permanent DEV `edsh...` is current; isolated B is comparison-only.
+2. Prove why CURRENT permanent DEV has no live `swe-planner`. **PASS**: canonical bootstrap evidence shows Anthropic/OpenRouter resolved empty and SWE was intentionally skipped.
+3. Determine whether already-configured Gonka/OpenAI-compatible credentials can satisfy SWE without adding a new external secret. **PARTIAL**: code has `codex`/OpenAI auth and OpenAI-compatible OpenCode architecture; exact Gonka harness compatibility remains unproven.
+4. Choose the smallest safe enablement path: prefer a bounded live-container provider/start-contract adaptation if compatibility is proven; otherwise classify `EXTERNAL_PROVIDER_BLOCKED` and require explicit authorization before any Anthropic/OpenRouter secret-bearing change.
+5. Apply SWE product code/config changes only in CURRENT `/src/swe-af`; run targeted tests and `go/ make check` before restart. Do not program through GitHub/redeploy.
+6. Start/reload only SWE or the smallest owning target; verify `active/ready` independently of workforce provenance health.
+7. Run one non-mutating reasoner/schema smoke with execution evidence and confirm live `implement_issue` callability.
+8. Write accepted evidence here; only after acceptance materialize the exact live delta durably to `fork/dev`/SourceLoop.
 
-Stop condition: do not run a real coding canary until the node is active/ready.
+Stop conditions: no real coding canary while SWE is offline; no provider-secret mutation without explicit authorization; no whole-fleet or operator redeploy merely to work around the inner-loop tooling gap.
 
 ### Batch 2 — First bounded `implement_issue` canary
 
