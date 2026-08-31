@@ -163,9 +163,10 @@ Assign each primary failure to exactly one class:
 ## Known Drift / Debt
 
 - [OPEN] `swe-af:main` contains a downstream `ERRORS.md` commit and therefore is not a clean upstream mirror. Resolve before the next upstream rebase/reconciliation cycle.
-- [OPEN] Current non-DEV terminal runtime does not register `agentfield-dev-workforce` even though current `vps-terminal` Git config does; DEV terminal knows the target but mediates generic exec as review-required. This is operator-plane capability drift, not a SWE product defect.
+- [OPEN] DEV VPS Terminal source/deployed target registry contains `agentfield-dev-workforce`, but the CURRENT callable ChatGPT DEV surface lacks typed File ACI/process-start operations and generic `execContainer`/`startSession` fail closed as `REVIEW_REQUIRED: opaque_or_unknown_mutation`. `getOperatorGuidance` explicitly returned `ALLOW` for the scoped reversible SWE start, but execution remained blocked by mediation. Generic approval is unavailable (`approval_capability_gap`). This is `OPERATOR_PLANE_CAPABILITY_DRIFT`, not a SWE defect; do not redeploy the operator merely to bypass it.
 - [OPEN] Current workforce healthcheck proves provenance HTTP only and can be green while `swe-planner`/`swe-pro` are offline.
-- [OPEN] Current SWE process loss after materialization is proven; exact termination mechanism is not yet proven.
+- [OPEN] Current SWE absence is explained by the provider/bootstrap gate, not by a proven current-generation process crash: Anthropic/OpenRouter resolved empty and bootstrap intentionally skipped SWE. Historical process-exit logs remain forensic only.
+- [OPEN] Provider-contract gap: SWE code contains `codex`/`OPENAI_API_KEY` and OpenAI-compatible OpenCode support, while `agentfield-package.yaml` and Universal Solver bootstrap admit only Anthropic/OpenRouter. Exact Gonka execution compatibility must be proven before adapting the contract.
 
 ## BMAD Workflow Used for Current Batch
 
