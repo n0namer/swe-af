@@ -3,6 +3,17 @@
   "model": "{env:HARNESS_MODEL}",
   "small_model": "{env:HARNESS_MODEL}",
   "provider": {
+    "openai": {
+      "name": "OpenAI-compatible",
+      "env": [
+        "OPENAI_API_KEY"
+      ],
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:OPENAI_API_KEY}",
+        "baseURL": "{env:OPENAI_BASE_URL}"
+      }
+    },
     "openrouter": {
       "options": {
         "apiKey": "{env:OPENROUTER_API_KEY}"
