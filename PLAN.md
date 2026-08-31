@@ -64,7 +64,7 @@ Status: IN PROGRESS
 DoD:
 1. Reconcile CURRENT topology/provider contract. **PASS**: legacy standalone SWE is removed; permanent DEV `edsh...` is current; isolated B is comparison-only.
 2. Prove why CURRENT permanent DEV has no live `swe-planner`. **PASS**: canonical bootstrap evidence shows Anthropic/OpenRouter resolved empty and SWE was intentionally skipped.
-3. Determine whether already-configured Gonka/OpenAI-compatible credentials can satisfy SWE without adding a new external secret. **PARTIAL**: code has `codex`/OpenAI auth and OpenAI-compatible OpenCode architecture; exact Gonka harness compatibility remains unproven.
+3. Determine whether already-configured Gonka/OpenAI-compatible credentials can satisfy SWE without adding a new external secret. **PARTIAL**: repository code has `codex`/OpenAI auth; official current OpenCode provider documentation confirms custom OpenAI-compatible providers support `baseURL` + API-key configuration, matching SWE's existing `@ai-sdk/openai-compatible` pattern. Exact Gonka endpoint/model/tool-call compatibility inside the installed SWE harness still requires one live runtime canary.
 4. Choose the smallest safe enablement path: prefer a bounded live-container provider/start-contract adaptation if compatibility is proven; otherwise classify `EXTERNAL_PROVIDER_BLOCKED` and require explicit authorization before any Anthropic/OpenRouter secret-bearing change.
 5. Apply SWE product code/config changes only in CURRENT `/src/swe-af`; run targeted tests and `go/ make check` before restart. Do not program through GitHub/redeploy.
 6. Start/reload only SWE or the smallest owning target; verify `active/ready` independently of workforce provenance health.
