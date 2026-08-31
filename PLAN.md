@@ -35,14 +35,14 @@ Reconciled from live readback on 2026-08-31.
 - SourceLoop SWE canary has already passed at least once: runtime → capture → Git; accepted SWE dev SHA is recorded in Universal Solver fleet lock.
 - `runtime-capture` is currently running and has recent successful capture activity for Deep Research.
 - `meta_deep_research` is currently `active/ready`.
-- `swe-planner` is currently `inactive/offline`; last heartbeat `2026-08-25T13:30:41Z`.
-- `swe-pro` is currently `inactive`; last heartbeat `2026-08-25T13:30:41Z`.
-- Persisted SWE runtime logs prove both `swe-planner` and `swe-pro` previously started, registered, and served requests. `swe-pro` accepted real `code_task` calls.
-- Persisted `swe-planner.log` proves a successful background start on PID 6119 / port 8005, but the process is no longer running.
-- Current workforce container logs show the provenance HTTP server only; no live SWE process output is visible.
-- Current compose starts `swe-planner` only when `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` is present. Coolify env inventory contains both keys (values intentionally not exposed), so simple key absence is not established as the cause.
-- The current workforce container was created after the last SWE heartbeat. Therefore the current generation materialized without a durable live SWE node, or the node died before establishing/maintaining heartbeat.
-- Workforce health is insufficient evidence of SWE readiness: its healthcheck validates only `/afhome/us-e2e-provenance.txt`, not `swe-planner` or `swe-pro` liveness.
+- Historical standalone SWE service `universal-solver-swe-af` (`wetscrp2tj90tklmlvkcadfw`) existed during Wave 0, but canonical server-ops records it as removed during cleanup on 2026-08-21. It is superseded topology; CURRENT target is permanent DEV `edshqtkwskg3lrczekhcmd71`.
+- Historical isolated B `2zciq6hujpev6dbudcdlijqq` remains healthy but is forensic comparison only, not the current mutation target.
+- `swe-planner` / `swe-pro` are not live in CURRENT permanent DEV. Historical persisted logs prove they previously started, registered and served requests, but that evidence predates the current container generation.
+- Canonical Universal Solver handoff contains stronger CURRENT root-cause evidence for the present generation: workforce bootstrap resolved `OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY` empty, intentionally skipped `swe-planner`, and nevertheless became healthy. The prior `PROCESS_EXIT` hypothesis is superseded; primary classification is `PROVIDER / BOOTSTRAP_GATE`.
+- Coolify environment inventory proves the provider key names exist, not that secret values are non-empty. Secret values remain unexposed.
+- SWE's own `go/agentfield-package.yaml` requires one of `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`, so the current Universal Solver start gate matches the published SWE package contract.
+- SWE Go runtime also contains `codex`/`OPENAI_API_KEY` support and `opencode.json` contains explicit OpenAI-compatible provider support. Universal Solver already maps Gonka into `OPENAI_API_KEY` + `OPENAI_BASE_URL`. Therefore a small provider-contract/bootstrap adaptation is plausible, but exact Gonka compatibility for the SWE harness is not runtime-proven yet.
+- Workforce health is insufficient evidence of SWE readiness: its healthcheck validates only `/afhome/us-e2e-provenance.txt`, not required SWE node liveness/readiness.
 - Current AgentField registry still exposes `build`, `plan`, `implement_issue`, `resolve` and internal schemas for `swe-planner`, but these are not a live callable capability while the node is offline.
 - `swe-af:main` and `swe-af:dev` were observed diverged before this SoT commit: dev was 5 commits ahead and 1 commit behind main. The main-only downstream commit is `docs: add canonical error ledger`, conflicting with the clean-mirror invariant.
 
