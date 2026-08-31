@@ -38,6 +38,10 @@ user_environment:
           description: OpenRouter API key (DeepSeek/Qwen/Llama/… — 200+ models)
           type: secret
           scope: global
+        - name: OPENAI_API_KEY
+          description: OpenAI-compatible API key (including Gonka)
+          type: secret
+          scope: global
   optional:
     # Optional so an LLM key is the only secret needed to get started: builds
     # on local/public repos run without it; it is needed to clone private
