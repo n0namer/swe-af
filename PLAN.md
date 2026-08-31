@@ -4,7 +4,7 @@ Status: active
 Last reconciled: 2026-08-31
 Canonical project SoT: this file (`PLAN.md`)
 Canonical operator lifecycle: `n0namer/universal-solver/docs/runbooks/agentfield-dev-debug-test-handoff.md`
-BMAD method source: `n0namer/BMAD,MNNZ h.agents/skills/bmad-help/SKILL.md`
+BMAD method source: `n0namer/BMAD-MNNZ/.agents/skills/bmad-help/SKILL.md`
 
 ## North Star
 
@@ -26,52 +26,56 @@ For well-scoped work, `swe-planner.implement_issue` is the preferred acceptance 
 
 ## Current Factual State
 
-Cast at 2026-08-31 from live readback.
+Reconciled from live readback on 2026-08-31.
 
 - Permanent AgentField DEV Coolify application: `edshqtkwskg3lrczekhcmd71`; repo `n0namer/universal-solver`; deployed orchestrator SHA `75652b4b1f0bf18dbcdd6af9abfef40bfa068cd7`.
-- Workforce container: `workforce-edshqtkwskg3lrczekhcmd71-184945561237`; running and healthy; restart_count `3`? Note: container inspection readback showed `restart_count=0`, while Coolify application metadata reports `max_restart_count=10` and last restart type `crash` on 2026-08-30. Use Docker container readback for current container restart_count, Coolify for app history.
+- Current workforce container: `workforce-edshqtkwskg3lrczekhcmd71-184945561237`; created 2026-08-30T18:50:28Z; running and healthy; Docker restart_count = 0. Coolify app history records a crash-type restart on 2026-08-30.
 - `/src` is a writable persistent runtime-source volume in workforce.
-- Accepted SWE-AF runtime seed in that generation: `da9228f6dcaeffa2aca3cf781f04d2ea720b5294` (`swe-af:dev` at capture acceptance).
-- SourceLoop swee-canary has already passed at least once: runtime → capture → Git, and the accepted SWE dev SHA is recorded in Universal Solver fleet lock.
+- Accepted SWE-AF runtime seed in that generation: `da9228f6dcaeffa2aca3cf781f04d2ea720b5294`.
+- SourceLoop SWE canary has already passed at least once: runtime → capture → Git; accepted SWE dev SHA is recorded in Universal Solver fleet lock.
 - `runtime-capture` is currently running and has recent successful capture activity for Deep Research.
-- `meta_deep_research` node is currently `active/ready`.
-- `swe-planner` is currently `inactive/offline`; last heartbeat 2026-08-25T13:30:41Z.
-- `swe-pro` is currently `inactive`; last heartbeat 2026-08-25T13:30:41Z.
-- Persisted `swe-planner.log` shows that `swe-planner` did successfully start as a background process (PID 6119, port 8005) and registered with AgentField, but it is no longer running.
-- Current workforce container logs show only the provenance HTTP server activity, not live SYE process output.
-- Coolify env inventory shows both `OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY` are configured as this application runtime keys; values are intentionally not exposed here.
-- Current AgentField registry still exposes the `build`, `plan`, `implement_issue`, `resolve` and internal reasoner schemas for `swe-planner`, but they are not callable as a live SWE capability while the node is offline.
-- `swe-af:main` and `swe-af:dev` are currently diverged: `dev` is 5 commits ahead and 1 commit behind main. The main-only downstream commit is `docs: add canonical error ledger`, conflicting with the clean-mirror invariant.
+- `meta_deep_research` is currently `active/ready`.
+- `swe-planner` is currently `inactive/offline`; last heartbeat `2026-08-25T13:30:41Z`.
+- `swe-pro` is currently `inactive`; last heartbeat `2026-08-25T13:30:41Z`.
+- Persisted SWE runtime logs prove both `swe-planner` and `swe-pro` previously started, registered, and served requests. `swe-pro` accepted real `code_task` calls.
+- Persisted `swe-planner.log` proves a successful background start on PID 6119 / port 8005, but the process is no longer running.
+- Current workforce container logs show the provenance HTTP server only; no live SWE process output is visible.
+- Current compose starts `swe-planner` only when `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` is present. Coolify env inventory contains both keys (values intentionally not exposed), so simple key absence is not established as the cause.
+- The current workforce container was created after the last SWE heartbeat. Therefore the current generation materialized without a durable live SWE node, or the node died before establishing/maintaining heartbeat.
+- Workforce health is insufficient evidence of SWE readiness: its healthcheck validates only `/afhome/us-e2e-provenance.txt`, not `swe-planner` or `swe-pro` liveness.
+- Current AgentField registry still exposes `build`, `plan`, `implement_issue`, `resolve` and internal schemas for `swe-planner`, but these are not a live callable capability while the node is offline.
+- `swe-af:main` and `swe-af:dev` were observed diverged before this SoT commit: dev was 5 commits ahead and 1 commit behind main. The main-only downstream commit is `docs: add canonical error ledger`, conflicting with the clean-mirror invariant.
 
 ## Current Stage
 
 BROWNFIELD RECOVERY / SEMANTIC ACCEPTANCE.
 
-Infrastructure bootstrap, exact SHA reconciliation, discovery, and one real SWE SourceLoop capture are already proven. The next mandatory gate is to restore a live `swe-planner` node in the existing permanent DEV generation and then run the smallest discriminating `implement_issue` canary.
+Infrastructure bootstrap, exact-SHA reconciliation, discovery, and one real SWE SourceLoop capture are already proven. The next mandatory gate is to restore a live `swe-planner` node in the existing permanent DEV generation, prove liveness independently of the workforce healthcheck, and then run the smallest discriminating `implement_issue` canary.
 
 ## Bounded Development Batches
 
-Default batch size: ~30 minutes. Each batch closes a coherent DoD gate and writes back this file.
+Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file.
 
 ### Batch 1 — Restore SWE liveness and establish baseline
 
 Status: IN PROGRESS
 
 DoD:
-1. Identify why the previously started `swe-planner` died or became unreachable.
-2. Restore the same `swe-planner` process/node without whole-fleet redeploy/recreation.
+1. Identify why the current materialized generation has no live `swe-planner` despite a healthy workforce.
+2. Restore only the SWE process/node (or the smallest owning target) without whole-fleet redeploy/recreation.
 3. Verify AgentField discovery shows `active/ready` for `swe-planner`.
 4. Run a non-mutating reasoner smoke or minimal schema/health call and record execution_id/status.
-5. Confirm `mplement_issue` schema/callability ready for the next batch.
-6. Update `PLAN.md` with exact eavidence and next move.
+5. Confirm `implement_issue` schema and live callability for the next batch.
+6. Ensure the workforce readiness/acceptance gate cannot report SWE-ready solely from provenance HTTP health.
+7. Update `PLAN.md` with exact evidence and next move.
 
-Stop condition: don't run a real coding canary until the node is active/ready.
+Stop condition: do not run a real coding canary until the node is active/ready.
 
 ### Batch 2 — First bounded `implement_issue` canary
 
 Status: PENDING
 
-Prereduisite: Batch 1 DoD PASS.
+Prerequisite: Batch 1 DoD PASS.
 
 DoD:
 1. Use an existing safe/sacrificial local repo/workspace; do not create persistent infrastructure unless required.
@@ -103,10 +107,12 @@ DoD:
 - only source delta is captured; noise excluded;
 - stale capture fails closed;
 - accepted delta reaches `fork/dev`;
-- exact WORKING_DEV_SHA is recorded;
+- exact `WORKING_DEV_SHA` is recorded;
 - repo tests pass on that durable SHA.
 
 ### Batch 5 — Materialization and regression
+
+Status: PENDING
 
 DoD:
 - exact accepted SHA → materialized runtime;
@@ -132,14 +138,14 @@ For each canary record at least:
 ## Failure Classification
 
 Assign each primary failure to exactly one class:
-- `M81ER_REASONING`
-P pROMPT_OR_PLANNING@
+- `MODEL_REASONING`
+- `PROMPT_OR_PLANNING`
 - `ACI_HARNESS`
-- REPO_ENVIRONMENT`
+- `REPO_ENVIRONMENT`
 - `GIT_DELIVERY`
-KH `AGENTFIELD_RUNTIME`
-KHp`PROVIDER`
-- SOURCELOOP_RECONCILIATION@
+- `AGENTFIELD_RUNTIME`
+- `PROVIDER`
+- `SOURCELOOP_RECONCILIATION`
 - `OBSERVABILITY_GAP`
 
 ## Anti-Drift Checklist per Batch
@@ -151,18 +157,19 @@ KHp`PROVIDER`
 - Reload only the same target if needed.
 - Do not advance on health alone; require functional/semantic evidence.
 - After acceptance, materialize exact source to Git and record SHA.
-- When runtime and Git disagree, label `DESIGN_RUNTIME_DRIFT` or `FROVENANCE_GAP` as appropriate; do not silently reconcile.
+- When runtime and Git disagree, label `DESIGN_RUNTIME_DRIFT` or `PROVENANCE_GAP` as appropriate; do not silently reconcile.
 
-## Known Drift/Debt
+## Known Drift / Debt
 
 - [OPEN] `swe-af:main` contains a downstream `ERRORS.md` commit and therefore is not a clean upstream mirror. Resolve before the next upstream rebase/reconciliation cycle.
-- [OPEN] Current non-DEV terminal runtime does not yet register the `lagentfield-dev-workforce` target even though current `vps-terminal` Git config does; the DEV terminal knows the target but mediates generic exec as review-required. This is an operator-plane capability drift, NOT a product defect.
-- [OPEN] `swe-planner` process died after successful bootstrap; exact cause not yet proven.
+- [OPEN] Current non-DEV terminal runtime does not register `agentfield-dev-workforce` even though current `vps-terminal` Git config does; DEV terminal knows the target but mediates generic exec as review-required. This is operator-plane capability drift, not a SWE product defect.
+- [OPEN] Current workforce healthcheck proves provenance HTTP only and can be green while `swe-planner`/`swe-pro` are offline.
+- [OPEN] Current SWE process loss after materialization is proven; exact termination mechanism is not yet proven.
 
-## BMad Workflow Used for Current Batch
+## BMAD Workflow Used for Current Batch
 
 - Entry: `bmad-help` from `BMAD-MNNZ`.
-- Classification: brownfield recovery/quick implementation.
+- Classification: brownfield recovery / quick implementation.
 - `bmad-correct-course` rejected as a structural fit because it requires PRD + Epics artifacts that do not exist here; creating them would be method theater.
 - Selected: `bmad-quick-dev` for bounded recovery + first semantic canary.
 - Write-back target: this `PLAN.md`.
