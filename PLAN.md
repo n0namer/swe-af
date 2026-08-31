@@ -170,7 +170,8 @@ Assign each primary failure to exactly one class:
 ## BMAD Workflow Used for Current Batch
 
 - Entry: `bmad-help` from `BMAD-MNNZ`.
-- Classification: brownfield recovery / quick implementation.
-- `bmad-correct-course` rejected as a structural fit because it requires PRD + Epics artifacts that do not exist here; creating them would be method theater.
-- Selected: `bmad-quick-dev` for bounded recovery + first semantic canary.
+- Initial classification: brownfield recovery / quick implementation; `bmad-correct-course` rejected because its PRD + Epics prerequisites do not exist here.
+- After CURRENT reconciliation exposed an implementation/debugging evidence gate, the canonical Universal Solver handoff explicitly routes this workstream to `bmad-testarch-test-design`.
+- Active BMAD mode: risk-based system-level test/debug architecture embedded in this existing SoT (no duplicate BMAD artifact). Gate order: A0 CURRENT state -> A1 targeted regression -> A2 reasoner/pipeline -> A3 same-target reload if needed -> A4 functional canary -> A5 semantic E2E -> A6 durable accepted SHA.
+- `bmad-quick-dev` remains the implementation method once a source/config defect is proven and live-edit capability is available.
 - Write-back target: this `PLAN.md`.
