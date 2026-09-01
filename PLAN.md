@@ -52,9 +52,11 @@ Reconciled from live readback on 2026-09-01.
 
 ## Current Stage
 
-BROWNFIELD RECOVERY / PROVIDER ENABLEMENT / SEMANTIC ACCEPTANCE.
+LIVE-TASK DEBUGGING / SEMANTIC ACCEPTANCE / RECOVERY LADDER.
 
-Infrastructure bootstrap, exact-SHA reconciliation, discovery, and one real SWE SourceLoop capture are already proven. Provider/bootstrap enablement is now proven in CURRENT permanent DEV: `swe-planner` and `swe-pro` are running, registered, and initialized. The first failed prerequisite is now execution control/observability: this chat must obtain one real non-mutating reasoner execution and verify Gonka/OpenAI-compatible routing before a bounded `implement_issue`. The evidence ladder is therefore live-node registration -> non-mutating execution -> provider-route proof -> bounded `implement_issue`.
+Infrastructure bootstrap, node registration, authenticated execution control, and real non-mutating SWE executions are already proven. The current goal is no longer to prepare infrastructure in isolation; it is to use progressively harder live engineering tasks as controlled diagnostic experiments. The first failed gate observed in each task must be localized from runtime evidence, repaired minimally in live `/src`, and the same task repeated before complexity increases.
+
+The CURRENT source is not yet the CURRENT loaded binary: `swe-planner` PID `7686` predates the latest Deep-Research-style direct-AI/timeout source delta. Until that exact source is loaded into the same process lane, tests against PID `7686` validate the older binary only. Do not redeploy the container merely to load source. The next execution ladder is: load exact live source into the existing SWE process lane -> L0 minimal execution -> L1 calculator coding task -> L2 seeded regression repair -> L3 multi-file feature -> L4 forced recovery -> L5 bounded real-repository issue.
 
 ## Bounded Development Batches
 
