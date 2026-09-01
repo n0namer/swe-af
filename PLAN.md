@@ -103,6 +103,10 @@ Observed L1 run evidence — 2026-09-01:
 - Root cause: fail-open role/orchestration contracts convert coder/reviewer harness failure into ordinary result payloads and allow top-level completion with zero diff.
 - Live `/src` repair applied container-first: coder schema/transport failure now returns error; reviewer failure/no structured output now returns error; default and flagged coding loops no longer convert reviewer error into approval. Existing role tests were changed from fail-open expectations to fail-closed regression expectations. `git diff --check` PASS.
 - This repair is source-only until loaded-process identity is refreshed; do not claim runtime PASS on PID `7686` yet.
+- Coder-only diagnostics then isolated the next layer. `exec_20260901_130824_ktc5o8be` reproduced the same schema failure and raw OpenCode returned `Unexpected server error` (`err_67786025`) with correct CLI argv/repo/model. Renaming the custom provider from built-in `openai` to explicit `gonka` did not remove the error (`err_bf30da7d`).
+- Adding an explicit `gonka.models` catalog for `deepseek-ai/DeepSeek-V4-Flash-0731` changed the failure signature materially: `exec_20260901_131316_4naadw0k` no longer failed immediately and instead reached real inference until the harness 300s no-progress timeout. This is accepted evidence that explicit model registration is required for the custom OpenCode provider and that the remaining Gonka blocker is inference availability/latency, not local provider resolution.
+- Free OpenRouter canary `exec_20260901_131920_y14gwukz` reached the OpenRouter endpoint but returned HTTP 401 `Missing Authentication header`; the CURRENT workforce does not have a usable OpenRouter runtime credential. Do not inject or copy a secret merely to continue this diagnostic ladder without explicit authorization.
+- Independent filesystem oracle confirmed no `canary/calculator` directory was created. The disposable canary copy inherited the pre-existing live SWE source delta from `/src`, but the calculator task itself produced no task files.
 
 ### Batch 3 — Failure/recovery gate
 
