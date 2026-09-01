@@ -78,19 +78,21 @@ DoD:
 
 Stop conditions: no real coding canary while SWE is offline; no provider-secret mutation without explicit authorization; no whole-fleet or operator redeploy merely to work around the inner-loop tooling gap.
 
-### Batch 2 — First bounded `implement_issue` canary
+### Batch 2 — Live-task diagnostic ladder: calculator → seeded bug
 
-Status: PENDING
+Status: NEXT AFTER L0 / LOADED-SOURCE MATCH
 
-Prerequisite: Batch 1 DoD PASS.
+Prerequisite: one minimal execution on the intended loaded source reaches terminal status with runtime evidence.
 
 DoD:
-1. Use an existing safe/sacrificial local repo/workspace; do not create persistent infrastructure unless required.
-2. Run ONE well-scoped issue with machine-checkable acceptance criteria.
-3. Capture: execution_id, run/reasoner status, diff, test results, tool calls, wall time, retries, unintended files changed.
-4. Require targeted and canonical repo tests to pass.
-5. Verify the resulting branch/diff is bounded to the issue scope.
-6. Update `PLAN.md` with result and next gate.
+1. Use an ephemeral calculator workspace only; no GitHub delivery and no persistent infrastructure.
+2. L1: ask SWE to implement a tiny CLI calculator with add/subtract/multiply/divide, controlled divide-by-zero behavior and agent-written unit tests.
+3. Independently verify deterministic examples, simple algebraic properties and unintended files changed; agent-written tests are not the sole oracle.
+4. Capture execution_id, reasoner/node, status, wall time, runtime-log causal timeline, before/after file set, actual diff, tests, retries and primary failure class.
+5. On FAIL, stop at the first causal failed gate, patch only that layer live in the container and rerun the same task.
+6. After L1 PASS, seed one known regression in the same disposable workspace and require SWE to diagnose and repair it minimally.
+7. Require two independent PASS observations across the level boundary before advancing.
+8. Write exact evidence and the next failed gate back here.
 
 ### Batch 3 — Failure/recovery gate
 
