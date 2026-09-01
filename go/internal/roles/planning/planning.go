@@ -138,24 +138,42 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 			WorkspaceManifest:  wsManifest,
 			PriorUserResponses: prior,
 		})
-		opts := harnessx.RoleOptions{
-			Provider:       provider,
-			Model:          model,
-			MaxTurns:       maxTurns,
-			Tools:          []string{"Read", "Write", "Glob", "Grep", "Bash"},
-			PermissionMode: permissionMode,
-			SystemPrompt:   systemPrompt,
-			Cwd:            repoPath,
-		}.ToOptions()
-		parsed, res, err := harnessx.Run[schemas.PRD](ctx, deps.Harness, taskPrompt, opts)
-		if err != nil {
-			return nil, err
-		}
-		if res == nil || res.Parsed == nil {
-			if res == nil {
-				return nil, errors.New("PM harness diagnostic: nil result")
+		var parsed *schemas.PRD
+		if deps.AI != nil {
+			var direct schemas.PRD
+			resp, aiErr := deps.AI.AI(ctx, taskPrompt,
+				ai.WithSystem(systemPrompt),
+				ai.WithModel(model),
+				ai.WithSchema(schemas.PRD{}),
+			)
+			if aiErr != nil {
+				return nil, aiErr
 			}
-			return nil, fmt.Errorf("PM harness diagnostic: is_error=%v failure=%v err=%q result=%q turns=%d duration_ms=%d messages=%d", res.IsError, res.FailureType, res.ErrorMessage, res.Result, res.NumTurns, res.DurationMS, len(res.Messages))
+			if err := resp.Into(&direct); err != nil {
+				return nil, fmt.Errorf("PM direct AI schema decode failed: %w", err)
+			}
+			parsed = &direct
+		} else {
+			opts := harnessx.RoleOptions{
+				Provider:       provider,
+				Model:          model,
+				MaxTurns:       maxTurns,
+				Tools:          []string{"Read", "Write", "Glob", "Grep", "Bash"},
+				PermissionMode: permissionMode,
+				SystemPrompt:   systemPrompt,
+				Cwd:            repoPath,
+			}.ToOptions()
+			p, res, hErr := harnessx.Run[schemas.PRD](ctx, deps.Harness, taskPrompt, opts)
+			if hErr != nil {
+				return nil, hErr
+			}
+			if res == nil || res.Parsed == nil {
+				if res == nil {
+					return nil, errors.New("PM harness diagnostic: nil result")
+				}
+				return nil, fmt.Errorf("PM harness diagnostic: is_error=%v failure=%v err=%q result=%q turns=%d duration_ms=%d messages=%d", res.IsError, res.FailureType, res.ErrorMessage, res.Result, res.NumTurns, res.DurationMS, len(res.Messages))
+			}
+			parsed = p
 		}
 		prdMap, err := toMap(parsed)
 		if err != nil {
