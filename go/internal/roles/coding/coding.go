@@ -159,44 +159,23 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		Cwd:            in.WorktreePath,
 	}.ToOptions()
 
-	harnessError := ""
 	parsed, result, hErr := harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
-	switch {
-	case hErr != nil:
-		if isFatal(hErr) {
-			return nil, hErr // Non-retryable — propagate immediately.
-		}
-		harnessError = hErr.Error()
-		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, harnessError), "coder", "error")
-	case result != nil && result.Parsed != nil:
-		deps.Note.Note(ctx, fmt.Sprintf("Coder complete: %s, files=%d, complete=%s",
-			issueName, len(parsed.FilesChanged), pyBool(parsed.Complete)), "coder", "complete")
-		parsed.IterationID = in.IterationID
-		return parsed, nil
-	default:
-		// Harness returned but produced no parseable CoderResult. Surface the
-		// underlying error so the empty result carries *why*.
-		if result != nil {
-			harnessError = result.ErrorMessage
-		}
-		if harnessError == "" {
-			harnessError = "no structured output returned"
-		}
-		deps.Note.Note(ctx, fmt.Sprintf("Coder produced no result: %s: %s", issueName, harnessError), "coder", "error")
+	if hErr != nil {
+		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, hErr.Error()), "coder", "error")
+		return nil, fmt.Errorf("coder agent failed for %s: %w", issueName, hErr)
 	}
-
-	summary := fmt.Sprintf("Coder agent failed for %s", issueName)
-	if harnessError != "" {
-		summary += ": " + harnessError
+	if result == nil || result.Parsed == nil {
+		detail := "no structured output returned"
+		if result != nil && result.ErrorMessage != "" {
+			detail = result.ErrorMessage
+		}
+		deps.Note.Note(ctx, fmt.Sprintf("Coder produced no result: %s: %s", issueName, detail), "coder", "error")
+		return nil, fmt.Errorf("coder produced no structured result for %s: %s", issueName, detail)
 	}
-	return &schemas.CoderResult{
-		FilesChanged:      []string{},
-		Summary:           summary,
-		Complete:          false,
-		IterationID:       in.IterationID,
-		CodebaseLearnings: []string{},
-		AgentRetro:        map[string]any{},
-	}, nil
+	deps.Note.Note(ctx, fmt.Sprintf("Coder complete: %s, files=%d, complete=%s",
+		issueName, len(parsed.FilesChanged), pyBool(parsed.Complete)), "coder", "complete")
+	parsed.IterationID = in.IterationID
+	return parsed, nil
 }
 
 // ---------------------------------------------------------------------------
