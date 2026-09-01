@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 	"github.com/Agent-Field/agentfield/sdk/go/ai"
@@ -141,9 +142,10 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 		var parsed *schemas.PRD
 		if deps.AI != nil {
 			var direct schemas.PRD
+			directModel := strings.TrimPrefix(model, "openai/")
 			resp, aiErr := deps.AI.AI(ctx, taskPrompt,
 				ai.WithSystem(systemPrompt),
-				ai.WithModel(model),
+				ai.WithModel(directModel),
 				ai.WithSchema(schemas.PRD{}),
 			)
 			if aiErr != nil {
