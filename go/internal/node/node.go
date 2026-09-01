@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 	"github.com/Agent-Field/agentfield/sdk/go/ai"
@@ -196,6 +197,10 @@ func resolveAIConfig() *ai.Config {
 			c.BaseURL = base
 		}
 	}
+	// Match the proven Deep Research semantic transport contract: provider calls
+	// may legitimately run for minutes, so the default 30s Go SDK client timeout
+	// is too short for Gonka. Keep a 30-minute transport safety ceiling.
+	c.Timeout = 30 * time.Minute
 	if c.Validate() == nil {
 		return c
 	}
