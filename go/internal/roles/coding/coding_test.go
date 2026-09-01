@@ -249,9 +249,9 @@ func TestRunCoderNoGuardrailWhenDisabled(t *testing.T) {
 	}
 }
 
-// Contract: on Parsed==nil (schema parse failure) run_coder returns its
-// deterministic fallback (complete=false, key set intact) — NOT an error.
-func TestRunCoderParsedNilFallback(t *testing.T) {
+// Contract: schema/no-result failures are fail-closed. Returning a synthetic
+// complete=false payload lets the outer orchestrator report false success.
+func TestRunCoderParsedNilFailsClosed(t *testing.T) {
 	nr := &noteRecorder{}
 	mh := &mockHarness{fn: func(_ any) (*harness.Result, error) {
 		return &harness.Result{IsError: true, ErrorMessage: "boom-parse", Parsed: nil}, nil
@@ -260,20 +260,11 @@ func TestRunCoderParsedNilFallback(t *testing.T) {
 		"issue":        map[string]any{"name": "issue-x"},
 		"iteration_id": "it-1",
 	})
-	if err != nil {
-		t.Fatalf("fallback must not be an error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "boom-parse") {
+		t.Fatalf("expected fail-closed schema error, got out=%v err=%v", out, err)
 	}
-	m := asMap(t, out)
-	assertKeys(t, m, coderResultKeys)
-	if m["complete"] != false {
-		t.Fatalf("fallback must have complete=false, got %v", m["complete"])
-	}
-	if !strings.Contains(m["summary"].(string), "boom-parse") {
-		t.Fatalf("fallback summary should carry the harness error, got %q", m["summary"])
-	}
-	// Empty collections must serialize as [] / {}, not null (model_dump parity).
-	if _, ok := m["files_changed"].([]any); !ok {
-		t.Fatalf("files_changed should be an empty array, got %#v", m["files_changed"])
+	if out != nil {
+		t.Fatalf("expected nil result on schema failure, got %v", out)
 	}
 	if !nr.hasTag("error") {
 		t.Fatalf("expected an error note on the no-result path")
@@ -302,9 +293,9 @@ func TestRunCoderFatalPropagates(t *testing.T) {
 	}
 }
 
-// Contract: a non-fatal transport error falls back deterministically (Python's
-// `except Exception` branch) rather than propagating.
-func TestRunCoderTransportErrorFallsBack(t *testing.T) {
+// Contract: transport errors are fail-closed so an unavailable coder cannot be
+// converted into a successful zero-diff workflow.
+func TestRunCoderTransportErrorFailsClosed(t *testing.T) {
 	nr := &noteRecorder{}
 	mh := &mockHarness{fn: func(_ any) (*harness.Result, error) {
 		return nil, errors.New("network blip")
@@ -312,12 +303,11 @@ func TestRunCoderTransportErrorFallsBack(t *testing.T) {
 	out, err := RunCoder(context.Background(), newDeps(mh, nil, nr), map[string]any{
 		"issue": map[string]any{"name": "i"},
 	})
-	if err != nil {
-		t.Fatalf("non-fatal error should fall back, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "network blip") {
+		t.Fatalf("expected transport error to propagate, got out=%v err=%v", out, err)
 	}
-	m := asMap(t, out)
-	if m["complete"] != false || !strings.Contains(m["summary"].(string), "network blip") {
-		t.Fatalf("expected fallback carrying the transport error, got %v", m)
+	if out != nil {
+		t.Fatalf("expected nil result on transport failure, got %v", out)
 	}
 }
 
@@ -372,9 +362,9 @@ func TestRunQASuccessAndFallback(t *testing.T) {
 // run_code_reviewer
 // ---------------------------------------------------------------------------
 
-// Contract: reviewer passes qa_ran through to its prompt AND uses the reviewer
-// tool set; on failure it falls back to approved=true (non-blocking).
-func TestRunCodeReviewerQARanAndFallback(t *testing.T) {
+// Contract: reviewer passes qa_ran through to its prompt and uses the reviewer
+// tool set; schema/no-result failure is fail-closed and must never auto-approve.
+func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	nr := &noteRecorder{}
 	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
 		rr := dest.(*schemas.CodeReviewResult)
@@ -394,26 +384,23 @@ func TestRunCodeReviewerQARanAndFallback(t *testing.T) {
 	}
 	m := asMap(t, out)
 	assertKeys(t, m, codeReviewResultKeys)
-	// reviewer tools ordering (Bash last) is the reviewer-specific set.
 	if strings.Join(mh.gotOpts.Tools, ",") != "Read,Write,Glob,Grep,Bash" {
 		t.Fatalf("reviewer tool set mismatch: %v", mh.gotOpts.Tools)
 	}
 
-	// fallback: not-blocking approve
 	mhf := &mockHarness{fn: func(_ any) (*harness.Result, error) {
-		return &harness.Result{IsError: true, Parsed: nil}, nil
+		return &harness.Result{IsError: true, ErrorMessage: "review-parse", Parsed: nil}, nil
 	}}
 	out2, err := RunCodeReviewer(context.Background(), newDeps(mhf, nil, nr), map[string]any{
 		"worktree_path": "/wt",
 		"coder_result":  map[string]any{},
 		"issue":         map[string]any{"name": "i"},
 	})
-	if err != nil {
-		t.Fatalf("fallback must not error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "review-parse") {
+		t.Fatalf("expected fail-closed reviewer error, got out=%v err=%v", out2, err)
 	}
-	m2 := asMap(t, out2)
-	if m2["approved"] != true || m2["blocking"] != false {
-		t.Fatalf("reviewer fallback must be approved=true, blocking=false, got %v", m2)
+	if out2 != nil {
+		t.Fatalf("expected nil reviewer result on schema failure, got %v", out2)
 	}
 }
 
