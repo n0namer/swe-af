@@ -11,7 +11,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "options": {
         "apiKey": "{env:OPENAI_API_KEY}",
-        "baseURL": "{env:OPENAI_BASE_URL}"
+        "baseURL": "{env:OLLAMA_BASE_URL}"
       }
     },
     "openrouter": {
