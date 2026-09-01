@@ -166,9 +166,9 @@ Assign each primary failure to exactly one class:
 
 - [OPEN] `swe-af:main` contains a downstream `ERRORS.md` commit and therefore is not a clean upstream mirror. Resolve before the next upstream rebase/reconciliation cycle.
 - [OPEN] DEV VPS Terminal source/deployed target registry contains `agentfield-dev-workforce`, but the CURRENT callable ChatGPT DEV surface lacks typed File ACI/process-start operations and generic `execContainer`/`startSession` fail closed as `REVIEW_REQUIRED: opaque_or_unknown_mutation`. `getOperatorGuidance` explicitly returned `ALLOW` for the scoped reversible SWE start, but execution remained blocked by mediation. Generic approval is unavailable (`approval_capability_gap`). This is `OPERATOR_PLANE_CAPABILITY_DRIFT`, not a SWE defect; do not redeploy the operator merely to bypass it.
-- [OPEN] Current workforce healthcheck proves provenance HTTP only and can be green while `swe-planner`/`swe-pro` are offline.
-- [OPEN] Current SWE absence is explained by the provider/bootstrap gate, not by a proven current-generation process crash: Anthropic/OpenRouter resolved empty and bootstrap intentionally skipped SWE. Historical process-exit logs remain forensic only.
-- [OPEN] Provider-contract gap: SWE code contains `codex`/`OPENAI_API_KEY` and OpenAI-compatible OpenCode support, while `agentfield-package.yaml` and Universal Solver bootstrap admit only Anthropic/OpenRouter. Exact Gonka execution compatibility must be proven before adapting the contract.
+- [OPEN] Workforce healthcheck still proves provenance HTTP only; current SWE readiness is instead evidenced separately by `swe-planner` / `swe-pro` registration and initialization events. Preserve this distinction in future canaries.
+- [RESOLVED] Historical SWE absence was caused by the provider/bootstrap admission gate. CURRENT generation has consumed the live provider delta and both SWE nodes are registered/initialized, so this is no longer the active blocker.
+- [OPEN] Provider-route acceptance is not yet complete: source/config now admits OpenAI-compatible Gonka and preserves `OPENAI_BASE_URL`, but one real non-mutating execution must still prove the configured Gonka route and absence of Anthropic/OpenRouter fallback.
 
 ## BMAD Workflow Used for Current Batch
 
