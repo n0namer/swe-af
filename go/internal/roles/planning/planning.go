@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
+	"github.com/Agent-Field/agentfield/sdk/go/ai"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/config"
 	"github.com/Agent-Field/SWE-AF/go/internal/dagutil"
@@ -48,8 +49,13 @@ type Handler func(ctx context.Context, deps *Deps, input map[string]any) (any, e
 // ask_user_form is stripped and the current decision proceeds) — matching
 // Python's build_hax_client_from_env() returning None when HAX_API_KEY is unset.
 // The node wiring builds it once via hitl.BuildHaxClientFromEnv().
+type AICaller interface {
+	AI(ctx context.Context, prompt string, opts ...ai.Option) (*ai.Response, error)
+}
+
 type Deps struct {
 	Harness          harnessx.HarnessCaller
+	AI               AICaller
 	App              hitl.App
 	Pauser           hitl.Pauser
 	Hax              *hitl.HaxClient
