@@ -336,26 +336,22 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 	}.ToOptions()
 
 	parsed, result, hErr := harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, taskPrompt, opts)
-	switch {
-	case hErr != nil:
-		if isFatal(hErr) {
-			return nil, hErr
-		}
+	if hErr != nil {
 		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer agent failed: %s: %s", issueName, hErr.Error()), "code_reviewer", "error")
-	case result != nil && result.Parsed != nil:
-		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer complete: %s, approved=%s, blocking=%s",
-			issueName, pyBool(parsed.Approved), pyBool(parsed.Blocking)), "code_reviewer", "complete")
-		parsed.IterationID = in.IterationID
-		return parsed, nil
+		return nil, fmt.Errorf("code reviewer agent failed for %s: %w", issueName, hErr)
 	}
-
-	return &schemas.CodeReviewResult{
-		Approved:    true, // don't block on reviewer failure
-		Summary:     fmt.Sprintf("Code reviewer agent failed for %s — not blocking", issueName),
-		Blocking:    false,
-		DebtItems:   []map[string]any{},
-		IterationID: in.IterationID,
-	}, nil
+	if result == nil || result.Parsed == nil {
+		detail := "no structured output returned"
+		if result != nil && result.ErrorMessage != "" {
+			detail = result.ErrorMessage
+		}
+		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer produced no result: %s: %s", issueName, detail), "code_reviewer", "error")
+		return nil, fmt.Errorf("code reviewer produced no structured result for %s: %s", issueName, detail)
+	}
+	deps.Note.Note(ctx, fmt.Sprintf("Code reviewer complete: %s, approved=%s, blocking=%s",
+		issueName, pyBool(parsed.Approved), pyBool(parsed.Blocking)), "code_reviewer", "complete")
+	parsed.IterationID = in.IterationID
+	return parsed, nil
 }
 
 // ---------------------------------------------------------------------------
