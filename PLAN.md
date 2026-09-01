@@ -80,9 +80,9 @@ Stop conditions: no real coding canary while SWE is offline; no provider-secret 
 
 ### Batch 2 — Live-task diagnostic ladder: calculator → seeded bug
 
-Status: NEXT AFTER L0 / LOADED-SOURCE MATCH
+Status: IN PROGRESS — L1 FIRST RUN EXPOSED FALSE SUCCESS
 
-Prerequisite: one minimal execution on the intended loaded source reaches terminal status with runtime evidence.
+Prerequisite note: the first L1 run was intentionally executed against CURRENT loaded PID `7686` to expose actual runtime behavior before latest source reload. Results below therefore diagnose the loaded binary, not the newest `/src` delta.
 
 DoD:
 1. Use an ephemeral calculator workspace only; no GitHub delivery and no persistent infrastructure.
