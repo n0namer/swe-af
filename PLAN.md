@@ -181,10 +181,10 @@ Assign each primary failure to exactly one class:
 ## Known Drift / Debt
 
 - [OPEN] `swe-af:main` contains a downstream `ERRORS.md` commit and therefore is not a clean upstream mirror. Resolve before the next upstream rebase/reconciliation cycle.
-- [OPEN] DEV VPS Terminal source/deployed target registry contains `agentfield-dev-workforce`, but the CURRENT callable ChatGPT DEV surface lacks typed File ACI/process-start operations and generic `execContainer`/`startSession` fail closed as `REVIEW_REQUIRED: opaque_or_unknown_mutation`. `getOperatorGuidance` explicitly returned `ALLOW` for the scoped reversible SWE start, but execution remained blocked by mediation. Generic approval is unavailable (`approval_capability_gap`). This is `OPERATOR_PLANE_CAPABILITY_DRIFT`, not a SWE defect; do not redeploy the operator merely to bypass it.
-- [OPEN] Workforce healthcheck still proves provenance HTTP only; current SWE readiness is instead evidenced separately by `swe-planner` / `swe-pro` registration and initialization events. Preserve this distinction in future canaries.
+- [OPEN] DEV VPS Terminal can edit/read CURRENT live source, but it still lacks a typed Go build/process-only restart primitive for `swe-planner`; generic `go`, `kill`, and similar process commands fail closed under mediation. This is now specifically a `LOADED_SOURCE_DRIFT` / process-hot-load gap, not an execution-control gap. Do not redeploy the whole container merely to load source.
+- [OPEN] Workforce healthcheck still proves provenance HTTP only; current SWE readiness is instead evidenced by registration plus real reasoner execution. Preserve this distinction in future canaries.
 - [RESOLVED] Historical SWE absence was caused by the provider/bootstrap admission gate. CURRENT generation has consumed the live provider delta and both SWE nodes are registered/initialized, so this is no longer the active blocker.
-- [OPEN] Provider-route acceptance is not yet complete: source/config now admits OpenAI-compatible Gonka and preserves `OPENAI_BASE_URL`, but one real non-mutating execution must still prove the configured Gonka route and absence of Anthropic/OpenRouter fallback.
+- [OPEN] Provider/runtime semantic acceptance remains incomplete. Real SWE executions now reach coder/reviewer stages, but structured-output harness failures persist on the loaded binary. Independent Gonka probes show healthy `/models` with stalled valid `/chat/completions`, and the same stall reproduces through the previously working Deep Research path. The latest live `/src` delta aligns planning with Deep Research-style direct AI + custom base + 30-minute timeout, but it is not yet loaded into PID `7686`.
 
 ## BMAD Workflow Used for Current Batch
 
