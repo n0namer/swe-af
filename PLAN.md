@@ -52,7 +52,7 @@ Reconciled from live readback on 2026-09-01.
 
 BROWNFIELD RECOVERY / PROVIDER ENABLEMENT / SEMANTIC ACCEPTANCE.
 
-Infrastructure bootstrap, exact-SHA reconciliation, discovery, and one real SWE SourceLoop capture are already proven. The first failed prerequisite in CURRENT permanent DEV is provider/bootstrap enablement: SWE is intentionally not started because its declared Anthropic/OpenRouter provider gate is unsatisfied. The evidence ladder is therefore provider contract -> SWE active/ready -> non-mutating smoke -> bounded `implement_issue`.
+Infrastructure bootstrap, exact-SHA reconciliation, discovery, and one real SWE SourceLoop capture are already proven. Provider/bootstrap enablement is now proven in CURRENT permanent DEV: `swe-planner` and `swe-pro` are running, registered, and initialized. The first failed prerequisite is now execution control/observability: this chat must obtain one real non-mutating reasoner execution and verify Gonka/OpenAI-compatible routing before a bounded `implement_issue`. The evidence ladder is therefore live-node registration -> non-mutating execution -> provider-route proof -> bounded `implement_issue`.
 
 ## Bounded Development Batches
 
