@@ -22,17 +22,25 @@
     },
     "fcm": {
       "name": "FCM OpenAI-compatible",
+      "env": [
+        "FCM_API_KEY"
+      ],
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "baseURL": "http://172.16.60.2:19280/v1"
+        "apiKey": "{env:FCM_API_KEY}",
+        "baseURL": "{env:FCM_BASE_URL}"
       },
       "models": {
+        "fcm": {
+          "id": "fcm",
+          "name": "FCM"
+        },
         "fcm:keyless-dev": {
           "id": "fcm:keyless-dev",
           "name": "FCM Keyless Dev"
         }
       }
-    },
+    }
     "openrouter": {
       "options": {
         "apiKey": "{env:OPENROUTER_API_KEY}"
