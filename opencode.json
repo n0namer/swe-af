@@ -24,7 +24,7 @@
       "name": "FCM OpenAI-compatible",
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "baseURL": "http://172.16.1.26:19280/v1"
+        "baseURL": "http://172.16.60.2:19280/v1"
       },
       "models": {
         "fcm:keyless-dev": {
