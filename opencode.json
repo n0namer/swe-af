@@ -20,11 +20,24 @@
         }
       }
     },
+    "fcm": {
+      "name": "FCM OpenAI-compatible",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://fcm-dev-internal:19280/v1"
+      },
+      "models": {
+        "fcm:keyless-dev": {
+          "id": "fcm:keyless-dev",
+          "name": "FCM Keyless Dev"
+        }
+      }
+    },
     "openrouter": {
       "options": {
         "apiKey": "{env:OPENROUTER_API_KEY}"
       }
-    },
+    }
     "minimax-global-openai": {
       "name": "MiniMax Global (OpenAI-compatible)",
       "env": [
