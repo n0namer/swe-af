@@ -40,7 +40,7 @@
           "name": "FCM Keyless Dev"
         }
       }
-    }
+    },
     "openrouter": {
       "options": {
         "apiKey": "{env:OPENROUTER_API_KEY}"
