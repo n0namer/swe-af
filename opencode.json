@@ -37,7 +37,7 @@
       "options": {
         "apiKey": "{env:OPENROUTER_API_KEY}"
       }
-    }
+    },
     "minimax-global-openai": {
       "name": "MiniMax Global (OpenAI-compatible)",
       "env": [
