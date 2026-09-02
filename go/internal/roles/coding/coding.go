@@ -169,6 +169,11 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		if result != nil && result.ErrorMessage != "" {
 			detail = result.ErrorMessage
 		}
+		if result != nil {
+			if providerErr := providerErrorFromMessages(result.Messages); providerErr != "" && !strings.Contains(detail, providerErr) {
+				detail = fmt.Sprintf("provider error: %s; harness: %s", providerErr, detail)
+			}
+		}
 		deps.Note.Note(ctx, fmt.Sprintf("Coder produced no result: %s: %s", issueName, detail), "coder", "error")
 		return nil, fmt.Errorf("coder produced no structured result for %s: %s", issueName, detail)
 	}
