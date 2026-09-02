@@ -52,11 +52,29 @@ Reconciled from live readback on 2026-09-01.
 
 ## Current Stage
 
-LIVE-TASK DEBUGGING / SEMANTIC ACCEPTANCE / RECOVERY LADDER.
+LIVE-TASK DEBUGGING / SEMANTIC ACCEPTANCE / STRUCTURED-OUTPUT RELIABILITY.
 
-Infrastructure bootstrap, node registration, authenticated execution control, and real non-mutating SWE executions are already proven. The current goal is no longer to prepare infrastructure in isolation; it is to use progressively harder live engineering tasks as controlled diagnostic experiments. The first failed gate observed in each task must be localized from runtime evidence, repaired minimally in live `/src`, and the same task repeated before complexity increases.
+Fresh CURRENT readback on 2026-09-02 supersedes the older PID/provider-gate wording below for the active debug batch:
 
-The CURRENT source is not yet the CURRENT loaded binary: `swe-planner` PID `7686` predates the latest Deep-Research-style direct-AI/timeout source delta. Until that exact source is loaded into the same process lane, tests against PID `7686` validate the older binary only. Do not redeploy the container merely to load source. The next execution ladder is: load exact live source into the existing SWE process lane -> L0 minimal execution -> L1 calculator coding task -> L2 seeded regression repair -> L3 multi-file feature -> L4 forced recovery -> L5 bounded real-repository issue.
+- Permanent DEV workforce is container `1437789b5c4debc061992bec718132dcbccc66ac67e0b9e45ce1eea5b651c9e7` (`workforce-edshqtkwskg3lrczekhcmd71-105906341777`), image `edshqtkwskg3lrczekhcmd71_workforce:ffa6c6a56814b59da19903bd56c04f8cafdb44ae`, healthy, restart count `0`, OOM=`false`.
+- `/afhome/installed.yaml` is the loaded-process authority for this generation: `swe-planner` was installed from local `/src/swe-af/go`, PID `8059`, started `2026-09-02T11:09:42Z`, port `8800`. `swe-planner.log` proves both `swe-planner` and `swe-pro` registered and initialized in this generation. Provider/bootstrap/liveness is therefore no longer the blocking gate.
+- Direct `run_coder` behavior is not uniformly broken. After three early structured-output failures (`exec_20260902_112138_30mrlcvk`, `exec_20260902_113131_ju4aqfom`, `exec_20260902_113412_3jvaz47h`), four later direct coder executions completed (`exec_20260902_113619_5298bek0`, `exec_20260902_115708_d5rur0zd`, `exec_20260902_120030_8m4rpg5e`, `exec_20260902_120338_5ac3xq2q`). The last one is also independently recorded in `ERRORS.md` with 13/13 external-cwd tests PASS after bounded recovery.
+- Two full `implement_issue` L2 attempts then failed at the child-coder boundary: parent `exec_20260902_120757_zb70eml7` -> child `exec_20260902_120757_yk42tvru`, and parent `exec_20260902_121608_24prhnbd` -> child `exec_20260902_121608_ezcvem44`. Both parents emitted `call.outbound.failed`; no false PASS was observed. Both child failures were surfaced as `Schema validation failed after 2 retry attempt(s). Last error: The output file was NOT created.`
+- Container-first wrapper evidence localizes the second L2 failure more precisely. The three OpenCode attempts for `/tmp/fcm-calculator-live/.worktrees/40e731f4-calculator-l2-retry-power-modulo-json-cl` are captured as `/tmp/opencode-run-20451-1788351368.*`, `opencode-run-20974-1788351484.*`, and `opencode-run-21477-1788351564.*`. The agent successfully inspected/edited calculator files and repeatedly ran `python3 test_calculator.py`; the final retry reported 13 tests `OK`. Each attempt then terminated with OpenCode `type:error`, `UnknownError`, message `"Stream error occurred"` before the AgentField output file was written. Therefore `output file was NOT created` is a downstream schema symptom for this L2 failure, not yet the first causal error.
+- The first causal boundary currently evidenced for L2 is `OpenCode -> fcm stream -> AgentField structured-output file protocol`. Failure class is `PROVIDER / ACI_HARNESS boundary` until the upstream stream error is made more specific. Do not patch coder business logic merely to silence the schema symptom.
+- A separate planning defect remains isolated: `plan` parent `exec_20260902_113433_etlccqv6` / `run_product_manager` child `exec_20260902_113433_82kd1vcp` failed in ~16 ms with `API error: Invalid or missing broker client token`. This is an authentication/configuration gap in the planning path and is not the current L2 coding blocker.
+- PR-AF is separately active in the same workforce (PID `31633`, started `2026-09-02T13:18:24Z`) and continues high-latency parallel OpenCode/LLM activity. Its evidence may help classify shared provider/schema behavior, but correlation alone must not be promoted to SWE causation.
+- The connected AgentField Action currently reports healthy gateway status while execution-list/node-list reads return `Bad Gateway`; use direct permanent-DEV component logs and wrapper captures as the CURRENT execution evidence until that control-plane read path is restored.
+
+BMAD `bmad-testarch-test-design` revalidation verdict for this stage:
+
+1. **P0 semantic gate:** a bounded full `implement_issue` must terminate with a valid structured child result and no `call.outbound.failed`; transport status or successful task-file edits alone are insufficient.
+2. **P0 failure-classification gate:** preserve the underlying OpenCode/provider error when schema output is absent; a generic schema error must not mask the first causal provider/transport event.
+3. **P1 concurrency/provider gate:** before attributing failure to PR-AF or provider contention, compare one quiet/bounded SWE retry with runtime/provider evidence; do not stop or mutate unrelated agents merely to simplify the test.
+4. **P1 planning-auth debt:** track `broker client token` independently and repair only after the L2 coding gate or if it becomes a hard prerequisite.
+5. **Nearest compulsory move:** use the existing failed-task artifacts to expose/classify the upstream FCM stream failure, then rerun the SAME bounded L2 `implement_issue` once. Patch only the proven owning layer; after any source patch run its canonical regression, reload only the owning same-runtime target if required, then repeat the identical canary.
+
+The recovery ladder remains L2-first until this gate passes. Do not advance to L3/L4/L5 and do not redeploy the whole workforce as a debugging primitive.
 
 ## Bounded Development Batches
 
