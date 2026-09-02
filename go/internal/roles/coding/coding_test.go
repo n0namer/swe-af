@@ -271,6 +271,40 @@ func TestRunCoderParsedNilFailsClosed(t *testing.T) {
 	}
 }
 
+// Contract: when the provider emitted an in-band OpenCode error before the
+// structured output disappeared, preserve that causal message alongside the
+// downstream schema diagnosis instead of reporting only "output file missing".
+func TestRunCoderPreservesNestedProviderErrorOnSchemaFailure(t *testing.T) {
+	nr := &noteRecorder{}
+	mh := &mockHarness{fn: func(_ any) (*harness.Result, error) {
+		return &harness.Result{
+			IsError:      true,
+			ErrorMessage: "Schema validation failed after 2 retry attempt(s). Last error: The output file was NOT created.",
+			Parsed:       nil,
+			Messages: []map[string]any{{
+				"type": "error",
+				"error": map[string]any{
+					"name": "UnknownError",
+					"data": map[string]any{"message": "\"Stream error occurred\""},
+				},
+			}},
+		}, nil
+	}}
+	out, err := RunCoder(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"issue":        map[string]any{"name": "issue-stream"},
+		"iteration_id": "it-stream",
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider error: Stream error occurred") {
+		t.Fatalf("expected provider stream error to be preserved, got out=%v err=%v", out, err)
+	}
+	if !strings.Contains(err.Error(), "Schema validation failed after 2 retry attempt") {
+		t.Fatalf("expected downstream schema diagnosis to remain visible, got err=%v", err)
+	}
+	if out != nil {
+		t.Fatalf("expected nil result on provider/schema failure, got %v", out)
+	}
+}
+
 // Contract: a fatal harness error propagates (as *FatalHarnessError) and is not
 // swallowed into a fallback.
 func TestRunCoderFatalPropagates(t *testing.T) {

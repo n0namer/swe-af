@@ -183,6 +183,40 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 	return parsed, nil
 }
 
+// providerErrorFromMessages preserves an in-band provider failure that the
+// harness may otherwise mask with a later schema/output-file diagnosis. OpenCode
+// emits errors as JSON events, including nested error.data.message payloads.
+func providerErrorFromMessages(messages []map[string]any) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if eventType, _ := msg["type"].(string); eventType != "error" {
+			continue
+		}
+		for _, key := range []string{"message", "text"} {
+			if value, _ := msg[key].(string); strings.TrimSpace(value) != "" {
+				return strings.Trim(strings.TrimSpace(value), "\"")
+			}
+		}
+		if errObj, ok := msg["error"].(map[string]any); ok {
+			if data, ok := errObj["data"].(map[string]any); ok {
+				if value, _ := data["message"].(string); strings.TrimSpace(value) != "" {
+					return strings.Trim(strings.TrimSpace(value), "\"")
+				}
+			}
+			if value, _ := errObj["message"].(string); strings.TrimSpace(value) != "" {
+				return strings.Trim(strings.TrimSpace(value), "\"")
+			}
+			if value, _ := errObj["name"].(string); strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+		if value, _ := msg["error"].(string); strings.TrimSpace(value) != "" {
+			return strings.Trim(strings.TrimSpace(value), "\"")
+		}
+	}
+	return ""
+}
+
 // ---------------------------------------------------------------------------
 // run_qa
 // ---------------------------------------------------------------------------
