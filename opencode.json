@@ -23,12 +23,12 @@
     "fcm": {
       "name": "FCM OpenAI-compatible",
       "env": [
-        "FCM_API_KEY"
+        "LLM_BROKER_API_KEY"
       ],
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "apiKey": "{env:FCM_API_KEY}",
-        "baseURL": "{env:FCM_BASE_URL}"
+        "apiKey": "{env:LLM_BROKER_API_KEY}",
+        "baseURL": "{env:LLM_BROKER_BASE_URL}"
       },
       "models": {
         "fcm": {
