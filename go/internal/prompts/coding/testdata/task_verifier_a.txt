@@ -29,12 +29,6 @@ This task spans multiple repositories. Each repository is listed below with its 
 
 Use this to focus your verification. Do ONE build check + spot-check risky areas. Do NOT recompile everything or rerun the full test suite.
 
-## Reference Paths
-- Artifacts: /a/artifacts
-- PRD: /a/artifacts/plan/prd.md
-- Architecture: /a/artifacts/plan/architecture.md
-- Issues: /a/artifacts/plan/issues/
-
 ## Completed Issues
 - **lexer**: done
   Files changed: src/lexer.rs
@@ -46,7 +40,7 @@ Use this to focus your verification. Do ONE build check + spot-check risky areas
 - optimizer
 
 ## Your Task
-1. Read the PRD and architecture documents for full context.
+1. Treat the PRD and acceptance criteria embedded above as authoritative; do not read artifacts or files outside the current repository/worktree.
 2. For each acceptance criterion, identify the responsible issue(s).
 3. Inspect the code changes made by completed issues.
 4. Run any existing tests relevant to the criteria.
