@@ -1,12 +1,18 @@
 package harnessx
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"reflect"
+	"sort"
+	"strings"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
@@ -63,6 +69,24 @@ func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harn
 	var dest T
 	result, err := app.Harness(ctx, prompt, schema, &dest, opts)
 	if err != nil {
+		// A provider CLI can stall after already emitting a complete structured
+		// result in assistant text. The no-progress watchdog is a liveness signal,
+		// not proof that the result is unusable. Recover only this narrow case and
+		// only after exact schema validation; generic/provider errors remain fatal.
+		if result != nil && strings.Contains(err.Error(), "CLI command made no progress") {
+			for _, text := range structuredResultCandidates(result) {
+				var recovered T
+				if recoverErr := recoverStructuredText(text, schema, &recovered); recoverErr != nil {
+					continue
+				}
+				schemas.EmptyForNilSlices(&recovered)
+				result.Parsed = &recovered
+				result.IsError = false
+				result.ErrorMessage = ""
+				result.FailureType = harness.FailureNone
+				return &recovered, result, nil
+			}
+		}
 		return nil, result, err
 	}
 
@@ -70,6 +94,29 @@ func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harn
 	// real non-retryable message is not masked by a generic fallback struct.
 	if fErr := fatal.CheckFatalHarnessError(result); fErr != nil {
 		return nil, result, fErr
+	}
+
+	// Recover one important weak-model failure mode before giving up: OpenCode may
+	// preserve a useful schema-shaped JSON object in an earlier text event even
+	// when the file protocol fails and later schema retries produce unrelated
+	// text. The SDK returns only the LAST retry text in Result, but it preserves
+	// all attempt events in Messages. Search only assistant text events (never tool
+	// output) and recover only schema/no-output failures; provider/transport errors
+	// remain fail-closed.
+	if result != nil && result.Parsed == nil &&
+		(result.FailureType == harness.FailureSchema || result.FailureType == harness.FailureNoOutput || result.FailureType == harness.FailureNone) {
+		for _, text := range structuredResultCandidates(result) {
+			var recovered T
+			if recoverErr := recoverStructuredText(text, schema, &recovered); recoverErr != nil {
+				continue
+			}
+			schemas.EmptyForNilSlices(&recovered)
+			result.Parsed = &recovered
+			result.IsError = false
+			result.ErrorMessage = ""
+			result.FailureType = harness.FailureNone
+			return &recovered, result, nil
+		}
 	}
 
 	// Schema parse failure: hand the caller a default-seeded value plus the
@@ -85,6 +132,159 @@ func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harn
 	// checkpoint/DAGState normalisation. Maps and nil pointers are left null.
 	schemas.EmptyForNilSlices(&dest)
 	return &dest, result, nil
+}
+
+// structuredResultCandidates returns only assistant text surfaces that can
+// legitimately contain the final structured result. Result is the latest retry
+// text; Messages retains earlier OpenCode attempts, which is critical when a
+// useful first answer was followed by broken schema retries. Tool outputs are
+// deliberately excluded so repository/file JSON cannot be mistaken for the
+// orchestration result.
+func structuredResultCandidates(result *harness.Result) []string {
+	if result == nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	out := make([]string, 0, 4)
+	appendUnique := func(text string) {
+		if text == "" {
+			return
+		}
+		if _, ok := seen[text]; ok {
+			return
+		}
+		seen[text] = struct{}{}
+		out = append(out, text)
+	}
+
+	appendUnique(result.Result)
+	for i := len(result.Messages) - 1; i >= 0; i-- {
+		msg := result.Messages[i]
+		kind, _ := msg["type"].(string)
+		if kind != "text" && kind != "assistant" && kind != "result" {
+			continue
+		}
+		if text, ok := msg["text"].(string); ok {
+			appendUnique(text)
+		}
+		if part, ok := msg["part"].(map[string]any); ok {
+			if text, ok := part["text"].(string); ok {
+				appendUnique(text)
+			}
+		}
+	}
+	return out
+}
+
+// recoverStructuredText extracts candidate JSON objects with a string-aware
+// scanner, validates them against the exact generated schema, and only then
+// unmarshals into dest. It is intentionally strict: malformed or schema-invalid
+// text stays a failure and is handled by the normal retry/error path.
+func recoverStructuredText[T any](text string, schema map[string]any, dest *T) error {
+	schemaBytes, err := json.Marshal(schema)
+	if err != nil {
+		return fmt.Errorf("marshal schema: %w", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("mem://swe/schema.json", bytes.NewReader(schemaBytes)); err != nil {
+		return fmt.Errorf("add schema: %w", err)
+	}
+	compiled, err := compiler.Compile("mem://swe/schema.json")
+	if err != nil {
+		return fmt.Errorf("compile schema: %w", err)
+	}
+
+	for _, candidate := range extractJSONObjectCandidates(text) {
+		var data any
+		if err := json.Unmarshal([]byte(candidate), &data); err != nil {
+			continue
+		}
+		if err := compiled.Validate(data); err == nil {
+			if err := json.Unmarshal([]byte(candidate), dest); err == nil {
+				return nil
+			}
+		}
+
+		// CoderResult mirrors a Pydantic model where every field has a default.
+		// Weak models commonly omit those defaulted fields and sometimes emit the
+		// advisory agent_retro as a string. Let its custom UnmarshalJSON normalize
+		// that one known shape, then validate the fully-materialized typed object.
+		// Do not do this generically: required fields on other schemas must never be
+		// synthesized from Go zero values.
+		if reflect.TypeOf((*T)(nil)).Elem().Name() == "CoderResult" {
+			var normalized T
+			if err := json.Unmarshal([]byte(candidate), &normalized); err != nil {
+				continue
+			}
+			normalizedBytes, err := json.Marshal(normalized)
+			if err != nil {
+				continue
+			}
+			var normalizedData any
+			if err := json.Unmarshal(normalizedBytes, &normalizedData); err != nil {
+				continue
+			}
+			if err := compiled.Validate(normalizedData); err != nil {
+				continue
+			}
+			*dest = normalized
+			return nil
+		}
+	}
+	return fmt.Errorf("no schema-valid JSON object found in final text")
+}
+
+// extractJSONObjectCandidates finds balanced top-level JSON objects while
+// ignoring braces that appear inside quoted strings. Candidates are returned
+// largest-first so an enclosing result object wins over nested examples.
+func extractJSONObjectCandidates(text string) []string {
+	candidates := make([]string, 0, 2)
+	depth := 0
+	start := -1
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(text); i++ {
+		ch := text[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+
+		switch ch {
+		case '"':
+			inString = true
+		case '{':
+			if depth == 0 {
+				start = i
+			}
+			depth++
+		case '}':
+			if depth == 0 {
+				continue
+			}
+			depth--
+			if depth == 0 && start >= 0 {
+				candidates = append(candidates, text[start:i+1])
+				start = -1
+			}
+		}
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return len(candidates[i]) > len(candidates[j])
+	})
+	return candidates
 }
 
 // seedDefaults returns a T seeded with its pydantic-parity defaults. Unmarshaling
@@ -138,16 +338,25 @@ type RoleOptions struct {
 // credentials into Env afterwards, so callers leave Env as the base env only.
 func (r RoleOptions) ToOptions() harness.Options {
 	binPath := ""
+	schemaMode := ""
 	if r.Provider == "opencode" {
 		// SWE owns its harness binary contract. Cross-component fallbacks (for
 		// example SEC_AF_OPENCODE_BIN) couple independently deployable agents and
 		// belong in fleet orchestration, not SWE source.
 		binPath = os.Getenv("SWE_OPENCODE_BIN")
+
+		// Weak OpenCode-backed models are materially more reliable when the
+		// structured envelope is built field-by-field. Incremental mode also keeps
+		// the original task/schema context on validation retries, while the SDK's
+		// single-shot retry prompt contains only the output-file diagnosis. That
+		// distinction is critical when a model otherwise drifts into generic prose
+		// after completing the coding work.
+		schemaMode = "incremental"
 	}
 	return harness.Options{
 		Provider:       r.Provider,
 		BinPath:        binPath,
-		Model:          r.Model,
+		Model:           r.Model,
 		MaxTurns:       r.MaxTurns,
 		Tools:          r.Tools,
 		PermissionMode: r.PermissionMode,
@@ -155,5 +364,6 @@ func (r RoleOptions) ToOptions() harness.Options {
 		Cwd:            r.Cwd,
 		ProjectDir:     r.Cwd,
 		Env:            r.Env,
+		SchemaMode:     schemaMode,
 	}
 }
