@@ -134,11 +134,33 @@ func defaultCoderResult() CoderResult {
 	return CoderResult{Complete: true}
 }
 
-// UnmarshalJSON seeds CoderResult.Complete = true.
+// UnmarshalJSON seeds CoderResult.Complete = true and tolerates one common
+// weak-model shape: agent_retro emitted as a plain string instead of an object.
+// Preserve that text under a deterministic "summary" key; all other type errors
+// remain strict and are returned to the caller.
 func (c *CoderResult) UnmarshalJSON(b []byte) error {
 	*c = defaultCoderResult()
 	type alias CoderResult
-	return json.Unmarshal(b, (*alias)(c))
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if retroRaw, ok := raw["agent_retro"]; ok && len(retroRaw) > 0 && string(retroRaw) != "null" {
+		var retroText string
+		if err := json.Unmarshal(retroRaw, &retroText); err == nil {
+			normalized, err := json.Marshal(map[string]any{"summary": retroText})
+			if err != nil {
+				return err
+			}
+			raw["agent_retro"] = normalized
+		}
+	}
+	normalized, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(normalized, (*alias)(c))
 }
 
 // --- fast.go ---
