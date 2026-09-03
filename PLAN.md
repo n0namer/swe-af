@@ -93,6 +93,23 @@ Risk/test-design verdict remains **P0 BLOCKED on evidence, not implementation**:
 
 L2 semantic DoD remains unchanged and is not PASS: the same bounded `implement_issue` must produce a valid structured child result, no `call.outbound.failed`, expected bounded diff, independent tests PASS, and no unresolved provider/stream failure.
 
+### BMAD source-level discriminator — 2026-09-03
+
+Following the same `bmad-testarch-test-design` evidence gate, canonical FCM source was inspected at exact `n0namer/free-coding-models:dev` SHA `574f300458249252a5616406184c7ef3395e4f3f` before any implementation mutation.
+
+Source evidence in `src/core/router-daemon.js` narrows the candidate defect:
+
+- The router loops through candidates, records each `candidate.key`, and invokes `proxyStreamingRequest` for streaming requests. When a result returns `failoverToNext`, the next eligible candidate is selected and an `app_router_failover` event is emitted.
+- Retryable upstream HTTP responses, auth failures, provider URL failures, empty streams, first-chunk failures, and transport errors before any client data is sent all return `failoverToNext: true`.
+- After partial streaming data has already been sent, only `timeout` / `stream_stall_timeout` returns `failoverToNext: true`.
+- A non-stall mid-stream error after partial output explicitly logs `Streaming failure after partial response`, closes the response, and returns `{ done: true }`; the outer router therefore does **not** attempt the secondary candidate on that branch.
+- Final `All routed models failed for set: <set>` is produced only after the candidate loop exhausts its allowed attempts without a `done` result. The response already carries `models_tried` and quota metadata.
+- The router has an existing unauthenticated `/stats` payload containing `requestLog`, `activeRequests`, routing order, and circuit-breaker state. This is the preferred bounded correlation surface; no new observability service or file is justified.
+
+This is a **source-proven behavioral gap / runtime-correlation pending** result. It is consistent with the observed OpenCode `Stream error occurred`, but the failed SWE request has not yet been correlated to the post-partial non-stall branch by request id. Therefore `bmad-quick-dev` implementation is not yet authorized by evidence: changing streaming failover now would promote an inference into a product fix.
+
+Nearest compulsory move is now sharper: obtain the router `/stats` / request-log entry for the same failed SWE/OpenCode request (or reproduce the same bounded L2 once while capturing its FCM `x-request-id`). If the entry shows a post-partial non-stall stream error with no second candidate, ownership moves to FCM and `bmad-quick-dev` should implement the smallest failover/stream-lifecycle fix with regression coverage. If it instead shows both `keyless-dev` candidates attempted, classify their exact upstream errors and patch that owning provider/config path instead.
+
 ## Bounded Development Batches
 
 Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
