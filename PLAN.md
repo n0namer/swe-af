@@ -136,6 +136,18 @@ The compulsory same-level retry was executed through the CURRENT authenticated A
 
 Current gate is therefore **SOURCE FIX DURABLE / VALIDATION + RUNTIME MATERIALIZATION PENDING**. Do not advance L2 yet. Next mandatory move: run the canonical Go regression on exact source `a21f1ce8...` using an existing authorized Go-capable runner; if PASS, materialize this exact accepted delta into CURRENT `/src/swe-af`, reload only `swe-planner` if required, and repeat the identical L2 canary. If no Go-capable authorized runner exists, keep status `VALIDATION_BLOCKER` rather than treating the code review as PASS.
 
+### Fresh functional check — 2026-09-03 13:03Z
+
+A new identical L2 canary was executed to test whether CURRENT runtime behavior had already converged without further materialization:
+
+- Parent execution `exec_20260903_130335_s8486jav`, run `run_20260903_130335_p7riw9h0`, duration ~91.6s.
+- AgentField transport status was `succeeded`, but semantic result was `success=false`, `outcome=failed_unrecoverable`.
+- The failure returned at coder iteration 1: `Schema validation failed after 2 retry attempt(s). Last error: The output file was NOT created.`
+- The run still produced commit `04905bd385090a465bbf606235edb4c3046c8dda` and a non-empty diff before losing the structured result; this again proves transport/file mutation is not semantic acceptance.
+- Because this attempt failed before reviewer execution, it does not prove whether the durable blocking-review retry fix is loaded in CURRENT `swe-planner`.
+
+Verdict: CURRENT L2 is **not reliably working yet**. The provider/structured-output failure is intermittent: the immediately preceding L2 reached a valid reviewer result, while this fresh retry regressed to missing structured output. Keep the FCM/provider boundary open and keep runtime materialization of the self-repair fix unproven. No L3 advancement.
+
 ## Bounded Development Batches
 
 Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
