@@ -200,6 +200,82 @@ func TestRunParsedNilReturnsSeededDefaults(t *testing.T) {
 	}
 }
 
+func TestRunRecoversSchemaValidJSONWithBraceInsideString(t *testing.T) {
+	const weakModelText = `I finished the task. {"complete":false,"estimated_scope":"medium ${foo {"} trailing prose`
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Result:       weakModelText,
+				Parsed:       nil,
+				IsError:      true,
+				ErrorMessage: "schema validation failed after retries",
+				FailureType:  harness.FailureSchema,
+			}, nil
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out == nil || out.Complete || out.Scope != "medium ${foo {" {
+		t.Fatalf("expected recovered structured result, got %+v", out)
+	}
+	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
+		t.Fatalf("expected recovery to normalize harness result, got %+v", res)
+	}
+}
+
+func TestRunRecoveryRejectsSchemaInvalidJSON(t *testing.T) {
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Result:       `prefix {"complete":false} suffix`,
+				Parsed:       nil,
+				IsError:      true,
+				ErrorMessage: "schema validation failed after retries",
+				FailureType:  harness.FailureSchema,
+			}, nil
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out == nil || !out.Complete || out.Scope != "medium" {
+		t.Fatalf("schema-invalid text must fall back to seeded defaults, got %+v", out)
+	}
+	if res == nil || res.Parsed != nil || !res.IsError || res.FailureType != harness.FailureSchema {
+		t.Fatalf("schema-invalid text must remain a harness failure, got %+v", res)
+	}
+}
+
+func TestRunRecoveryDoesNotMaskProviderFailure(t *testing.T) {
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Result:       `{"complete":false,"estimated_scope":"medium"}`,
+				Parsed:       nil,
+				IsError:      true,
+				ErrorMessage: "Stream error occurred",
+				FailureType:  harness.FailureAPIError,
+			}, nil
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out == nil || !out.Complete || out.Scope != "medium" {
+		t.Fatalf("provider failure must fall back to seeded defaults, got %+v", out)
+	}
+	if res == nil || res.Parsed != nil || !res.IsError || res.FailureType != harness.FailureAPIError {
+		t.Fatalf("provider failure must remain visible, got %+v", res)
+	}
+}
+
 // --- Run: success path ------------------------------------------------------
 
 func TestRunSuccessReturnsParsed(t *testing.T) {
