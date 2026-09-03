@@ -361,11 +361,17 @@ func TestRoleOptionsOpenCodeUsesOnlySWEOwnedBinary(t *testing.T) {
 	if o.BinPath != "/opt/swe/opencode" {
 		t.Fatalf("expected SWE-owned binary, got %q", o.BinPath)
 	}
+	if o.SchemaMode != "incremental" {
+		t.Fatalf("weak-model OpenCode roles must keep task context across schema retries, got schema_mode=%q", o.SchemaMode)
+	}
 
 	t.Setenv("SWE_OPENCODE_BIN", "")
 	o = (RoleOptions{Provider: "opencode"}).ToOptions()
 	if o.BinPath != "" {
 		t.Fatalf("SEC-AF binary must not leak into SWE options, got %q", o.BinPath)
+	}
+	if o.SchemaMode != "incremental" {
+		t.Fatalf("OpenCode schema mode changed with binary resolution: %q", o.SchemaMode)
 	}
 }
 

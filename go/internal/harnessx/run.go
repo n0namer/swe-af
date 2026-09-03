@@ -319,11 +319,20 @@ type RoleOptions struct {
 // credentials into Env afterwards, so callers leave Env as the base env only.
 func (r RoleOptions) ToOptions() harness.Options {
 	binPath := ""
+	schemaMode := ""
 	if r.Provider == "opencode" {
 		// SWE owns its harness binary contract. Cross-component fallbacks (for
 		// example SEC_AF_OPENCODE_BIN) couple independently deployable agents and
 		// belong in fleet orchestration, not SWE source.
 		binPath = os.Getenv("SWE_OPENCODE_BIN")
+
+		// Weak OpenCode-backed models are materially more reliable when the
+		// structured envelope is built field-by-field. Incremental mode also keeps
+		// the original task/schema context on validation retries, while the SDK's
+		// single-shot retry prompt contains only the output-file diagnosis. That
+		// distinction is critical when a model otherwise drifts into generic prose
+		// after completing the coding work.
+		schemaMode = "incremental"
 	}
 	return harness.Options{
 		Provider:       r.Provider,
@@ -336,5 +345,6 @@ func (r RoleOptions) ToOptions() harness.Options {
 		Cwd:            r.Cwd,
 		ProjectDir:     r.Cwd,
 		Env:            r.Env,
+		SchemaMode:     schemaMode,
 	}
 }
