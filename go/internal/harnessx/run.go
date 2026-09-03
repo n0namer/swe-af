@@ -78,15 +78,19 @@ func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harn
 	}
 
 	// Recover one important weak-model failure mode before giving up: OpenCode may
-	// preserve a schema-shaped JSON object in its final text even when the output
-	// file protocol fails. The upstream SDK already tries a text fallback, but its
-	// brace scanner is not JSON-string-aware, so code snippets such as "${foo {"
-	// can hide an otherwise valid object. Recover only schema/no-output failures;
-	// provider/transport errors remain fail-closed.
-	if result != nil && result.Parsed == nil && result.Result != "" &&
+	// preserve a useful schema-shaped JSON object in an earlier text event even
+	// when the file protocol fails and later schema retries produce unrelated
+	// text. The SDK returns only the LAST retry text in Result, but it preserves
+	// all attempt events in Messages. Search only assistant text events (never tool
+	// output) and recover only schema/no-output failures; provider/transport errors
+	// remain fail-closed.
+	if result != nil && result.Parsed == nil &&
 		(result.FailureType == harness.FailureSchema || result.FailureType == harness.FailureNoOutput || result.FailureType == harness.FailureNone) {
-		var recovered T
-		if recoverErr := recoverStructuredText(result.Result, schema, &recovered); recoverErr == nil {
+		for _, text := range structuredResultCandidates(result) {
+			var recovered T
+			if recoverErr := recoverStructuredText(text, schema, &recovered); recoverErr != nil {
+				continue
+			}
 			schemas.EmptyForNilSlices(&recovered)
 			result.Parsed = &recovered
 			result.IsError = false
@@ -109,6 +113,48 @@ func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harn
 	// checkpoint/DAGState normalisation. Maps and nil pointers are left null.
 	schemas.EmptyForNilSlices(&dest)
 	return &dest, result, nil
+}
+
+// structuredResultCandidates returns only assistant text surfaces that can
+// legitimately contain the final structured result. Result is the latest retry
+// text; Messages retains earlier OpenCode attempts, which is critical when a
+// useful first answer was followed by broken schema retries. Tool outputs are
+// deliberately excluded so repository/file JSON cannot be mistaken for the
+// orchestration result.
+func structuredResultCandidates(result *harness.Result) []string {
+	if result == nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	out := make([]string, 0, 4)
+	appendUnique := func(text string) {
+		if text == "" {
+			return
+		}
+		if _, ok := seen[text]; ok {
+			return
+		}
+		seen[text] = struct{}{}
+		out = append(out, text)
+	}
+
+	appendUnique(result.Result)
+	for i := len(result.Messages) - 1; i >= 0; i-- {
+		msg := result.Messages[i]
+		kind, _ := msg["type"].(string)
+		if kind != "text" && kind != "assistant" && kind != "result" {
+			continue
+		}
+		if text, ok := msg["text"].(string); ok {
+			appendUnique(text)
+		}
+		if part, ok := msg["part"].(map[string]any); ok {
+			if text, ok := part["text"].(string); ok {
+				appendUnique(text)
+			}
+		}
+	}
+	return out
 }
 
 // recoverStructuredText extracts candidate JSON objects with a string-aware
