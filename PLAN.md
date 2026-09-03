@@ -122,6 +122,20 @@ The existing `/stats` correlation path was pursued without runtime mutation.
 
 Updated gate: this is now an `OBSERVABILITY_GAP` with a source-backed explanation — the diagnostic endpoint exists but its CURRENT deployment location/exposure is not evidenced. The next safe discriminator must therefore come from an already-authorized runtime-local read of the router port/log/requestLog, or from the same bounded SWE L2 retry capturing the FCM `x-request-id` through the existing OpenCode wrapper artifacts. Do not mutate FCM streaming behavior until one of those paths correlates the failure.
 
+### BMAD L2 retry + quick-dev result — 2026-09-03
+
+The compulsory same-level retry was executed through the CURRENT authenticated AgentField control plane with no provider/config/redeploy mutation.
+
+- Parent: `exec_20260903_120353_r0nor5re`, run `run_20260903_120353_fvi6k9nh`, target `swe-planner.implement_issue`, repo `/tmp/fcm-calculator-live`, base `master`.
+- The run completed in ~102s with a valid structured top-level result. The previous FCM/OpenCode `Stream error occurred` / missing-output failure did **not** reproduce on this retry, so FCM streaming must not be patched from the earlier correlation alone.
+- Coder produced a bounded 3-file change and commit `662ba6a5533cf9c597a3b925930037c17b1e65bf`; reviewer then correctly found unmet CLI acceptance: power/modulo were not wired into parser choices and JSON output was not implemented. Result was `success=false`, `outcome=failed_unrecoverable`, one iteration.
+- This moved the first failed gate from provider transport to SWE semantic self-repair. Source inspection on canonical SWE `dev` showed a contract mismatch: the reviewer prompt defines `blocking=true` as "must be fixed before merge" including missing core functionality, while `runDefaultPath` converted any blocking review directly to action `block`, and the outer loop terminates `block` immediately instead of feeding feedback into the next bounded coder iteration.
+- `bmad-quick-dev` applied the smallest durable source fix on `dev`: commit `2310dbd418499a9a230ffaed39f613d0b0c129cf` changes default-path blocking review to `fix` so bounded iteration/stuck/exhaustion guards own recoverability; commit `a21f1ce8f345cc7e294fbb5821d7db44f441b954` replaces the immediate-fail regression with `TestBlockingReviewRetriesAndCanRecover`, requiring blocking iteration 1 followed by successful iteration 2.
+- Stale-safe reread and secret scans passed for both source edits. Exact-source test execution is currently **VALIDATION_BLOCKER**: Coding Station, the existing runtime target, and Personal Edge do not provide `go`; repository CI has no `workflow_dispatch` and does not auto-run on `dev`.
+- A bounded validation ref `copilot/bmad-validate-a21f1ce` was created at exact SHA `a21f1ce8...` to reuse the existing CI branch trigger without changing code. Creating the ref did not produce a workflow run, so no CI PASS is claimed and no further release/PR action was taken.
+
+Current gate is therefore **SOURCE FIX DURABLE / VALIDATION + RUNTIME MATERIALIZATION PENDING**. Do not advance L2 yet. Next mandatory move: run the canonical Go regression on exact source `a21f1ce8...` using an existing authorized Go-capable runner; if PASS, materialize this exact accepted delta into CURRENT `/src/swe-af`, reload only `swe-planner` if required, and repeat the identical L2 canary. If no Go-capable authorized runner exists, keep status `VALIDATION_BLOCKER` rather than treating the code review as PASS.
+
 ## Bounded Development Batches
 
 Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
