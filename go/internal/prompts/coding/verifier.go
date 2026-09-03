@@ -169,15 +169,6 @@ func VerifierTaskPrompt(o VerifierTaskPromptOpts) string {
 			"risky areas. Do NOT recompile everything or rerun the full test suite.")
 	}
 
-	// --- Reference Paths ---
-	sections = append(sections, "\n## Reference Paths")
-	sections = append(sections, fmt.Sprintf("- Artifacts: %s", o.ArtifactsDir))
-	if o.ArtifactsDir != "" {
-		sections = append(sections, fmt.Sprintf("- PRD: %s/plan/prd.md", o.ArtifactsDir))
-		sections = append(sections, fmt.Sprintf("- Architecture: %s/plan/architecture.md", o.ArtifactsDir))
-		sections = append(sections, fmt.Sprintf("- Issues: %s/plan/issues/", o.ArtifactsDir))
-	}
-
 	// --- Completed Issues ---
 	sections = append(sections, "\n## Completed Issues")
 	if len(o.CompletedIssues) > 0 {
