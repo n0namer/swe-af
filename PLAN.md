@@ -168,20 +168,25 @@ Decision / safety contract:
 5. Provider/API/transport failures remain fail-closed even when text happens to resemble JSON; this recovery path must not mask `Stream error occurred` or other upstream failures.
 6. Longer-term reliability direction after L2 PASS: prefer provider/OpenCode schema-constrained finalization for the packaging phase, while keeping domain/semantic validation separate. Constrained decoding improves structural compliance but is not itself semantic correctness.
 
-Container-first implementation candidate is present directly in CURRENT `/src/swe-af` in exactly three new owning files for this batch:
+The container-first implementation was expanded and closed in CURRENT `/src/swe-af` across the exact owning slice below; no GitHub-first coding or whole-workforce redeploy was used:
 
-- `go/internal/harnessx/run.go`: assistant-event recovery, string-aware JSON extraction, exact-schema revalidation, CoderResult-only default materialization.
-- `go/internal/harnessx/harnessx_test.go`: regressions for quoted braces, schema-invalid rejection, provider-failure fail-closed behavior, and the observed weak CoderResult/retry-overwrite shape.
-- `go/internal/schemas/defaults.go`: narrow `agent_retro:string` normalization in `CoderResult.UnmarshalJSON`.
+- `go/internal/harnessx/run.go`: assistant-event recovery from `Result` + prior `Messages`, string/escape-aware JSON extraction, exact JSON-Schema revalidation, watchdog salvage for already-valid structured output, and OpenCode `SchemaMode="incremental"` so schema retries retain task context.
+- `go/internal/harnessx/harnessx_test.go`: regressions for quoted braces, schema-invalid rejection, provider-failure fail-closed behavior, observed retry-overwrite, watchdog salvage, generic transport fail-closed behavior, and incremental OpenCode schema mode.
+- `go/internal/schemas/defaults.go`: narrow `agent_retro:string` → `agent_retro:{"summary":...}` normalization in `CoderResult.UnmarshalJSON`; unrelated type errors remain strict.
+- `go/internal/roles/coding/coding.go`: coder schema/transport failures fail closed; one bounded same-worktree retry is allowed only for recoverable no-progress/stream conditions so completed filesystem work is not discarded; reviewer output loss also fails closed instead of auto-approving.
+- `go/internal/roles/coding/coding_test.go`: fail-closed coder/reviewer regressions, provider-error preservation, and same-worktree no-progress retry coverage.
+- `go/internal/prompts/coding/verifier.go`: verifier uses the PRD/acceptance criteria already embedded in the prompt and no longer instructs OpenCode to read artifact paths outside the current worktree.
+- `go/internal/prompts/coding/testdata/task_verifier_a.txt`, `task_verifier_b.txt`: canonical prompt goldens updated for the bounded verifier contract.
 
-Validation evidence:
+Validation and runtime evidence:
 
-- Exact-delta Coding Station validation on runtime baseline `58c4e0d19081bc52363c120b7963a34cebb1e894`: `go test ./internal/harnessx ./internal/schemas ./internal/roles/coding` PASS; `go vet ./internal/harnessx ./internal/schemas ./internal/roles/coding` PASS.
-- A focused regression reproducing the observed condition where `Result.Result` contains bad retry text while an earlier `Messages` assistant event contains the useful weak CoderResult is included in the live candidate and must pass before runtime materialization is accepted.
-- Direct validation in the permanent workforce is currently a **VALIDATION_BLOCKER**, not a code failure: host filesystem is 100% full. The first native `/usr/local/go/bin/go test` attempt failed with `no space left on device`; deleting only the Go cache created/reused by this validation recovered ~417 MiB, but the retry still exhausted disk while compiling `net/url`. Do not delete unrelated `/tmp` forensic artifacts or host/container data merely to force a test.
-- CURRENT loaded `swe-planner` remains PID `8059`, started `2026-09-02T11:09:41Z`; therefore the new recovery candidate is not functionally loaded. This is `LOADED_SOURCE_DRIFT`.
+- Exact live source targeted validation PASS in the permanent workforce: `go test ./internal/harnessx ./internal/schemas ./internal/roles/coding ./internal/roles/advisor ./internal/prompts/coding`; matching `go vet` PASS.
+- The no-progress behavior is now **progress/evidence-driven**, not governed by a hard total workflow budget: a no-progress watchdog remains as a liveness guard, but if assistant text already contains an exact-schema-valid structured result it is salvaged; otherwise coder may retry once in the same worktree and generic/provider errors remain fail closed.
+- CURRENT loaded planner is `/afhome/packages/swe-planner/bin/swe-planner` SHA256 `ff662a38022d29ef641506def62fce3cf6ecdc02f7ef478bcaaef3d6a3aa12d0`, PID `167730`, started `2026-09-03T19:24:35Z`; `swe-pro` is PID `167737`.
+- Final same L2 canary result `/tmp/l2-canary-verifier-fix.json`: `success=true`, `outcome=completed`, build `9a7e6fb6`, one bounded 3-file task commit `52fc4a500a6a3e6e4218a47382ffe53159320e0e`, reviewer `approved=true` / `blocking=false`, verifier `passed=true`, **5/5 acceptance criteria PASS**, and independent `python3 -m unittest test_calculator.py` **22 tests PASS**.
+- Exact runtime → Git durability check PASS for all eight source files: Git blob OIDs on `dev` match `git hash-object` of CURRENT `/src/swe-af` byte-for-byte. Pre-PLAN code head after canonicalization is `52bdb640fa9f2a796dc423a96cdec971d883172d`; this PLAN-only write-back may advance branch HEAD without changing those product blobs.
 
-Current mandatory gate remains L2 and is not PASS. Next safe move: obtain enough target-local build space without deleting unrelated evidence/data, rerun the exact live-source targeted tests, build and load only `swe-planner`, then repeat the identical bounded L2 canary. Acceptance requires a valid structured child result and preservation of fail-closed behavior for genuine provider/schema-invalid cases.
+**L2 structured-output reliability gate: PASS / CLOSED.** The original intermittent `The output file was NOT created` failure is no longer an open product gate for this bounded path. Advance only to the next documented recovery/failure gate; do not regress to GitHub-first debugging or reintroduce hard total wall-clock budgets as an acceptance primitive.
 
 ## Bounded Development Batches
 
