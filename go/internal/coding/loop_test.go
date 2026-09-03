@@ -279,17 +279,21 @@ func TestStuckLoopNonBlockingAcceptsDebt(t *testing.T) {
 	}
 }
 
-func TestBlockingReviewFailsImmediately(t *testing.T) {
+func TestBlockingReviewRetriesAndCanRecover(t *testing.T) {
 	b := newBuilder()
-	b.onCoder(1, []string{"src/app.py"}, "impl").onReviewer(1, false, true, "SQL injection")
+	b.onCoder(1, []string{"src/app.py"}, "impl").onReviewer(1, false, true, "Missing core functionality")
+	b.onCoder(2, []string{"src/app.py"}, "fixed").onReviewer(2, true, false, "LGTM now")
 
 	res := run(t, makeIssue("ISSUE-1", false), makeDAGState(t.TempDir()), b.build(), makeConfig(t, nil), nil)
 
-	if res.Outcome != schemas.IssueOutcomeFailedUnrecoverable || res.Attempts != 1 {
-		t.Fatalf("outcome=%s attempts=%d, want failed_unrecoverable/1", res.Outcome, res.Attempts)
+	if res.Outcome != schemas.IssueOutcomeCompleted || res.Attempts != 2 {
+		t.Fatalf("outcome=%s attempts=%d, want completed/2", res.Outcome, res.Attempts)
 	}
-	if res.IterationHistory[0]["action"] != "block" {
-		t.Errorf("history[0].action = %v, want block", res.IterationHistory[0]["action"])
+	if res.IterationHistory[0]["action"] != "fix" || res.IterationHistory[1]["action"] != "approve" {
+		t.Errorf("history actions = %v/%v, want fix/approve", res.IterationHistory[0]["action"], res.IterationHistory[1]["action"])
+	}
+	if v, _ := res.IterationHistory[0]["review_blocking"].(bool); !v {
+		t.Errorf("history[0].review_blocking = false, want true")
 	}
 }
 
