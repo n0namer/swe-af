@@ -160,6 +160,15 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 	}.ToOptions()
 
 	parsed, result, hErr := harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
+	if hErr != nil && isRecoverableCoderHarnessError(hErr) {
+		// A no-progress watchdog is a liveness guard, not a semantic verdict. The
+		// first OpenCode process may already have edited/tested the worktree before
+		// its provider stream stalls. Retry once in the SAME worktree so the second
+		// process can observe and finish that partial work instead of discarding it.
+		// Keep this narrow: fatal/schema/provider failures remain fail-closed.
+		deps.Note.Note(ctx, fmt.Sprintf("Coder transport stalled; retrying once in-place: %s", issueName), "coder", "retry")
+		parsed, result, hErr = harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
+	}
 	if hErr != nil {
 		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, hErr.Error()), "coder", "error")
 		return nil, fmt.Errorf("coder agent failed for %s: %w", issueName, hErr)
@@ -186,6 +195,15 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 // providerErrorFromMessages preserves an in-band provider failure that the
 // harness may otherwise mask with a later schema/output-file diagnosis. OpenCode
 // emits errors as JSON events, including nested error.data.message payloads.
+func isRecoverableCoderHarnessError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "CLI command made no progress") ||
+		strings.Contains(msg, "Stream error occurred")
+}
+
 func providerErrorFromMessages(messages []map[string]any) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
