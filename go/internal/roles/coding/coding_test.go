@@ -429,9 +429,9 @@ func TestRunQASuccessAndFallback(t *testing.T) {
 // run_code_reviewer
 // ---------------------------------------------------------------------------
 
-// Contract: reviewer passes qa_ran through to its prompt AND uses the reviewer
-// tool set; on failure it falls back to approved=true (non-blocking).
-func TestRunCodeReviewerQARanAndFallback(t *testing.T) {
+// Contract: reviewer passes qa_ran through to its prompt and uses the reviewer
+// tool set; schema/no-result failure is fail-closed and must never auto-approve.
+func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	nr := &noteRecorder{}
 	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
 		rr := dest.(*schemas.CodeReviewResult)
@@ -451,26 +451,23 @@ func TestRunCodeReviewerQARanAndFallback(t *testing.T) {
 	}
 	m := asMap(t, out)
 	assertKeys(t, m, codeReviewResultKeys)
-	// reviewer tools ordering (Bash last) is the reviewer-specific set.
 	if strings.Join(mh.gotOpts.Tools, ",") != "Read,Write,Glob,Grep,Bash" {
 		t.Fatalf("reviewer tool set mismatch: %v", mh.gotOpts.Tools)
 	}
 
-	// fallback: not-blocking approve
 	mhf := &mockHarness{fn: func(_ any) (*harness.Result, error) {
-		return &harness.Result{IsError: true, Parsed: nil}, nil
+		return &harness.Result{IsError: true, ErrorMessage: "review-parse", Parsed: nil}, nil
 	}}
 	out2, err := RunCodeReviewer(context.Background(), newDeps(mhf, nil, nr), map[string]any{
 		"worktree_path": "/wt",
 		"coder_result":  map[string]any{},
 		"issue":         map[string]any{"name": "i"},
 	})
-	if err != nil {
-		t.Fatalf("fallback must not error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "review-parse") {
+		t.Fatalf("expected fail-closed reviewer error, got out=%v err=%v", out2, err)
 	}
-	m2 := asMap(t, out2)
-	if m2["approved"] != true || m2["blocking"] != false {
-		t.Fatalf("reviewer fallback must be approved=true, blocking=false, got %v", m2)
+	if out2 != nil {
+		t.Fatalf("expected nil reviewer result on schema failure, got %v", out2)
 	}
 }
 
