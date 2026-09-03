@@ -148,6 +148,41 @@ A new identical L2 canary was executed to test whether CURRENT runtime behavior 
 
 Verdict: CURRENT L2 is **not reliably working yet**. The provider/structured-output failure is intermittent: the immediately preceding L2 reached a valid reviewer result, while this fresh retry regressed to missing structured output. Keep the FCM/provider boundary open and keep runtime materialization of the self-repair fix unproven. No L3 advancement.
 
+### Structured-output root cause and recovery design — 2026-09-03
+
+BMAD routing for this batch: `bmad-help` → `bmad-testarch-test-design` for the evidence/risk gate → `bmad-quick-dev` for the smallest source fix. No duplicate spec/test-plan artifact was created; this `PLAN.md` remains the single project SoT.
+
+Fresh forensic evidence for `exec_20260903_130335_s8486jav` changes the owning failure classification from generic `PROVIDER / ACI_HARNESS` suspicion to a concrete structured-result recovery defect for this execution:
+
+- The first OpenCode attempt completed repository work and emitted a useful near-schema `CoderResult` JSON object in an assistant text event. It reported `complete=true`, `tests_passed=true`, a non-empty `files_changed` list, summary/test summary/codebase learnings, and `agent_retro` as a plain string.
+- `.agentfield_output.json` was not created. The weak-model shape `agent_retro:string` conflicts with the typed Go field `map[string]any`; other omitted CoderResult fields are defaulted by the canonical Pydantic model and are not independently invalid.
+- AgentField then executed schema retries. Later retries emitted unrelated generic OpenCode text. The pinned SDK exposes only the latest retry text as `Result.Result`, but preserves prior OpenCode events in `Result.Messages`. The useful first-attempt JSON therefore remained available but SWE's wrapper did not inspect it.
+- The pinned SDK text extractor also counts `{`/`}` without JSON-string awareness, so valid coder summaries/code fragments containing unmatched braces inside quoted strings can evade recovery.
+
+Decision / safety contract:
+
+1. Do **not** weaken semantic validation and do **not** convert repository side effects/commit existence into success. A recovered result must still satisfy the exact generated JSON Schema.
+2. For `FailureSchema` / `FailureNoOutput` only, search candidate structured results in assistant text surfaces from the latest result plus prior `Result.Messages`; exclude tool outputs so arbitrary repository/file JSON cannot be mistaken for the orchestration envelope.
+3. Extract candidate JSON objects with a string/escape-aware scanner. Validate each candidate against the exact schema before accepting it.
+4. Apply one narrow weak-model compatibility normalization for `CoderResult`: `agent_retro:"text"` → `agent_retro:{"summary":"text"}`; leave unrelated type errors strict. Materialize normal CoderResult defaults before final schema validation because the canonical Pydantic model defines those fields with defaults.
+5. Provider/API/transport failures remain fail-closed even when text happens to resemble JSON; this recovery path must not mask `Stream error occurred` or other upstream failures.
+6. Longer-term reliability direction after L2 PASS: prefer provider/OpenCode schema-constrained finalization for the packaging phase, while keeping domain/semantic validation separate. Constrained decoding improves structural compliance but is not itself semantic correctness.
+
+Container-first implementation candidate is present directly in CURRENT `/src/swe-af` in exactly three new owning files for this batch:
+
+- `go/internal/harnessx/run.go`: assistant-event recovery, string-aware JSON extraction, exact-schema revalidation, CoderResult-only default materialization.
+- `go/internal/harnessx/harnessx_test.go`: regressions for quoted braces, schema-invalid rejection, provider-failure fail-closed behavior, and the observed weak CoderResult/retry-overwrite shape.
+- `go/internal/schemas/defaults.go`: narrow `agent_retro:string` normalization in `CoderResult.UnmarshalJSON`.
+
+Validation evidence:
+
+- Exact-delta Coding Station validation on runtime baseline `58c4e0d19081bc52363c120b7963a34cebb1e894`: `go test ./internal/harnessx ./internal/schemas ./internal/roles/coding` PASS; `go vet ./internal/harnessx ./internal/schemas ./internal/roles/coding` PASS.
+- A focused regression reproducing the observed condition where `Result.Result` contains bad retry text while an earlier `Messages` assistant event contains the useful weak CoderResult is included in the live candidate and must pass before runtime materialization is accepted.
+- Direct validation in the permanent workforce is currently a **VALIDATION_BLOCKER**, not a code failure: host filesystem is 100% full. The first native `/usr/local/go/bin/go test` attempt failed with `no space left on device`; deleting only the Go cache created/reused by this validation recovered ~417 MiB, but the retry still exhausted disk while compiling `net/url`. Do not delete unrelated `/tmp` forensic artifacts or host/container data merely to force a test.
+- CURRENT loaded `swe-planner` remains PID `8059`, started `2026-09-02T11:09:41Z`; therefore the new recovery candidate is not functionally loaded. This is `LOADED_SOURCE_DRIFT`.
+
+Current mandatory gate remains L2 and is not PASS. Next safe move: obtain enough target-local build space without deleting unrelated evidence/data, rerun the exact live-source targeted tests, build and load only `swe-planner`, then repeat the identical bounded L2 canary. Acceptance requires a valid structured child result and preservation of fail-closed behavior for genuine provider/schema-invalid cases.
+
 ## Bounded Development Batches
 
 Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
