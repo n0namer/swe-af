@@ -76,6 +76,25 @@ func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harn
 		return nil, result, fErr
 	}
 
+	// Recover one important weak-model failure mode before giving up: OpenCode may
+	// preserve a schema-shaped JSON object in its final text even when the output
+	// file protocol fails. The upstream SDK already tries a text fallback, but its
+	// brace scanner is not JSON-string-aware, so code snippets such as "${foo {"
+	// can hide an otherwise valid object. Recover only schema/no-output failures;
+	// provider/transport errors remain fail-closed.
+	if result != nil && result.Parsed == nil && result.Result != "" &&
+		(result.FailureType == harness.FailureSchema || result.FailureType == harness.FailureNoOutput || result.FailureType == harness.FailureNone) {
+		var recovered T
+		if recoverErr := recoverStructuredText(result.Result, schema, &recovered); recoverErr == nil {
+			schemas.EmptyForNilSlices(&recovered)
+			result.Parsed = &recovered
+			result.IsError = false
+			result.ErrorMessage = ""
+			result.FailureType = harness.FailureNone
+			return &recovered, result, nil
+		}
+	}
+
 	// Schema parse failure: hand the caller a default-seeded value plus the
 	// Result so it can apply its own deterministic fallback. Not an error.
 	if result == nil || result.Parsed == nil {
@@ -89,6 +108,93 @@ func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harn
 	// checkpoint/DAGState normalisation. Maps and nil pointers are left null.
 	schemas.EmptyForNilSlices(&dest)
 	return &dest, result, nil
+}
+
+// recoverStructuredText extracts candidate JSON objects with a string-aware
+// scanner, validates them against the exact generated schema, and only then
+// unmarshals into dest. It is intentionally strict: malformed or schema-invalid
+// text stays a failure and is handled by the normal retry/error path.
+func recoverStructuredText[T any](text string, schema map[string]any, dest *T) error {
+	schemaBytes, err := json.Marshal(schema)
+	if err != nil {
+		return fmt.Errorf("marshal schema: %w", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("mem://swe/schema.json", bytes.NewReader(schemaBytes)); err != nil {
+		return fmt.Errorf("add schema: %w", err)
+	}
+	compiled, err := compiler.Compile("mem://swe/schema.json")
+	if err != nil {
+		return fmt.Errorf("compile schema: %w", err)
+	}
+
+	for _, candidate := range extractJSONObjectCandidates(text) {
+		var data any
+		if err := json.Unmarshal([]byte(candidate), &data); err != nil {
+			continue
+		}
+		if err := compiled.Validate(data); err != nil {
+			continue
+		}
+		if err := json.Unmarshal([]byte(candidate), dest); err != nil {
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("no schema-valid JSON object found in final text")
+}
+
+// extractJSONObjectCandidates finds balanced top-level JSON objects while
+// ignoring braces that appear inside quoted strings. Candidates are returned
+// largest-first so an enclosing result object wins over nested examples.
+func extractJSONObjectCandidates(text string) []string {
+	candidates := make([]string, 0, 2)
+	depth := 0
+	start := -1
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(text); i++ {
+		ch := text[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+
+		switch ch {
+		case '"':
+			inString = true
+		case '{':
+			if depth == 0 {
+				start = i
+			}
+			depth++
+		case '}':
+			if depth == 0 {
+				continue
+			}
+			depth--
+			if depth == 0 && start >= 0 {
+				candidates = append(candidates, text[start:i+1])
+				start = -1
+			}
+		}
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return len(candidates[i]) > len(candidates[j])
+	})
+	return candidates
 }
 
 // seedDefaults returns a T seeded with its pydantic-parity defaults. Unmarshaling
