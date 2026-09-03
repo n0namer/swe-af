@@ -1,12 +1,16 @@
 package harnessx
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"sort"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
