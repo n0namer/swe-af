@@ -249,9 +249,9 @@ func TestRunCoderNoGuardrailWhenDisabled(t *testing.T) {
 	}
 }
 
-// Contract: on Parsed==nil (schema parse failure) run_coder returns its
-// deterministic fallback (complete=false, key set intact) — NOT an error.
-func TestRunCoderParsedNilFallback(t *testing.T) {
+// Contract: schema/no-result failures are fail-closed. Returning a synthetic
+// complete=false payload lets the outer orchestrator report false success.
+func TestRunCoderParsedNilFailsClosed(t *testing.T) {
 	nr := &noteRecorder{}
 	mh := &mockHarness{fn: func(_ any) (*harness.Result, error) {
 		return &harness.Result{IsError: true, ErrorMessage: "boom-parse", Parsed: nil}, nil
@@ -260,23 +260,48 @@ func TestRunCoderParsedNilFallback(t *testing.T) {
 		"issue":        map[string]any{"name": "issue-x"},
 		"iteration_id": "it-1",
 	})
-	if err != nil {
-		t.Fatalf("fallback must not be an error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "boom-parse") {
+		t.Fatalf("expected fail-closed schema error, got out=%v err=%v", out, err)
 	}
-	m := asMap(t, out)
-	assertKeys(t, m, coderResultKeys)
-	if m["complete"] != false {
-		t.Fatalf("fallback must have complete=false, got %v", m["complete"])
-	}
-	if !strings.Contains(m["summary"].(string), "boom-parse") {
-		t.Fatalf("fallback summary should carry the harness error, got %q", m["summary"])
-	}
-	// Empty collections must serialize as [] / {}, not null (model_dump parity).
-	if _, ok := m["files_changed"].([]any); !ok {
-		t.Fatalf("files_changed should be an empty array, got %#v", m["files_changed"])
+	if out != nil {
+		t.Fatalf("expected nil result on schema failure, got %v", out)
 	}
 	if !nr.hasTag("error") {
 		t.Fatalf("expected an error note on the no-result path")
+	}
+}
+
+// Contract: when the provider emitted an in-band OpenCode error before the
+// structured output disappeared, preserve that causal message alongside the
+// downstream schema diagnosis instead of reporting only "output file missing".
+func TestRunCoderPreservesNestedProviderErrorOnSchemaFailure(t *testing.T) {
+	nr := &noteRecorder{}
+	mh := &mockHarness{fn: func(_ any) (*harness.Result, error) {
+		return &harness.Result{
+			IsError:      true,
+			ErrorMessage: "Schema validation failed after 2 retry attempt(s). Last error: The output file was NOT created.",
+			Parsed:       nil,
+			Messages: []map[string]any{{
+				"type": "error",
+				"error": map[string]any{
+					"name": "UnknownError",
+					"data": map[string]any{"message": "\"Stream error occurred\""},
+				},
+			}},
+		}, nil
+	}}
+	out, err := RunCoder(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"issue":        map[string]any{"name": "issue-stream"},
+		"iteration_id": "it-stream",
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider error: Stream error occurred") {
+		t.Fatalf("expected provider stream error to be preserved, got out=%v err=%v", out, err)
+	}
+	if !strings.Contains(err.Error(), "Schema validation failed after 2 retry attempt") {
+		t.Fatalf("expected downstream schema diagnosis to remain visible, got err=%v", err)
+	}
+	if out != nil {
+		t.Fatalf("expected nil result on provider/schema failure, got %v", out)
 	}
 }
 
