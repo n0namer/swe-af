@@ -356,7 +356,7 @@ func (r RoleOptions) ToOptions() harness.Options {
 	return harness.Options{
 		Provider:       r.Provider,
 		BinPath:        binPath,
-		Model:           r.Model,
+		Model:          r.Model,
 		MaxTurns:       r.MaxTurns,
 		Tools:          r.Tools,
 		PermissionMode: r.PermissionMode,
