@@ -40,7 +40,7 @@ Use this to focus your verification. Do ONE build check + spot-check risky areas
 - optimizer
 
 ## Your Task
-1. Read the PRD and architecture documents for full context.
+1. Treat the PRD and acceptance criteria embedded above as authoritative; do not read artifacts or files outside the current repository/worktree.
 2. For each acceptance criterion, identify the responsible issue(s).
 3. Inspect the code changes made by completed issues.
 4. Run any existing tests relevant to the criteria.
