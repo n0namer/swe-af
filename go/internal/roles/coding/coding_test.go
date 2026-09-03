@@ -345,6 +345,39 @@ func TestRunCoderTransportErrorFailsClosed(t *testing.T) {
 	}
 }
 
+func TestRunCoderRetriesNoProgressOnceInPlace(t *testing.T) {
+	nr := &noteRecorder{}
+	calls := 0
+	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
+		calls++
+		if calls == 1 {
+			return nil, errors.New("CLI command made no progress for 300s: opencode run --format json")
+		}
+		cr := dest.(*schemas.CoderResult)
+		cr.Complete = true
+		cr.FilesChanged = []string{"calculator.py"}
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	out, err := RunCoder(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"issue":         map[string]any{"name": "issue-stall"},
+		"worktree_path": "/wt",
+		"iteration_id":  "it-stall",
+	})
+	if err != nil {
+		t.Fatalf("expected in-place retry to recover, got %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected exactly one retry, calls=%d", calls)
+	}
+	m := asMap(t, out)
+	if m["complete"] != true || m["iteration_id"] != "it-stall" {
+		t.Fatalf("unexpected recovered coder result: %v", m)
+	}
+	if !nr.hasTag("retry") {
+		t.Fatal("expected retry note for recoverable coder stall")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // run_qa
 // ---------------------------------------------------------------------------
