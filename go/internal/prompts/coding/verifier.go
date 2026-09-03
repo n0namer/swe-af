@@ -210,7 +210,7 @@ func VerifierTaskPrompt(o VerifierTaskPromptOpts) string {
 
 	// --- Instructions ---
 	sections = append(sections, "\n## Your Task\n"+
-		"1. Read the PRD and architecture documents for full context.\n"+
+		"1. Treat the PRD and acceptance criteria embedded above as authoritative; do not read artifacts or files outside the current repository/worktree.\n"+
 		"2. For each acceptance criterion, identify the responsible issue(s).\n"+
 		"3. Inspect the code changes made by completed issues.\n"+
 		"4. Run any existing tests relevant to the criteria.\n"+
