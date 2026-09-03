@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
@@ -68,6 +69,24 @@ func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harn
 	var dest T
 	result, err := app.Harness(ctx, prompt, schema, &dest, opts)
 	if err != nil {
+		// A provider CLI can stall after already emitting a complete structured
+		// result in assistant text. The no-progress watchdog is a liveness signal,
+		// not proof that the result is unusable. Recover only this narrow case and
+		// only after exact schema validation; generic/provider errors remain fatal.
+		if result != nil && strings.Contains(err.Error(), "CLI command made no progress") {
+			for _, text := range structuredResultCandidates(result) {
+				var recovered T
+				if recoverErr := recoverStructuredText(text, schema, &recovered); recoverErr != nil {
+					continue
+				}
+				schemas.EmptyForNilSlices(&recovered)
+				result.Parsed = &recovered
+				result.IsError = false
+				result.ErrorMessage = ""
+				result.FailureType = harness.FailureNone
+				return &recovered, result, nil
+			}
+		}
 		return nil, result, err
 	}
 
