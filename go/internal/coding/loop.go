@@ -507,9 +507,11 @@ func runDefaultPath(
 
 	if approved && !blocking {
 		action = "approve"
-	} else if blocking {
-		action = "block"
 	} else {
+		// A blocking review means the current change must not merge yet; it does
+		// not mean the autonomous repair loop is unrecoverable. Feed blocking
+		// findings back to the coder and let the bounded iteration/stuck/
+		// exhaustion guards decide whether recovery is possible.
 		action = "fix"
 	}
 
