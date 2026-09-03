@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
@@ -314,6 +315,47 @@ func TestRunRecoversObservedWeakCoderJSONShape(t *testing.T) {
 	}
 	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
 		t.Fatalf("expected recovered result to be marked successful, got %+v", res)
+	}
+}
+
+func TestRunRecoversValidStructuredTextAfterNoProgressWatchdog(t *testing.T) {
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Messages: []map[string]any{{
+					"type": "text",
+					"part": map[string]any{"text": `{"complete":false,"estimated_scope":"medium"}`},
+				}},
+				Parsed:  nil,
+				IsError: true,
+			}, errors.New("CLI command made no progress for 300s: opencode run --format json")
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("watchdog should not discard schema-valid assistant output: %v", err)
+	}
+	if out == nil || out.Complete || out.Scope != "medium" {
+		t.Fatalf("expected recovered watchdog result, got %+v", out)
+	}
+	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
+		t.Fatalf("expected recovered watchdog result normalized, got %+v", res)
+	}
+}
+
+func TestRunDoesNotRecoverGenericTransportErrorFromText(t *testing.T) {
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Messages: []map[string]any{{"type": "text", "part": map[string]any{"text": `{"complete":false,"estimated_scope":"medium"}`}}},
+			}, errors.New("network blip")
+		},
+	}
+
+	_, _, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err == nil || !strings.Contains(err.Error(), "network blip") {
+		t.Fatalf("generic transport errors must remain fail-closed, got %v", err)
 	}
 }
 
