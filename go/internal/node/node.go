@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 	"github.com/Agent-Field/agentfield/sdk/go/ai"
@@ -186,7 +187,21 @@ func newCallFn(app *agent.Agent) func(context.Context, string, map[string]any) (
 // config — keeps node startup working with no key: the QA-synthesizer LLM branch
 // is simply disabled and its deterministic fallback runs instead.
 func resolveAIConfig() *ai.Config {
-	if c := ai.DefaultConfig(); c.Validate() == nil {
+	c := ai.DefaultConfig()
+	// The AgentField Go SDK reads AI_BASE_URL, while the harness/deployment
+	// contract uses OPENAI_BASE_URL for OpenAI-compatible providers such as
+	// Gonka. Preserve that configured endpoint explicitly instead of silently
+	// falling back to the SDK default OpenAI base.
+	if strings.TrimSpace(os.Getenv("AI_BASE_URL")) == "" {
+		if base := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL")); base != "" {
+			c.BaseURL = base
+		}
+	}
+	// Match the proven Deep Research semantic transport contract: provider calls
+	// may legitimately run for minutes, so the default 30s Go SDK client timeout
+	// is too short for Gonka. Keep a 30-minute transport safety ceiling.
+	c.Timeout = 30 * time.Minute
+	if c.Validate() == nil {
 		return c
 	}
 	return nil

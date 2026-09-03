@@ -484,15 +484,11 @@ func runDefaultPath(
 			})
 		})
 	if rerr != nil {
-		var fhe *fatal.FatalHarnessError
-		if errors.As(rerr, &fhe) || errors.Is(rerr, context.Canceled) {
-			return "", "", nil, rerr // raise
-		}
 		note(
 			fmt.Sprintf("Reviewer failed: %s: %v", issueName, rerr),
 			[]string{"coding_loop", "review_error", issueName},
 		)
-		reviewResult = map[string]any{"approved": true, "blocking": false, "summary": fmt.Sprintf("Review unavailable: %v", rerr)}
+		return "", "", nil, fmt.Errorf("reviewer failed for %s: %w", issueName, rerr)
 	}
 
 	note(
@@ -598,7 +594,7 @@ func runFlaggedPath(
 			fmt.Sprintf("Review agent failed: %s: %v", issueName, reviewErr),
 			[]string{"coding_loop", "review_error", issueName},
 		)
-		reviewResult = map[string]any{"approved": true, "blocking": false, "summary": fmt.Sprintf("Review unavailable: %v", reviewErr)}
+		return "", "", nil, qaResult, nil, fmt.Errorf("review agent failed for %s: %w", issueName, reviewErr)
 	}
 
 	note(

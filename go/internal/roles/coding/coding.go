@@ -159,44 +159,80 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		Cwd:            in.WorktreePath,
 	}.ToOptions()
 
-	harnessError := ""
 	parsed, result, hErr := harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
-	switch {
-	case hErr != nil:
-		if isFatal(hErr) {
-			return nil, hErr // Non-retryable — propagate immediately.
+	if hErr != nil && isRecoverableCoderHarnessError(hErr) {
+		// A no-progress watchdog is a liveness guard, not a semantic verdict. The
+		// first OpenCode process may already have edited/tested the worktree before
+		// its provider stream stalls. Retry once in the SAME worktree so the second
+		// process can observe and finish that partial work instead of discarding it.
+		// Keep this narrow: fatal/schema/provider failures remain fail-closed.
+		deps.Note.Note(ctx, fmt.Sprintf("Coder transport stalled; retrying once in-place: %s", issueName), "coder", "retry")
+		parsed, result, hErr = harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
+	}
+	if hErr != nil {
+		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, hErr.Error()), "coder", "error")
+		return nil, fmt.Errorf("coder agent failed for %s: %w", issueName, hErr)
+	}
+	if result == nil || result.Parsed == nil {
+		detail := "no structured output returned"
+		if result != nil && result.ErrorMessage != "" {
+			detail = result.ErrorMessage
 		}
-		harnessError = hErr.Error()
-		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, harnessError), "coder", "error")
-	case result != nil && result.Parsed != nil:
-		deps.Note.Note(ctx, fmt.Sprintf("Coder complete: %s, files=%d, complete=%s",
-			issueName, len(parsed.FilesChanged), pyBool(parsed.Complete)), "coder", "complete")
-		parsed.IterationID = in.IterationID
-		return parsed, nil
-	default:
-		// Harness returned but produced no parseable CoderResult. Surface the
-		// underlying error so the empty result carries *why*.
 		if result != nil {
-			harnessError = result.ErrorMessage
+			if providerErr := providerErrorFromMessages(result.Messages); providerErr != "" && !strings.Contains(detail, providerErr) {
+				detail = fmt.Sprintf("provider error: %s; harness: %s", providerErr, detail)
+			}
 		}
-		if harnessError == "" {
-			harnessError = "no structured output returned"
-		}
-		deps.Note.Note(ctx, fmt.Sprintf("Coder produced no result: %s: %s", issueName, harnessError), "coder", "error")
+		deps.Note.Note(ctx, fmt.Sprintf("Coder produced no result: %s: %s", issueName, detail), "coder", "error")
+		return nil, fmt.Errorf("coder produced no structured result for %s: %s", issueName, detail)
 	}
+	deps.Note.Note(ctx, fmt.Sprintf("Coder complete: %s, files=%d, complete=%s",
+		issueName, len(parsed.FilesChanged), pyBool(parsed.Complete)), "coder", "complete")
+	parsed.IterationID = in.IterationID
+	return parsed, nil
+}
 
-	summary := fmt.Sprintf("Coder agent failed for %s", issueName)
-	if harnessError != "" {
-		summary += ": " + harnessError
+// providerErrorFromMessages preserves an in-band provider failure that the
+// harness may otherwise mask with a later schema/output-file diagnosis. OpenCode
+// emits errors as JSON events, including nested error.data.message payloads.
+func isRecoverableCoderHarnessError(err error) bool {
+	if err == nil {
+		return false
 	}
-	return &schemas.CoderResult{
-		FilesChanged:      []string{},
-		Summary:           summary,
-		Complete:          false,
-		IterationID:       in.IterationID,
-		CodebaseLearnings: []string{},
-		AgentRetro:        map[string]any{},
-	}, nil
+	msg := err.Error()
+	return strings.Contains(msg, "CLI command made no progress") ||
+		strings.Contains(msg, "Stream error occurred")
+}
+
+func providerErrorFromMessages(messages []map[string]any) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if eventType, _ := msg["type"].(string); eventType != "error" {
+			continue
+		}
+		for _, key := range []string{"message", "text"} {
+			if value, _ := msg[key].(string); strings.TrimSpace(value) != "" {
+				return strings.Trim(strings.TrimSpace(value), "\"")
+			}
+		}
+		if errObj, ok := msg["error"].(map[string]any); ok {
+			if data, ok := errObj["data"].(map[string]any); ok {
+				if value, _ := data["message"].(string); strings.TrimSpace(value) != "" {
+					return strings.Trim(strings.TrimSpace(value), "\"")
+				}
+			}
+			if value, _ := errObj["message"].(string); strings.TrimSpace(value) != "" {
+				return strings.Trim(strings.TrimSpace(value), "\"")
+			}
+			if value, _ := errObj["name"].(string); strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+		if value, _ := msg["error"].(string); strings.TrimSpace(value) != "" {
+			return strings.Trim(strings.TrimSpace(value), "\"")
+		}
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------------
@@ -357,26 +393,22 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 	}.ToOptions()
 
 	parsed, result, hErr := harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, taskPrompt, opts)
-	switch {
-	case hErr != nil:
-		if isFatal(hErr) {
-			return nil, hErr
-		}
+	if hErr != nil {
 		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer agent failed: %s: %s", issueName, hErr.Error()), "code_reviewer", "error")
-	case result != nil && result.Parsed != nil:
-		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer complete: %s, approved=%s, blocking=%s",
-			issueName, pyBool(parsed.Approved), pyBool(parsed.Blocking)), "code_reviewer", "complete")
-		parsed.IterationID = in.IterationID
-		return parsed, nil
+		return nil, fmt.Errorf("code reviewer agent failed for %s: %w", issueName, hErr)
 	}
-
-	return &schemas.CodeReviewResult{
-		Approved:    true, // don't block on reviewer failure
-		Summary:     fmt.Sprintf("Code reviewer agent failed for %s — not blocking", issueName),
-		Blocking:    false,
-		DebtItems:   []map[string]any{},
-		IterationID: in.IterationID,
-	}, nil
+	if result == nil || result.Parsed == nil {
+		detail := "no structured output returned"
+		if result != nil && result.ErrorMessage != "" {
+			detail = result.ErrorMessage
+		}
+		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer produced no result: %s: %s", issueName, detail), "code_reviewer", "error")
+		return nil, fmt.Errorf("code reviewer produced no structured result for %s: %s", issueName, detail)
+	}
+	deps.Note.Note(ctx, fmt.Sprintf("Code reviewer complete: %s, approved=%s, blocking=%s",
+		issueName, pyBool(parsed.Approved), pyBool(parsed.Blocking)), "code_reviewer", "complete")
+	parsed.IterationID = in.IterationID
+	return parsed, nil
 }
 
 // ---------------------------------------------------------------------------

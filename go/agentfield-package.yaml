@@ -24,9 +24,8 @@ agent_node:
 
 user_environment:
   require_one_of:
-    # SWE-AF runs on either Claude (Anthropic) or open models via OpenRouter.
-    # Provide one. With only an OpenRouter key it auto-selects the open_code
-    # runtime.
+    # SWE-AF accepts Anthropic, OpenRouter, or an OpenAI-compatible provider.
+    # The permanent DEV lane uses Gonka through OPENAI_API_KEY + OPENAI_BASE_URL.
     - id: llm_provider
       description: an LLM provider key
       options:
@@ -36,6 +35,10 @@ user_environment:
           scope: global
         - name: OPENROUTER_API_KEY
           description: OpenRouter API key (DeepSeek/Qwen/Llama/… — 200+ models)
+          type: secret
+          scope: global
+        - name: OPENAI_API_KEY
+          description: OpenAI-compatible API key (including Gonka)
           type: secret
           scope: global
   optional:
@@ -48,8 +51,10 @@ user_environment:
       scope: global
     - name: SWE_DEFAULT_RUNTIME
       description: Coding runtime for every role (claude_code | open_code | codex)
+      default: open_code
     - name: SWE_DEFAULT_MODEL
-      description: Override the model id for every role (e.g. openrouter/deepseek/deepseek-v4-flash-0731)
+      description: Override the model id for every role (e.g. openai/deepseek-ai/DeepSeek-V4-Flash-0731)
+      default: openai/deepseek-ai/DeepSeek-V4-Flash-0731
     - name: SWE_PRO_ENGINE
       description: >-
         High-performance coding engine (beta). On by default for nodes

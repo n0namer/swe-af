@@ -108,6 +108,7 @@ func internalRoleOpts(area string) []agent.ReasonerOption {
 func (n *Node) registerRoles() {
 	planningDeps := &planning.Deps{
 		Harness:          n.App,
+		AI:               n.App,
 		App:              n.App,
 		Pauser:           n.App,
 		Hax:              n.hax,
