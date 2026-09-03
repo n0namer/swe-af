@@ -4,9 +4,6 @@
 ### Acceptance Criteria (ALL must pass for overall PASS)
 (none specified)
 
-## Reference Paths
-- Artifacts: 
-
 ## Completed Issues
 (none)
 
