@@ -278,14 +278,19 @@ func TestRunRecoveryDoesNotMaskProviderFailure(t *testing.T) {
 }
 
 func TestRunRecoversObservedWeakCoderJSONShape(t *testing.T) {
-	// Reproduces the 2026-09-03 L2 failure class: the coder completed repository
-	// work and emitted useful final JSON text, but agent_retro was a string and
-	// defaulted fields were omitted, so the strict harness rejected the result.
+	// Reproduces the 2026-09-03 L2 failure exactly: the useful first OpenCode
+	// attempt emitted near-schema JSON in a text event, then two schema retries
+	// produced unrelated final text. Runner.Result therefore contains retry
+	// garbage while Runner.Messages still preserves the earlier useful JSON.
 	const observed = `{"files_changed":["calculator.py","cli.py","test_calculator.py"],"summary":"Added power and modulo operations.","complete":true,"tests_passed":true,"test_summary":"All tests passed.","codebase_learnings":["Test framework is unittest."],"agent_retro":"The implementation was straightforward."}`
 	mh := &mockHarness{
 		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
 			return &harness.Result{
-				Result:       observed,
+				Result:       "OpenCode is an open-source AI coding agent.",
+				Messages: []map[string]any{
+					{"type": "text", "part": map[string]any{"text": observed}},
+					{"type": "text", "part": map[string]any{"text": "OpenCode is an open-source AI coding agent."}},
+				},
 				Parsed:       nil,
 				IsError:      true,
 				ErrorMessage: "schema validation failed after retries",
