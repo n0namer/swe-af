@@ -29,12 +29,6 @@ This task spans multiple repositories. Each repository is listed below with its 
 
 Use this to focus your verification. Do ONE build check + spot-check risky areas. Do NOT recompile everything or rerun the full test suite.
 
-## Reference Paths
-- Artifacts: /a/artifacts
-- PRD: /a/artifacts/plan/prd.md
-- Architecture: /a/artifacts/plan/architecture.md
-- Issues: /a/artifacts/plan/issues/
-
 ## Completed Issues
 - **lexer**: done
   Files changed: src/lexer.rs
