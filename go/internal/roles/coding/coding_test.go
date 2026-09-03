@@ -327,9 +327,9 @@ func TestRunCoderFatalPropagates(t *testing.T) {
 	}
 }
 
-// Contract: a non-fatal transport error falls back deterministically (Python's
-// `except Exception` branch) rather than propagating.
-func TestRunCoderTransportErrorFallsBack(t *testing.T) {
+// Contract: transport errors are fail-closed so an unavailable coder cannot be
+// converted into a successful zero-diff workflow.
+func TestRunCoderTransportErrorFailsClosed(t *testing.T) {
 	nr := &noteRecorder{}
 	mh := &mockHarness{fn: func(_ any) (*harness.Result, error) {
 		return nil, errors.New("network blip")
@@ -337,12 +337,44 @@ func TestRunCoderTransportErrorFallsBack(t *testing.T) {
 	out, err := RunCoder(context.Background(), newDeps(mh, nil, nr), map[string]any{
 		"issue": map[string]any{"name": "i"},
 	})
+	if err == nil || !strings.Contains(err.Error(), "network blip") {
+		t.Fatalf("expected transport error to propagate, got out=%v err=%v", out, err)
+	}
+	if out != nil {
+		t.Fatalf("expected nil result on transport failure, got %v", out)
+	}
+}
+
+func TestRunCoderRetriesNoProgressOnceInPlace(t *testing.T) {
+	nr := &noteRecorder{}
+	calls := 0
+	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
+		calls++
+		if calls == 1 {
+			return nil, errors.New("CLI command made no progress for 300s: opencode run --format json")
+		}
+		cr := dest.(*schemas.CoderResult)
+		cr.Complete = true
+		cr.FilesChanged = []string{"calculator.py"}
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	out, err := RunCoder(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"issue":         map[string]any{"name": "issue-stall"},
+		"worktree_path": "/wt",
+		"iteration_id":  "it-stall",
+	})
 	if err != nil {
-		t.Fatalf("non-fatal error should fall back, got %v", err)
+		t.Fatalf("expected in-place retry to recover, got %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected exactly one retry, calls=%d", calls)
 	}
 	m := asMap(t, out)
-	if m["complete"] != false || !strings.Contains(m["summary"].(string), "network blip") {
-		t.Fatalf("expected fallback carrying the transport error, got %v", m)
+	if m["complete"] != true || m["iteration_id"] != "it-stall" {
+		t.Fatalf("unexpected recovered coder result: %v", m)
+	}
+	if !nr.hasTag("retry") {
+		t.Fatal("expected retry note for recoverable coder stall")
 	}
 }
 
