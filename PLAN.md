@@ -110,6 +110,18 @@ This is a **source-proven behavioral gap / runtime-correlation pending** result.
 
 Nearest compulsory move is now sharper: obtain the router `/stats` / request-log entry for the same failed SWE/OpenCode request (or reproduce the same bounded L2 once while capturing its FCM `x-request-id`). If the entry shows a post-partial non-stall stream error with no second candidate, ownership moves to FCM and `bmad-quick-dev` should implement the smallest failover/stream-lifecycle fix with regression coverage. If it instead shows both `keyless-dev` candidates attempted, classify their exact upstream errors and patch that owning provider/config path instead.
 
+### BMAD observability-lane check — 2026-09-03
+
+The existing `/stats` correlation path was pursued without runtime mutation.
+
+- `fcm-private-dev` is an nginx container sharing the WireGuard network namespace, not the Node router process itself; its logs only show nginx startup in the inspected window.
+- `ingress-dev` is also nginx-facing and does not expose the router `/stats` surface directly.
+- Personal Edge has an active WireGuard peer (`10.8.0.1/32`) with a recent handshake, but neither `10.8.0.1:4019` nor the canonical FCM DEV daemon port range beginning at `29280` is reachable from the edge. No local FCM/router process is listening on the Personal Edge host either.
+- Exact FCM source confirms DEV daemon behavior: `runRouterDaemon()` defaults to `127.0.0.1`, uses DEV ports `29280..29289`, and only becomes remotely reachable when `FCM_HOST` is set to another bind address. Therefore a healthy WireGuard tunnel does not imply that `/stats` is network-exposed.
+- No current canonical runtime evidence identifies a remote `/stats` bind or port-forward. Guessing a host/port or introducing a debug proxy would expand scope and is rejected.
+
+Updated gate: this is now an `OBSERVABILITY_GAP` with a source-backed explanation — the diagnostic endpoint exists but its CURRENT deployment location/exposure is not evidenced. The next safe discriminator must therefore come from an already-authorized runtime-local read of the router port/log/requestLog, or from the same bounded SWE L2 retry capturing the FCM `x-request-id` through the existing OpenCode wrapper artifacts. Do not mutate FCM streaming behavior until one of those paths correlates the failure.
+
 ## Bounded Development Batches
 
 Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
