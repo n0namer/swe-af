@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
+	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
 )
 
 // --- test fixtures ----------------------------------------------------------
