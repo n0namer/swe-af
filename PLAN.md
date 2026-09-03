@@ -76,6 +76,23 @@ BMAD `bmad-testarch-test-design` revalidation verdict for this stage:
 
 The recovery ladder remains L2-first until this gate passes. Do not advance to L3/L4/L5 and do not redeploy the whole workforce as a debugging primitive.
 
+### BMAD test-design gate update — 2026-09-03
+
+`bmad-help` was reread from canonical `n0namer/BMAD-MNNZ`, and the existing brownfield test/debug stage was revalidated with `bmad-testarch-test-design` in Edit mode. No duplicate test-plan artifact was created.
+
+CURRENT evidence for the compulsory L2 failure-classification gate:
+
+- AgentField gateway health is reachable, while capability discovery and recent-execution reads still return `Bad Gateway`; execution absence cannot be inferred from that control-plane API.
+- Permanent workforce container `1437789b5c4debc061992bec718132dcbccc66ac67e0b9e45ce1eea5b651c9e7` remains the current healthy SWE canary runtime from the 2026-09-02 batch.
+- DEV FCM topology is live without restart/OOM evidence at the container layer. `broker-dev-wgifzaww64jjnhazzed2nrrz` is healthy with restart count `0`, and `fcm-private-dev-wgifzaww64jjnhazzed2nrrz` is running behind nginx.
+- Canonical FCM service SoT (`n0namer/server-ops/services/fcm-llm-gateway.md`) identifies DEV `keyless-dev` as primary `kilo/kilo-auto/free`, secondary `llm7/minimax-m2.7`, and explicitly leaves real request-time 429/5xx/timeout failover acceptance open. A health-aware preselection proof is not equivalent to runtime failover proof.
+- Canonical FCM source is `n0namer/free-coding-models:dev`; the current source tree contains dedicated router/failover/telemetry components (`src/core/router-daemon.js`, `provider-cooldown.js`, `runtime-telemetry.js`). This establishes the likely owning layer but does not prove the failed request's candidate-attempt sequence.
+- Broker logs available through the current bounded container-log surface are dominated by successful `/healthz` reads and do not expose the required per-request candidate chain. Read-only `/work` inspection through generic container exec is currently fail-closed by DEV operator mediation with `OBSERVE_REQUIRED: scope_unknown`, even after container identity/mount observation. This is an `OBSERVABILITY_GAP`, not evidence that failover did or did not occur.
+
+Risk/test-design verdict remains **P0 BLOCKED on evidence, not implementation**: do not patch SWE coder/schema logic, do not stop PR-AF, do not change provider/model credentials, and do not redeploy. The next mandatory test action is one request-correlated `keyless-dev` trace proving `candidate #1 -> exact upstream result -> failover decision -> candidate #2 attempt/result or explicit absence -> returned FCM error`. Only after that evidence may ownership move to an FCM implementation/config fix; otherwise retain the same SWE L2 canary and investigate stream/concurrency lifecycle.
+
+L2 semantic DoD remains unchanged and is not PASS: the same bounded `implement_issue` must produce a valid structured child result, no `call.outbound.failed`, expected bounded diff, independent tests PASS, and no unresolved provider/stream failure.
+
 ## Bounded Development Batches
 
 Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
