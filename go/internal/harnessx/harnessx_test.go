@@ -10,6 +10,7 @@ import (
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
+	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
 )
 
 // --- test fixtures ----------------------------------------------------------
@@ -273,6 +274,41 @@ func TestRunRecoveryDoesNotMaskProviderFailure(t *testing.T) {
 	}
 	if res == nil || res.Parsed != nil || !res.IsError || res.FailureType != harness.FailureAPIError {
 		t.Fatalf("provider failure must remain visible, got %+v", res)
+	}
+}
+
+func TestRunRecoversObservedWeakCoderJSONShape(t *testing.T) {
+	// Reproduces the 2026-09-03 L2 failure class: the coder completed repository
+	// work and emitted useful final JSON text, but agent_retro was a string and
+	// defaulted fields were omitted, so the strict harness rejected the result.
+	const observed = `{"files_changed":["calculator.py","cli.py","test_calculator.py"],"summary":"Added power and modulo operations.","complete":true,"tests_passed":true,"test_summary":"All tests passed.","codebase_learnings":["Test framework is unittest."],"agent_retro":"The implementation was straightforward."}`
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Result:       observed,
+				Parsed:       nil,
+				IsError:      true,
+				ErrorMessage: "schema validation failed after retries",
+				FailureType:  harness.FailureSchema,
+			}, nil
+		},
+	}
+
+	out, res, err := Run[schemas.CoderResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out == nil || !out.Complete || out.Summary == "" || len(out.FilesChanged) != 3 {
+		t.Fatalf("expected observed coder JSON to recover, got %+v", out)
+	}
+	if got, ok := out.AgentRetro["summary"].(string); !ok || got != "The implementation was straightforward." {
+		t.Fatalf("expected string agent_retro to normalize under summary, got %#v", out.AgentRetro)
+	}
+	if out.IterationID != "" || out.RepoName != "" {
+		t.Fatalf("omitted defaulted fields should materialize as empty defaults, got iteration=%q repo=%q", out.IterationID, out.RepoName)
+	}
+	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
+		t.Fatalf("expected recovered result to be marked successful, got %+v", res)
 	}
 }
 

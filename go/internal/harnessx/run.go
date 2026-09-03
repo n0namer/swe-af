@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"sort"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
@@ -133,13 +134,37 @@ func recoverStructuredText[T any](text string, schema map[string]any, dest *T) e
 		if err := json.Unmarshal([]byte(candidate), &data); err != nil {
 			continue
 		}
-		if err := compiled.Validate(data); err != nil {
-			continue
+		if err := compiled.Validate(data); err == nil {
+			if err := json.Unmarshal([]byte(candidate), dest); err == nil {
+				return nil
+			}
 		}
-		if err := json.Unmarshal([]byte(candidate), dest); err != nil {
-			continue
+
+		// CoderResult mirrors a Pydantic model where every field has a default.
+		// Weak models commonly omit those defaulted fields and sometimes emit the
+		// advisory agent_retro as a string. Let its custom UnmarshalJSON normalize
+		// that one known shape, then validate the fully-materialized typed object.
+		// Do not do this generically: required fields on other schemas must never be
+		// synthesized from Go zero values.
+		if reflect.TypeOf((*T)(nil)).Elem().Name() == "CoderResult" {
+			var normalized T
+			if err := json.Unmarshal([]byte(candidate), &normalized); err != nil {
+				continue
+			}
+			normalizedBytes, err := json.Marshal(normalized)
+			if err != nil {
+				continue
+			}
+			var normalizedData any
+			if err := json.Unmarshal(normalizedBytes, &normalizedData); err != nil {
+				continue
+			}
+			if err := compiled.Validate(normalizedData); err != nil {
+				continue
+			}
+			*dest = normalized
+			return nil
 		}
-		return nil
 	}
 	return fmt.Errorf("no schema-valid JSON object found in final text")
 }
