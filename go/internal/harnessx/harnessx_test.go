@@ -231,7 +231,7 @@ func TestRunRecoveryRejectsSchemaInvalidJSON(t *testing.T) {
 	mh := &mockHarness{
 		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
 			return &harness.Result{
-				Result:       `prefix {"complete":false} suffix`,
+				Result:       `prefix {"complete":false,"estimated_scope":42} suffix`,
 				Parsed:       nil,
 				IsError:      true,
 				ErrorMessage: "schema validation failed after retries",
