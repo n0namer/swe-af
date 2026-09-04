@@ -244,7 +244,7 @@ Observed L1 run evidence — 2026-09-01:
 
 ### Batch 3 — Failure/recovery gate
 
-Status: IN PROGRESS — CENTRAL STRUCTURED-OUTPUT SPINE PASS; RESUME + STALE-SHA GATES REMAIN
+Status: PASS / CLOSED — FAILURE/RECOVERY CONTRACT PROVEN
 
 Prerequisite: L2 structured-output reliability gate PASS/CLOSED above.
 
