@@ -602,6 +602,15 @@ func TestReplanContinueSkipsDownstream(t *testing.T) {
 
 func TestLevelFailureThresholdAborts(t *testing.T) {
 	m := newMock()
+	var coderMu sync.Mutex
+	coderIssues := map[string]int{}
+	m.on("run_coder", func(kwargs map[string]any) (map[string]any, error) {
+		name := asStr(asMap(kwargs["issue"])["name"])
+		coderMu.Lock()
+		coderIssues[name]++
+		coderMu.Unlock()
+		return m.defaultFor("run_coder", kwargs)
+	})
 	m.on("run_code_reviewer", func(kwargs map[string]any) (map[string]any, error) {
 		return map[string]any{"approved": false, "blocking": true, "summary": "bad"}, nil
 	})
@@ -620,9 +629,15 @@ func TestLevelFailureThresholdAborts(t *testing.T) {
 	if !contains(state.SkippedIssues, "c") {
 		t.Fatalf("expected 'c' skipped by abort threshold, got skipped=%v", state.SkippedIssues)
 	}
-	// 'c' must never have been executed.
-	if m.count("run_coder") != 2 {
-		t.Fatalf("expected exactly 2 coder calls (level 0 only), got %d", m.count("run_coder"))
+	// 'a' and 'b' may each take bounded self-repair iterations, but level-1 'c'
+	// must never execute once the level-0 failure threshold aborts the DAG.
+	coderMu.Lock()
+	defer coderMu.Unlock()
+	if coderIssues["c"] != 0 {
+		t.Fatalf("downstream issue c executed %d time(s): %v", coderIssues["c"], coderIssues)
+	}
+	if coderIssues["a"] == 0 || coderIssues["b"] == 0 {
+		t.Fatalf("expected both level-0 issues to execute, got %v", coderIssues)
 	}
 }
 
