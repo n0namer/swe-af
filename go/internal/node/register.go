@@ -428,11 +428,12 @@ var orchestratorSchemas = map[string]json.RawMessage{
 
 // issueSchemas maps the issue-level reasoner to its input schema.
 var issueSchemas = map[string]json.RawMessage{
-	// implement_issue(issue, repo_path, base_branch="", artifacts_dir=".artifacts",
-	//                 additional_context="", config=None)
+	// implement_issue(issue, repo_path, base_branch="", expected_base_sha="",
+	//                 artifacts_dir=".artifacts", additional_context="", config=None)
 	"implement_issue": schema(`{"type":"object","additionalProperties":true,"required":["issue","repo_path"],"properties":{` +
 		`"issue":{"type":"object"},"repo_path":{"type":"string"},"base_branch":{"type":"string"},` +
-		`"artifacts_dir":{"type":"string"},"additional_context":{"type":"string"},"config":{"type":"object"}}}`),
+		`"expected_base_sha":{"type":"string"},"artifacts_dir":{"type":"string"},` +
+		`"additional_context":{"type":"string"},"config":{"type":"object"}}}`),
 }
 
 // proSchemas maps the opt-in pro-engine reasoners to their input schemas.

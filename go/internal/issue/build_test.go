@@ -623,3 +623,42 @@ func TestSetupValidationErrors(t *testing.T) {
 		t.Errorf("missing repo_path: err = %v", err)
 	}
 }
+
+func TestExpectedBaseSHAFailsClosedAfterBranchAdvance(t *testing.T) {
+	repo := initRepo(t)
+	expected := gitT(t, repo, "rev-parse", "HEAD")
+	gitT(t, repo, "commit", "--allow-empty", "-m", "advance base")
+	advanced := gitT(t, repo, "rev-parse", "HEAD")
+	if advanced == expected {
+		t.Fatal("test setup did not advance base")
+	}
+
+	called := false
+	deps := &Deps{Call: func(context.Context, string, map[string]any) (map[string]any, error) {
+		called = true
+		return nil, fmt.Errorf("must not be called")
+	}, NodeID: "test-node"}
+	issueMap := map[string]any{"title": "stale", "description": "must fail before execution"}
+
+	_, err := ImplementIssue(context.Background(), deps, map[string]any{
+		"issue": issueMap, "repo_path": repo, "base_branch": "main", "expected_base_sha": expected,
+	})
+	if err == nil || !strings.Contains(err.Error(), "stale base main") || !strings.Contains(err.Error(), advanced) {
+		t.Fatalf("stale base error = %v", err)
+	}
+	if called {
+		t.Fatal("LLM/reasoner call occurred after stale-base detection")
+	}
+	if got := gitT(t, repo, "rev-parse", "HEAD"); got != advanced {
+		t.Fatalf("caller HEAD changed: got %s want %s", got, advanced)
+	}
+	if got := gitT(t, repo, "status", "--porcelain"); got != "" {
+		t.Fatalf("caller repo damaged: %q", got)
+	}
+	if got := gitT(t, repo, "branch", "--list", "issue/*"); got != "" {
+		t.Fatalf("stale request created issue branch: %q", got)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, ".worktrees")); !os.IsNotExist(statErr) {
+		t.Fatalf("stale request created worktree metadata: %v", statErr)
+	}
+}
