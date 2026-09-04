@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
@@ -67,24 +70,42 @@ func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harn
 	opts.Env = hitl.InjectCredentialsIntoEnv(opts.Env, runID)
 
 	var dest T
+	stopOutputCapture := startStructuredOutputCapture[T](ctx, opts.ProjectDir, schema)
 	result, err := app.Harness(ctx, prompt, schema, &dest, opts)
+	capturedOutput := stopOutputCapture()
 	if err != nil {
 		// A provider CLI can stall after already emitting a complete structured
-		// result in assistant text. The no-progress watchdog is a liveness signal,
-		// not proof that the result is unusable. Recover only this narrow case and
-		// only after exact schema validation; generic/provider errors remain fatal.
-		if result != nil && strings.Contains(err.Error(), "CLI command made no progress") {
-			for _, text := range structuredResultCandidates(result) {
-				var recovered T
-				if recoverErr := recoverStructuredText(text, schema, &recovered); recoverErr != nil {
-					continue
+		// result. The no-progress watchdog is a liveness signal, not proof that
+		// the result is unusable. Recover only this narrow case and only after
+		// exact schema validation; generic/provider errors remain fatal.
+		if strings.Contains(err.Error(), "CLI command made no progress") {
+			if result != nil {
+				for _, text := range structuredResultCandidates(result) {
+					var recovered T
+					if recoverErr := recoverStructuredText(text, schema, &recovered); recoverErr != nil {
+						continue
+					}
+					schemas.EmptyForNilSlices(&recovered)
+					result.Parsed = &recovered
+					result.IsError = false
+					result.ErrorMessage = ""
+					result.FailureType = harness.FailureNone
+					return &recovered, result, nil
 				}
-				schemas.EmptyForNilSlices(&recovered)
-				result.Parsed = &recovered
-				result.IsError = false
-				result.ErrorMessage = ""
-				result.FailureType = harness.FailureNone
-				return &recovered, result, nil
+			}
+			if len(capturedOutput) > 0 {
+				var recovered T
+				if recoverErr := recoverStructuredText(string(capturedOutput), schema, &recovered); recoverErr == nil {
+					schemas.EmptyForNilSlices(&recovered)
+					if result == nil {
+						result = &harness.Result{}
+					}
+					result.Parsed = &recovered
+					result.IsError = false
+					result.ErrorMessage = ""
+					result.FailureType = harness.FailureNone
+					return &recovered, result, nil
+				}
 			}
 		}
 		return nil, result, err
@@ -174,6 +195,96 @@ func structuredResultCandidates(result *harness.Result) []string {
 		}
 	}
 	return out
+}
+
+// startStructuredOutputCapture watches only output directories created after
+// this invocation starts and keeps the latest exact-schema-valid output bytes
+// in memory. The AgentField SDK removes its temporary output directory before
+// returning a CLI no-progress error, so this narrow monitor lets Run salvage a
+// completed result without weakening validation. If more than one new output
+// directory appears, capture becomes ambiguous and fails closed.
+func startStructuredOutputCapture[T any](ctx context.Context, projectDir string, schema map[string]any) func() []byte {
+	if projectDir == "" || schema == nil {
+		return func() []byte { return nil }
+	}
+
+	pattern := filepath.Join(projectDir, ".agentfield-out-*")
+	existingDirs, _ := filepath.Glob(pattern)
+	existing := make(map[string]struct{}, len(existingDirs))
+	for _, dir := range existingDirs {
+		existing[dir] = struct{}{}
+	}
+
+	watchCtx, cancel := context.WithCancel(ctx)
+	var mu sync.Mutex
+	var latest []byte
+	ambiguous := false
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+
+		scan := func() {
+			dirs, _ := filepath.Glob(pattern)
+			newDirs := make([]string, 0, 1)
+			for _, dir := range dirs {
+				if _, ok := existing[dir]; !ok {
+					newDirs = append(newDirs, dir)
+				}
+			}
+			if len(newDirs) > 1 {
+				mu.Lock()
+				ambiguous = true
+				latest = nil
+				mu.Unlock()
+				return
+			}
+			if len(newDirs) != 1 {
+				return
+			}
+
+			mu.Lock()
+			isAmbiguous := ambiguous
+			mu.Unlock()
+			if isAmbiguous {
+				return
+			}
+
+			b, err := os.ReadFile(filepath.Join(newDirs[0], ".agentfield_output.json"))
+			if err != nil || len(b) == 0 {
+				return
+			}
+			var recovered T
+			if err := recoverStructuredText(string(b), schema, &recovered); err != nil {
+				return
+			}
+			mu.Lock()
+			latest = append(latest[:0], b...)
+			mu.Unlock()
+		}
+
+		for {
+			scan()
+			select {
+			case <-watchCtx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
+	return func() []byte {
+		cancel()
+		<-done
+		mu.Lock()
+		defer mu.Unlock()
+		if ambiguous || len(latest) == 0 {
+			return nil
+		}
+		return append([]byte(nil), latest...)
+	}
 }
 
 // recoverStructuredText extracts candidate JSON objects with a string-aware

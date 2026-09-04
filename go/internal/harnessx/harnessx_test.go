@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
 
@@ -287,7 +290,7 @@ func TestRunRecoversObservedWeakCoderJSONShape(t *testing.T) {
 	mh := &mockHarness{
 		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
 			return &harness.Result{
-				Result:       "OpenCode is an open-source AI coding agent.",
+				Result: "OpenCode is an open-source AI coding agent.",
 				Messages: []map[string]any{
 					{"type": "text", "part": map[string]any{"text": observed}},
 					{"type": "text", "part": map[string]any{"text": "OpenCode is an open-source AI coding agent."}},
@@ -341,6 +344,39 @@ func TestRunRecoversValidStructuredTextAfterNoProgressWatchdog(t *testing.T) {
 	}
 	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
 		t.Fatalf("expected recovered watchdog result normalized, got %+v", res)
+	}
+}
+
+func TestRunRecoversValidOutputFileDeletedBeforeWatchdogReturns(t *testing.T) {
+	projectDir := t.TempDir()
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, opts harness.Options) (*harness.Result, error) {
+			outDir, err := os.MkdirTemp(opts.ProjectDir, ".agentfield-out-")
+			if err != nil {
+				return nil, err
+			}
+			outputPath := filepath.Join(outDir, ".agentfield_output.json")
+			if err := os.WriteFile(outputPath, []byte(`{"complete":false,"estimated_scope":"large"}`), 0o600); err != nil {
+				return nil, err
+			}
+			// Simulate the SDK lifecycle: the file is valid while the provider is
+			// still running, then its temp directory is removed before Harness
+			// returns the watchdog error to the SWE wrapper.
+			time.Sleep(100 * time.Millisecond)
+			_ = os.RemoveAll(outDir)
+			return nil, errors.New("CLI command made no progress for 300s: opencode run --format json")
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{ProjectDir: projectDir})
+	if err != nil {
+		t.Fatalf("watchdog should salvage exact-schema-valid output file: %v", err)
+	}
+	if out == nil || out.Complete || out.Scope != "large" {
+		t.Fatalf("expected output-file recovery, got %+v", out)
+	}
+	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
+		t.Fatalf("expected recovered watchdog file result normalized, got %+v", res)
 	}
 }
 
