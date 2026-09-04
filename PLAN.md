@@ -244,26 +244,37 @@ Observed L1 run evidence — 2026-09-01:
 
 ### Batch 3 — Failure/recovery gate
 
-Status: IN PROGRESS — VERIFIER WATCHDOG SALVAGE IS THE FIRST FAILED GATE
+Status: IN PROGRESS — CENTRAL STRUCTURED-OUTPUT SPINE PASS; RESUME + STALE-SHA GATES REMAIN
 
 Prerequisite: L2 structured-output reliability gate PASS/CLOSED above.
 
 Fresh CURRENT anti-drift readback — 2026-09-04:
-- Permanent workforce remains `1437789b5c4debc061992bec718132dcbccc66ac67e0b9e45ce1eea5b651c9e7`; live `/src/swe-af` identity is baseline `58c4e0d19081bc52363c120b7963a34cebb1e894` plus the preserved dirty source delta.
-- `/afhome/installed.yaml` is stale for process identity: it still names PID `8059`, but `/proc/8059/status` is zombie. CURRENT loaded `swe-planner` is PID `167730` and `/afhome/packages/swe-planner/bin/swe-planner` SHA256 is `ff662a38022d29ef641506def62fce3cf6ecdc02f7ef478bcaaef3d6a3aa12d0`, matching the accepted L2 generation above. Treat this as execution-metadata drift, not product rollback.
+- Permanent workforce remains `1437789b5c4debc061992bec718132dcbccc66ac67e0b9e45ce1eea5b651c9e7`; live `/src/swe-af` identity remains baseline `58c4e0d19081bc52363c120b7963a34cebb1e894` plus the preserved dirty source delta.
+- `/afhome/installed.yaml` is stale execution metadata and must not be used as CURRENT PID authority. Historical PID `8059` and prior PID `167730` are zombies. CURRENT loaded `swe-planner` after the centralization batch is PID `239824`; binary SHA256 is `94b2795f858dabc7fc3d598e26dd84ac8ffce353dac52d3cbcaf47f37799f9af`. Logs prove fresh `node.register.complete` / `agent.initialize.complete` for `swe-planner` and embedded `swe-pro` after the process-only reload at `2026-09-04T17:16:35Z`.
+- Root `ERRORS.md` exists in durable project history but not in the preserved runtime baseline; do not synthesize a duplicate inside `/src` merely to remove metadata drift.
 
-DoD:
-- nonexistent/invalid task fails closed or abstains without repo damage. **PASS 2026-09-04**: `exec_20260904_134916_1cbcid8b` / `run_20260904_134916_m14sblfu` invoked `swe-planner.implement_issue` on disposable `/tmp/fcm-calculator-live` with `issue:{}` and failed immediately with `issue: title must be a non-empty string`. Workforce repo HEAD remained exactly `f498992e8eaaba72595494ecbd30974c63cbda64` before/after; status remained exactly the pre-existing `?? __pycache__/`, proving no tracked or new canary damage from the invalid task.
+Structured-output architecture spine (BMAD `bmad-architecture` + `bmad-testarch-test-design` + `bmad-quick-dev`):
+1. All role structured calls continue through the existing `harnessx.Run[T]` choke point. `Run[T]` is now deliberately thin: reflect schema, inject run credentials, call `executeStructured[T]`.
+2. `executeStructured` is the single SWE-owned policy boundary for weak-model structured output: OpenCode incremental schema mode, exact-schema validation, assistant-event recovery, exact output-file watchdog salvage, default seeding, and provider/fatal fail-closed behavior. Role code no longer owns JSON retry strategy.
+3. Machine contract and business semantics stay separate. The centralized layer guarantees structural/schema contract only; coder/reviewer/verifier semantic acceptance remains with the owning role/application checks.
+4. Pareto decision: use the pinned SDK's existing incremental schema mode as the first field-by-field repair engine instead of re-implementing a second generic repair loop. Add an SWE-owned partial/group repair loop only when a real failure survives incremental mode with recoverable partial state.
+5. Desired long-term file layout is a dedicated adjacent structured-output module. DEV typed `file.create` currently denies new source files as `out_of_scope`; this was not bypassed with shell writes. Therefore the accepted live refactor temporarily houses the controller in existing adjacent `internal/harnessx/schema.go`, keeping `run.go` merge-friendly. A later SourceLoop/canonicalization step may split it to `structured.go` without changing the seam or behavior.
+
+Centralization batch evidence:
+- Live source changes are confined to `go/internal/harnessx/run.go`, `schema.go`, and the existing `harnessx_test.go` regression surface on top of the prior accepted runtime delta; no GitHub product-code edit and no container redeploy were used.
+- `gofmt -d` clean.
+- `go test ./internal/harnessx ./internal/schemas ./internal/roles/coding ./internal/roles/advisor ./internal/prompts/coding` PASS; matching `go vet` PASS.
+- Contract regression proves `RoleOptions` no longer owns `SchemaMode`; the central controller injects `SchemaMode="incremental"` for OpenCode immediately before the base harness call.
+- Functional canary `exec_20260904_171701_d2vmapuh` / `run_20260904_171701_qfs8mep3` on loaded PID `239824` completed `succeeded` in `153831ms`, returned `passed=true`, 2/2 criteria PASS, and produced a complete exact-schema verifier result. During execution the output file was observed being built incrementally before terminal success.
+
+Batch 3 DoD:
+- nonexistent/invalid task fails closed or abstains without repo damage. **PASS** — `exec_20260904_134916_1cbcid8b`; root HEAD/status unchanged.
+- unrelated worktree files are preserved. **PASS** — `exec_20260904_135618_p78m3o2b`; unrelated `.pyc` SHA256 unchanged.
+- centralized weak-model structured-output policy has one role-agnostic seam and real runtime proof. **PASS** — source tests/vet + `exec_20260904_171701_d2vmapuh`.
 - bounded run interruption + resume is idempotent. **PENDING**
 - stale SHA/branch advance is detected and fails closed. **PENDING**
-- unrelated worktree files are preserved. **PASS 2026-09-04**: `exec_20260904_135618_p78m3o2b` changed only `calculator.py` and `test_calculator.py`; root HEAD/status were preserved and pre-existing `__pycache__/calculator.cpython-311.pyc` retained the same SHA256 `612f39f2…` before/after.
 
-New first failed gate from that preservation canary:
-- coder and reviewer completed successfully; verifier child `exec_20260904_140630_aktkodsg` ran exactly ~300s and parent returned `Verifier agent failed to produce a valid result`.
-- OpenCode artifact `/tmp/opencode-run-225886-1788530790.stdout` proves the verifier had already written `.agentfield_output.json`, `json.load` reported `Valid JSON`, `passed=true`, and all four criteria were true before the 300s watchdog fired.
-- Current `harnessx.Run` salvages watchdog failures only from assistant-text candidates; a structured result written via the output-file tool is invisible to that salvage path. Therefore the first owning defect is **ACI_HARNESS watchdog salvage**, not verifier reasoning and not provider transport.
-
-30-minute Pareto batch / BMad route: `bmad-testarch-test-design` keeps exact-schema/fail-closed acceptance; `bmad-quick-dev` implements the smallest vertical slice in live `/src/swe-af`: on the narrow no-progress watchdog path, recover an exact-schema-valid harness output file when present, preserve provider/generic errors as failures, add regression coverage, run targeted Go test/vet, reload only `swe-planner`, then repeat the same preservation canary. Do not implement a broad field-by-field compiler until this file-salvage slice is measured.
+Next 30-minute Pareto move: close the cheaper of the two remaining recovery contracts first — stale SHA/branch advance fail-closed on a disposable repo with before/after HEAD/status evidence — then test interruption/resume using the existing checkpoint path. Do not add more structured-output machinery unless either gate exposes it as the first causal failure.
 
 ### Batch 4 — Durability / SourceLoop gate
 
