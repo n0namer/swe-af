@@ -242,15 +242,26 @@ Observed L1 run evidence — 2026-09-01:
 
 ### Batch 3 — Failure/recovery gate
 
-Status: IN PROGRESS
+Status: IN PROGRESS — VERIFIER WATCHDOG SALVAGE IS THE FIRST FAILED GATE
 
 Prerequisite: L2 structured-output reliability gate PASS/CLOSED above.
+
+Fresh CURRENT anti-drift readback — 2026-09-04:
+- Permanent workforce remains `1437789b5c4debc061992bec718132dcbccc66ac67e0b9e45ce1eea5b651c9e7`; live `/src/swe-af` identity is baseline `58c4e0d19081bc52363c120b7963a34cebb1e894` plus the preserved dirty source delta.
+- `/afhome/installed.yaml` is stale for process identity: it still names PID `8059`, but `/proc/8059/status` is zombie. CURRENT loaded `swe-planner` is PID `167730` and `/afhome/packages/swe-planner/bin/swe-planner` SHA256 is `ff662a38022d29ef641506def62fce3cf6ecdc02f7ef478bcaaef3d6a3aa12d0`, matching the accepted L2 generation above. Treat this as execution-metadata drift, not product rollback.
 
 DoD:
 - nonexistent/invalid task fails closed or abstains without repo damage. **PASS 2026-09-04**: `exec_20260904_134916_1cbcid8b` / `run_20260904_134916_m14sblfu` invoked `swe-planner.implement_issue` on disposable `/tmp/fcm-calculator-live` with `issue:{}` and failed immediately with `issue: title must be a non-empty string`. Workforce repo HEAD remained exactly `f498992e8eaaba72595494ecbd30974c63cbda64` before/after; status remained exactly the pre-existing `?? __pycache__/`, proving no tracked or new canary damage from the invalid task.
 - bounded run interruption + resume is idempotent. **PENDING**
 - stale SHA/branch advance is detected and fails closed. **PENDING**
-- unrelated worktree files are preserved. **PENDING**
+- unrelated worktree files are preserved. **PASS 2026-09-04**: `exec_20260904_135618_p78m3o2b` changed only `calculator.py` and `test_calculator.py`; root HEAD/status were preserved and pre-existing `__pycache__/calculator.cpython-311.pyc` retained the same SHA256 `612f39f2…` before/after.
+
+New first failed gate from that preservation canary:
+- coder and reviewer completed successfully; verifier child `exec_20260904_140630_aktkodsg` ran exactly ~300s and parent returned `Verifier agent failed to produce a valid result`.
+- OpenCode artifact `/tmp/opencode-run-225886-1788530790.stdout` proves the verifier had already written `.agentfield_output.json`, `json.load` reported `Valid JSON`, `passed=true`, and all four criteria were true before the 300s watchdog fired.
+- Current `harnessx.Run` salvages watchdog failures only from assistant-text candidates; a structured result written via the output-file tool is invisible to that salvage path. Therefore the first owning defect is **ACI_HARNESS watchdog salvage**, not verifier reasoning and not provider transport.
+
+30-minute Pareto batch / BMad route: `bmad-testarch-test-design` keeps exact-schema/fail-closed acceptance; `bmad-quick-dev` implements the smallest vertical slice in live `/src/swe-af`: on the narrow no-progress watchdog path, recover an exact-schema-valid harness output file when present, preserve provider/generic errors as failures, add regression coverage, run targeted Go test/vet, reload only `swe-planner`, then repeat the same preservation canary. Do not implement a broad field-by-field compiler until this file-salvage slice is measured.
 
 ### Batch 4 — Durability / SourceLoop gate
 
