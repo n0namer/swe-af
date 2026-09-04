@@ -250,7 +250,7 @@ Prerequisite: L2 structured-output reliability gate PASS/CLOSED above.
 
 Fresh CURRENT anti-drift readback — 2026-09-04:
 - Permanent workforce remains `1437789b5c4debc061992bec718132dcbccc66ac67e0b9e45ce1eea5b651c9e7`; live `/src/swe-af` identity remains baseline `58c4e0d19081bc52363c120b7963a34cebb1e894` plus the preserved dirty source delta.
-- `/afhome/installed.yaml` is stale execution metadata and must not be used as CURRENT PID authority. Historical PID `8059` and prior PID `167730` are zombies. CURRENT loaded `swe-planner` after the centralization batch is PID `239824`; binary SHA256 is `94b2795f858dabc7fc3d598e26dd84ac8ffce353dac52d3cbcaf47f37799f9af`. Logs prove fresh `node.register.complete` / `agent.initialize.complete` for `swe-planner` and embedded `swe-pro` after the process-only reload at `2026-09-04T17:16:35Z`.
+- `/afhome/installed.yaml` is stale execution metadata and must not be used as CURRENT PID authority. Historical PIDs `8059`, `167730`, `230927`, and `239824` are superseded/zombie generations. CURRENT loaded `swe-planner` after the stale-SHA batch is PID `241940`; binary SHA256 is `4935b99a0453832580b35186d52f686427940496d7e7eef97f3a14b4f6c315cb`. Logs prove fresh `node.register.complete` / `agent.initialize.complete` for `swe-planner` and embedded `swe-pro` after the process-only reload at `2026-09-04T17:29:14Z`.
 - Root `ERRORS.md` exists in durable project history but not in the preserved runtime baseline; do not synthesize a duplicate inside `/src` merely to remove metadata drift.
 
 Structured-output architecture spine (BMAD `bmad-architecture` + `bmad-testarch-test-design` + `bmad-quick-dev`):
