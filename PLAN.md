@@ -242,15 +242,15 @@ Observed L1 run evidence — 2026-09-01:
 
 ### Batch 3 — Failure/recovery gate
 
-Status: PENDING
+Status: IN PROGRESS
 
-Prerequisite: Batch 2 DoD PASS.
+Prerequisite: L2 structured-output reliability gate PASS/CLOSED above.
 
 DoD:
-- nonexistent/invalid task fails closed or abstains without repo damage;
-- bounded run interruption + resume is idempotent;
-- stale SHA/branch advance is detected and fails closed;
-- unrelated worktree files are preserved.
+- nonexistent/invalid task fails closed or abstains without repo damage. **PASS 2026-09-04**: `exec_20260904_134916_1cbcid8b` / `run_20260904_134916_m14sblfu` invoked `swe-planner.implement_issue` on disposable `/tmp/fcm-calculator-live` with `issue:{}` and failed immediately with `issue: title must be a non-empty string`. Workforce repo HEAD remained exactly `f498992e8eaaba72595494ecbd30974c63cbda64` before/after; status remained exactly the pre-existing `?? __pycache__/`, proving no tracked or new canary damage from the invalid task.
+- bounded run interruption + resume is idempotent. **PENDING**
+- stale SHA/branch advance is detected and fails closed. **PENDING**
+- unrelated worktree files are preserved. **PENDING**
 
 ### Batch 4 — Durability / SourceLoop gate
 
