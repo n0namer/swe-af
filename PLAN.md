@@ -52,9 +52,9 @@ Reconciled from live readback on 2026-09-01.
 
 ## Current Stage
 
-FAILURE/RECOVERY / STRUCTURED-OUTPUT CENTRALIZATION / ANTI-DRIFT.
+DURABILITY / SOURCELOOP / ANTI-DRIFT.
 
-L2 semantic/structured-output acceptance is already PASS/CLOSED. The active work is Batch 3 recovery plus consolidation of weak-model structured-output reliability behind the existing `harnessx.Run[T]` choke point.
+L2 semantic/structured-output acceptance and Batch 3 failure/recovery are PASS/CLOSED. The active work is Batch 4: capture only the accepted live source delta, reject stale/noisy capture, produce an exact durable `fork/dev` SHA, and prove repository tests on that SHA before materialization.
 
 Fresh CURRENT readback on 2026-09-02 supersedes the older PID/provider-gate wording below for the active debug batch:
 
