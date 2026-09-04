@@ -55,6 +55,7 @@ type implementInput struct {
 	Issue             map[string]any `json:"issue"`
 	RepoPath          string         `json:"repo_path"`
 	BaseBranch        string         `json:"base_branch"`
+	ExpectedBaseSHA   string         `json:"expected_base_sha"`
 	ArtifactsDir      string         `json:"artifacts_dir"`
 	AdditionalContext string         `json:"additional_context"`
 	Config            map[string]any `json:"config"`
@@ -111,6 +112,9 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 	baseRef, baseSHA, err := resolveBase(repoPath, in.BaseBranch)
 	if err != nil {
 		return nil, err
+	}
+	if in.ExpectedBaseSHA != "" && baseSHA != in.ExpectedBaseSHA {
+		return nil, fmt.Errorf("implement_issue: stale base %s: expected %s, current %s", baseRef, in.ExpectedBaseSHA, baseSHA)
 	}
 	excludes := []string{".worktrees/"}
 	if !filepath.IsAbs(in.ArtifactsDir) {
