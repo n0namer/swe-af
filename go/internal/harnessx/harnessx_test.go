@@ -439,8 +439,8 @@ func TestRoleOptionsOpenCodeUsesOnlySWEOwnedBinary(t *testing.T) {
 	if o.BinPath != "/opt/swe/opencode" {
 		t.Fatalf("expected SWE-owned binary, got %q", o.BinPath)
 	}
-	if o.SchemaMode != "incremental" {
-		t.Fatalf("weak-model OpenCode roles must keep task context across schema retries, got schema_mode=%q", o.SchemaMode)
+	if o.SchemaMode != "" {
+		t.Fatalf("role options must not own structured-output recovery policy, got schema_mode=%q", o.SchemaMode)
 	}
 
 	t.Setenv("SWE_OPENCODE_BIN", "")
@@ -448,8 +448,29 @@ func TestRoleOptionsOpenCodeUsesOnlySWEOwnedBinary(t *testing.T) {
 	if o.BinPath != "" {
 		t.Fatalf("SEC-AF binary must not leak into SWE options, got %q", o.BinPath)
 	}
-	if o.SchemaMode != "incremental" {
-		t.Fatalf("OpenCode schema mode changed with binary resolution: %q", o.SchemaMode)
+}
+
+func TestRunCentralizesOpenCodeIncrementalSchemaMode(t *testing.T) {
+	seenMode := ""
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
+			seenMode = opts.SchemaMode
+			parsed := dest.(*seededResult)
+			parsed.Complete = false
+			parsed.Scope = "large"
+			return &harness.Result{Parsed: parsed}, nil
+		},
+	}
+
+	out, _, err := Run[seededResult](context.Background(), mh, "prompt", (RoleOptions{Provider: "opencode"}).ToOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if seenMode != "incremental" {
+		t.Fatalf("central structured controller must enable incremental mode, got %q", seenMode)
+	}
+	if out == nil || out.Scope != "large" {
+		t.Fatalf("unexpected parsed result: %+v", out)
 	}
 }
 

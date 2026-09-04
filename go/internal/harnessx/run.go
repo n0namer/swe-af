@@ -36,18 +36,11 @@ type HarnessCaller interface {
 //  1. Reflect T into the JSON schema the harness consumes (cached per type).
 //  2. Inject the build's run-scoped credentials into opts.Env, scoped creds
 //     overriding the base env — mirroring the Python precedence where a freshly
-//     minted scout token beats a stale value inherited from os.environ. The run
-//     ID comes from agent.ExecutionContextFrom(ctx).RunID.
-//  3. Call app.Harness with a fresh *T dest.
-//  4. Classify fatal (non-retryable) API errors FIRST, before the Parsed==nil
-//     fallback, so the real billing/auth message surfaces past every retry layer
-//     as a *fatal.FatalHarnessError (callers must propagate it, not swallow it).
-//  5. On Result.Parsed == nil (the harness could not parse valid JSON into T),
-//     return a default-seeded T plus the Result — NOT an error — so the caller
-//     inspects Result.IsError and applies its role-specific deterministic
-//     fallback. The seed comes from unmarshaling "{}" into T, which triggers
-//     T's UnmarshalJSON default-seeding (schemas §2.2) when present, and yields
-//     the Go zero value otherwise.
+//     minted scout token beats a stale value inherited from os.environ.
+//  3. Delegate the full structured-output policy to executeStructured. Keeping
+//     this base call seam thin is intentional: weak-model recovery, validation,
+//     watchdog salvage, and incremental schema policy live in the adjacent
+//     harnessx structured-contract module rather than in role code.
 //
 // Returns (*T, *harness.Result, error). The Result is returned even alongside a
 // non-nil error so callers can inspect diagnostics.
@@ -99,20 +92,11 @@ type RoleOptions struct {
 // credentials into Env afterwards, so callers leave Env as the base env only.
 func (r RoleOptions) ToOptions() harness.Options {
 	binPath := ""
-	schemaMode := ""
 	if r.Provider == "opencode" {
 		// SWE owns its harness binary contract. Cross-component fallbacks (for
 		// example SEC_AF_OPENCODE_BIN) couple independently deployable agents and
 		// belong in fleet orchestration, not SWE source.
 		binPath = os.Getenv("SWE_OPENCODE_BIN")
-
-		// Weak OpenCode-backed models are materially more reliable when the
-		// structured envelope is built field-by-field. Incremental mode also keeps
-		// the original task/schema context on validation retries, while the SDK's
-		// single-shot retry prompt contains only the output-file diagnosis. That
-		// distinction is critical when a model otherwise drifts into generic prose
-		// after completing the coding work.
-		schemaMode = "incremental"
 	}
 	return harness.Options{
 		Provider:       r.Provider,
@@ -125,6 +109,5 @@ func (r RoleOptions) ToOptions() harness.Options {
 		Cwd:            r.Cwd,
 		ProjectDir:     r.Cwd,
 		Env:            r.Env,
-		SchemaMode:     schemaMode,
 	}
 }

@@ -100,6 +100,14 @@ func schemaFor[T any]() map[string]any {
 // integration seam so recovery behavior can evolve without spreading changes
 // across role code or increasing rebase pressure on the base call path.
 func executeStructured[T any](ctx context.Context, app HarnessCaller, prompt string, schema map[string]any, opts harness.Options) (*T, *harness.Result, error) {
+	// Weak OpenCode-backed models are materially more reliable when the SDK
+	// builds the structured envelope incrementally. Keep that policy here, next
+	// to recovery/validation, so role code and the base Run seam do not know how
+	// structured output is repaired.
+	if opts.Provider == "opencode" && opts.SchemaMode == "" {
+		opts.SchemaMode = "incremental"
+	}
+
 	var dest T
 	stopOutputCapture := startStructuredOutputCapture[T](ctx, opts.ProjectDir, schema)
 	result, err := app.Harness(ctx, prompt, schema, &dest, opts)
