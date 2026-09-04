@@ -365,6 +365,51 @@ func TestCheckpointWrittenAndRoundTrips(t *testing.T) {
 	}
 }
 
+func TestResumeAfterCancellationDoesNotRepeatCompletedIssue(t *testing.T) {
+	dir := t.TempDir()
+	plan := makePlan([]map[string]any{issue("a"), issue("b")}, [][]string{{"a"}, {"b"}})
+	plan["artifacts_dir"] = dir
+
+	ctx, cancel := context.WithCancel(context.Background())
+	firstCalls := []string{}
+	firstExecute := func(_ context.Context, iss map[string]any, _ *schemas.DAGState) (map[string]any, error) {
+		name := asStr(iss["name"])
+		firstCalls = append(firstCalls, name)
+		if name == "a" {
+			cancel()
+		}
+		return map[string]any{"outcome": "completed", "result_summary": "done"}, nil
+	}
+
+	_, err := RunDAG(ctx, plan, "/repo", nil, "swe-planner", testCfg(t, nil), WithExecuteFn(firstExecute))
+	if err != context.Canceled {
+		t.Fatalf("first run error = %v, want context.Canceled", err)
+	}
+	if len(firstCalls) != 1 || firstCalls[0] != "a" {
+		t.Fatalf("first run calls = %v, want [a]", firstCalls)
+	}
+	loaded := loadCheckpoint(dir)
+	if loaded == nil || !names(loaded.CompletedIssues)["a"] {
+		t.Fatalf("checkpoint after interruption lost completed issue a: %+v", loaded)
+	}
+
+	resumeCalls := []string{}
+	resumeExecute := func(_ context.Context, iss map[string]any, _ *schemas.DAGState) (map[string]any, error) {
+		resumeCalls = append(resumeCalls, asStr(iss["name"]))
+		return map[string]any{"outcome": "completed", "result_summary": "done"}, nil
+	}
+	resumed, err := RunDAG(context.Background(), plan, "/repo", nil, "swe-planner", testCfg(t, nil), WithResume(true), WithExecuteFn(resumeExecute))
+	if err != nil {
+		t.Fatalf("resume RunDAG: %v", err)
+	}
+	if len(resumeCalls) != 1 || resumeCalls[0] != "b" {
+		t.Fatalf("resume calls = %v, want [b] only", resumeCalls)
+	}
+	if !names(resumed.CompletedIssues)["a"] || !names(resumed.CompletedIssues)["b"] {
+		t.Fatalf("resumed completed issues = %v, want a+b", resumed.CompletedIssues)
+	}
+}
+
 func TestLoadPythonGoldenCheckpoint(t *testing.T) {
 	dir := t.TempDir()
 	execDir := filepath.Join(dir, "execution")
