@@ -278,16 +278,28 @@ Batch 3 is closed. Next 30-minute Pareto move is Batch 4 durability/SourceLoop: 
 
 ### Batch 4 — Durability / SourceLoop gate
 
-Status: PENDING
+Status: IN PROGRESS — STALE/NOISY RUNTIME CAPTURE REJECTED; CLEAN CANDIDATE REQUIRED
 
-Prerequisite: accepted runtime fix or accepted canary delta.
+Prerequisite: Batch 3 PASS/CLOSED above.
+
+Fresh CURRENT anti-drift — 2026-09-04:
+- CURRENT loaded planner is PID `246239`, binary SHA256 `952748c1b92c60a1dc60541bc225a2c0444a682b60d57e05e30d024ff51a03c2`, built from the live source after restoring the durable `blocking review -> fix/retry` contract and retaining the newer fail-closed reviewer behavior.
+- Whole-worktree comparison must be against CURRENT durable `dev`, not runtime Git status against baseline `58c4e0...`; the latter misses files that advanced in Git but were never materialized into the preserved runtime baseline.
+- That anti-drift comparison exposed and repaired a split-brain in `internal/coding/loop.go` / `loop_test.go`, then exposed a stale level-failure test oracle. After merging the intended semantics, combined `go test` and matching `go vet` PASS across coding, DAG, orch, harnessx, issue, node, schemas, coding/advisor roles, and coding prompts.
+- Runtime-capture is healthy and automatically captured CURRENT `/src/swe-af` to PR #7, head `556d910369158c2e664deb51a84000a68240711f`, but PR #7 is **not an acceptable durability candidate**: it is a 21-file full runtime snapshot rooted at stale runtime base `58c4e0...`, its PR base metadata predates CURRENT `dev`, and it mixes accepted recovery/structured-output changes with older provider/planning deltas that have no current Batch-4 acceptance verdict.
+- SourceLoop per-change journal is also incomplete for aggregate durability because some accepted patches were applied through the production typed live-patch lane and are not present in the DEV journal; requesting an artifact for a recent DEV change returned `capture_artifact_reference_invalid`. Therefore neither “latest journal event” nor PR #7 may be promoted blindly.
+- Durable-only `ERRORS.md`, this `PLAN.md`, and `docs/LLM_PROVIDER_SECURITY_CONTRACT.md` are absent from the preserved runtime baseline and must be preserved; their apparent deletion in a raw runtime snapshot is noise/drift, not accepted source delta.
+
+Accepted durability allowlist for the current recovery batch is the merged SWE slice only: `go/internal/coding/loop.go`, `go/internal/dag/executor.go`, `go/internal/dag/executor_test.go`, `go/internal/harnessx/harnessx_test.go`, `go/internal/harnessx/run.go`, `go/internal/harnessx/schema.go`, `go/internal/issue/build.go`, `go/internal/issue/build_test.go`, and `go/internal/node/register.go`. `loop_test.go` already matches durable `dev` after anti-drift repair and needs no publication delta. Older provider/planning files (`agentfield-package.yaml`, node AI config/source, `roles/planning/planning.go`, `opencode.json`) stay out until separately accepted.
 
 DoD:
-- only source delta is captured; noise excluded;
-- stale capture fails closed;
-- accepted delta reaches `fork/dev`;
-- exact `WORKING_DEV_SHA` is recorded;
-- repo tests pass on that durable SHA.
+- only accepted source delta captured; runtime/provider/planning noise excluded. **IN PROGRESS**
+- stale/noisy capture fails closed. **PASS** — PR #7 explicitly rejected as promotion input.
+- accepted delta reaches `fork/dev`. **PENDING**
+- exact `WORKING_DEV_SHA` is recorded. **PENDING**
+- repo tests pass on that exact durable SHA. **PENDING**
+
+Next 30-minute Pareto move: create one clean stale-safe publication candidate from CURRENT `dev` containing only the allowlisted live bytes above, validate its diff against both CURRENT `dev` and CURRENT live source, publish through the canonical repository publication lane, then run the same package test/vet gate on the exact candidate/durable SHA before acceptance. No product logic is to be edited in GitHub during this step; this is Lane-B canonicalization of already-tested live bytes.
 
 ### Batch 5 — Materialization and regression
 
