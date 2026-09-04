@@ -272,9 +272,9 @@ Batch 3 DoD:
 - unrelated worktree files are preserved. **PASS** — `exec_20260904_135618_p78m3o2b`; unrelated `.pyc` SHA256 unchanged.
 - centralized weak-model structured-output policy has one role-agnostic seam and real runtime proof. **PASS** — source tests/vet + `exec_20260904_171701_d2vmapuh`.
 - bounded run interruption + resume is idempotent. **PENDING**
-- stale SHA/branch advance is detected and fails closed. **PENDING**
+- stale SHA/branch advance is detected and fails closed. **PASS 2026-09-04**: `implement_issue` now accepts optional `expected_base_sha` and compares it immediately after resolving `base_branch`, before artifacts/worktree/LLM side effects. Source regressions `go test ./internal/issue ./internal/node` and matching `go vet` PASS. Runtime canary `exec_20260904_173012_503eoaro` used disposable `/tmp/swe-stale-sha-canary`: expected `f498992e8eaaba72595494ecbd30974c63cbda64`, current advanced `52ae4c29cd9b5604c07cbea8988709bdf2e064b1`; execution failed in ~11ms with explicit stale-base error. Independent readback proved HEAD remained `52ae4c29...`, status stayed clean, and no `issue/*` branch/worktree was created.
 
-Next 30-minute Pareto move: close the cheaper of the two remaining recovery contracts first — stale SHA/branch advance fail-closed on a disposable repo with before/after HEAD/status evidence — then test interruption/resume using the existing checkpoint path. Do not add more structured-output machinery unless either gate exposes it as the first causal failure.
+Next 30-minute Pareto move: close the final Batch 3 recovery contract — bounded interruption + resume idempotency — using the existing checkpoint/resume path on a disposable repo. Prefer a deterministic checkpoint fixture or the smallest real execution that reaches checkpoint state; interrupt only after checkpoint evidence exists, resume from that exact checkpoint, and prove no duplicate issue commits/branches/worktrees or unrelated-file damage.
 
 ### Batch 4 — Durability / SourceLoop gate
 
