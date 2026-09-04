@@ -52,7 +52,9 @@ Reconciled from live readback on 2026-09-01.
 
 ## Current Stage
 
-LIVE-TASK DEBUGGING / SEMANTIC ACCEPTANCE / STRUCTURED-OUTPUT RELIABILITY.
+FAILURE/RECOVERY / STRUCTURED-OUTPUT CENTRALIZATION / ANTI-DRIFT.
+
+L2 semantic/structured-output acceptance is already PASS/CLOSED. The active work is Batch 3 recovery plus consolidation of weak-model structured-output reliability behind the existing `harnessx.Run[T]` choke point.
 
 Fresh CURRENT readback on 2026-09-02 supersedes the older PID/provider-gate wording below for the active debug batch:
 
