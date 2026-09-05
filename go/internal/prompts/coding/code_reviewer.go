@@ -17,11 +17,13 @@ Your review depth is guided by the sprint planner's ` + "`" + `review_focus` + "
 
 ## Test Verification
 
-The coder agent already ran the project's test suite in this same worktree. Their reported results (tests_passed, test_summary) are included in the task prompt.
+The coder agent already ran tests in this same worktree, but its self-reported results are correlated evidence, not an independent oracle.
 
-- If the coder reports tests_passed=true with a credible test_summary, trust it. Focus your time on code quality, security, and requirements.
-- If the coder reports tests_passed=false or did not report test results, run the test suite yourself to understand the failures.
-- If something in the code looks fundamentally wrong during review, you may re-run tests to confirm your suspicion.
+- Always inspect the changed code against each acceptance criterion, even when tests_passed=true.
+- Re-run the smallest relevant repository-native test command yourself whenever feasible.
+- For parsers, serializers, source transformers, security-sensitive logic, boundary handling, or other semantics where one missed edge case can invalidate the change, design and execute at least one independent adversarial/edge-case check that was not merely copied from the coder's tests.
+- If the repository declares a lightweight static-quality command for the changed language (for example ruff, go vet, cargo clippy, eslint), run the smallest relevant check when feasible.
+- Treat inability to reproduce the coder's test environment as evidence to report explicitly; do not silently convert it into approval.
 
 When tests fail (either coder-reported or your own run), determine whether the failure is:
 - A real bug (→ blocking)
@@ -145,7 +147,7 @@ func CodeReviewerTaskPrompt(o CodeReviewerTaskPromptOpts) string {
 			sections = append(sections, fmt.Sprintf("- **test_summary**: %s", testSummary))
 		}
 		if truthy(testsPassedRaw) {
-			sections = append(sections, "The coder reports tests passed. Trust this unless your code review reveals suspicious logic.")
+			sections = append(sections, "The coder reports tests passed. Treat this as supporting evidence only; independently inspect acceptance semantics and run a focused verification check when feasible.")
 		} else {
 			sections = append(sections, "The coder reports tests DID NOT pass. Run the test suite yourself to assess failures.")
 		}
@@ -193,12 +195,13 @@ func CodeReviewerTaskPrompt(o CodeReviewerTaskPromptOpts) string {
 
 	sections = append(sections, "\n## Your Task\n"+
 		"1. Read ALL changed files carefully.\n"+
-		"2. If tests_passed is false or unknown, run the test suite. Otherwise trust the coder's results.\n"+
-		"3. Check each acceptance criterion is met.\n"+
-		"4. Look for security issues, crashes, data loss, wrong logic.\n"+
-		"5. Classify issues by severity (BLOCKING, SHOULD_FIX, SUGGESTION).\n"+
-		"6. Report: approved (bool), blocking (bool), summary, and debt_items.\n"+
-		"7. Only set blocking=true for security/crash/data-loss/wrong-algorithm.")
+		"2. Treat coder tests as correlated evidence, not proof: run the smallest relevant project test yourself when feasible.\n"+
+		"3. Check each acceptance criterion and, for parser/transformer/boundary-sensitive changes, execute at least one independent adversarial edge case not copied from the coder tests.\n"+
+		"4. Run the smallest declared static-quality check for the changed language when feasible.\n"+
+		"5. Look for security issues, crashes, data loss, wrong logic, and missing core functionality.\n"+
+		"6. Classify issues by severity (BLOCKING, SHOULD_FIX, SUGGESTION).\n"+
+		"7. Report: approved (bool), blocking (bool), summary, and debt_items.\n"+
+		"8. Set blocking=true for security/crash/data-loss/wrong-algorithm/missing-core-functionality or a reproducible acceptance-criterion violation.")
 
 	return strings.Join(sections, "\n")
 }

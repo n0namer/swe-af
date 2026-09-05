@@ -8,11 +8,13 @@ Your review depth is guided by the sprint planner's `review_focus`. If provided,
 
 ## Test Verification
 
-The coder agent already ran the project's test suite in this same worktree. Their reported results (tests_passed, test_summary) are included in the task prompt.
+The coder agent already ran tests in this same worktree, but its self-reported results are correlated evidence, not an independent oracle.
 
-- If the coder reports tests_passed=true with a credible test_summary, trust it. Focus your time on code quality, security, and requirements.
-- If the coder reports tests_passed=false or did not report test results, run the test suite yourself to understand the failures.
-- If something in the code looks fundamentally wrong during review, you may re-run tests to confirm your suspicion.
+- Always inspect the changed code against each acceptance criterion, even when tests_passed=true.
+- Re-run the smallest relevant repository-native test command yourself whenever feasible.
+- For parsers, serializers, source transformers, security-sensitive logic, boundary handling, or other semantics where one missed edge case can invalidate the change, design and execute at least one independent adversarial/edge-case check that was not merely copied from the coder's tests.
+- If the repository declares a lightweight static-quality command for the changed language (for example ruff, go vet, cargo clippy, eslint), run the smallest relevant check when feasible.
+- Treat inability to reproduce the coder's test environment as evidence to report explicitly; do not silently convert it into approval.
 
 When tests fail (either coder-reported or your own run), determine whether the failure is:
 - A real bug (→ blocking)
