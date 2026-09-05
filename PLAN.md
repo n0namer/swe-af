@@ -109,7 +109,7 @@ Fresh full-loop anti-drift: the repeated EvalGuard #3 execution `exec_20260905_0
 
 ### Governor communication decision — OpenClaw / Telegram
 
-Decision: reuse the existing OpenClaw installation as the messaging/control bridge; do not create a second Telegram bot or parallel notification stack. Logical ownership stays separated: SWE executes work, the Governor decides AUTO vs ASK/escalation, OpenClaw transports messages and user replies, Telegram is the human cockpit.
+Decision: reuse the existing OpenClaw installation as the messaging/control bridge, but move the SWE cockpit to **one dedicated Telegram bot/account `swe` bound to OpenClaw agent `devteam`**. Do not create one bot per project and do not create a parallel notification service/database. The default Telegram bot remains Jarvis. One SWE bot multiplexes multiple projects using explicit project identity plus execution/request correlation.
 
 CURRENT OpenClaw/Telegram control-plane readback on 2026-09-05:
 - Telegram `default` is configured, running, connected and polling. Bot probe reports `has_topics_enabled=false`, so the CURRENT direct-message channel is one flat Jarvis session; do not assume Telegram DM topic isolation.
