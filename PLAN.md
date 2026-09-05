@@ -52,9 +52,9 @@ Reconciled from live readback on 2026-09-01.
 
 ## Current Stage
 
-DURABILITY / SOURCELOOP / ANTI-DRIFT.
+REAL-TASK QUALITY ACCEPTANCE / REVIEWER RELIABILITY / ANTI-DRIFT.
 
-L2 semantic/structured-output acceptance and Batch 3 failure/recovery are PASS/CLOSED. The active work is Batch 4: capture only the accepted live source delta, reject stale/noisy capture, produce an exact durable `fork/dev` SHA, and prove repository tests on that SHA before materialization.
+L2 semantic/structured-output acceptance and Batch 3 failure/recovery are PASS/CLOSED. Batch 4 durability remains open, but the latest real-repository acceptance introduced an earlier product gate: SWE produced a plausible patch with green native tests, yet independent semantic/lint checks found defects and the reviewer structured result failed to complete. Do not advance durability as the active priority until the same real task passes independent acceptance.
 
 Fresh CURRENT readback on 2026-09-02 supersedes the older PID/provider-gate wording below for the active debug batch:
 
