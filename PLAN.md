@@ -99,7 +99,7 @@ Human/SWE boundary is explicit and sparse. The human is the governor of intent a
 
 Recommended operating profiles:
 - **Precision / default:** `implement_issue` for an already-scoped issue, classic or proven Pro coding engine, independent reviewer, bounded repair, verifier; human only at exceptions/final acceptance.
-- **Feature / governed:** `plan` -> human plan review -> `execute`/`build`; use HAX approval for architecture/scope-sensitive work.
+- **Feature / governed:** `plan` -> human plan review -> `execute`/`build`; use the CURRENT OpenClaw/Telegram approval path for architecture/scope-sensitive work. HAX remains an optional compatible form UI, not the active dependency in this deployment.
 - **Fast:** `swe-fast` only after its own L2/L3 certification; use for low-risk bounded tasks where turnaround dominates depth.
 - **Pro:** `SWE_PRO_ENGINE=1` only after Pro runtime acceptance; tune `SWE_PRO_VARIANT` and `SWE_PRO_MAX_COST` as effort/cost controls, not as correctness substitutes.
 
