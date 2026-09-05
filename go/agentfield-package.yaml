@@ -55,6 +55,12 @@ user_environment:
     - name: SWE_DEFAULT_MODEL
       description: Override the model id for every role (e.g. openai/deepseek-ai/DeepSeek-V4-Flash-0731)
       default: openai/deepseek-ai/DeepSeek-V4-Flash-0731
+    - name: AGENTFIELD_HARNESS_IDLE_SECONDS
+      description: >-
+        Idle-output watchdog for harness CLI subprocesses. SWE defaults this to 0
+        because the installed OpenCode wrapper buffers stdout/stderr until the
+        command exits; the SDK total timeout remains the bounded liveness guard.
+      default: "0"
     - name: SWE_PRO_ENGINE
       description: >-
         High-performance coding engine (beta). On by default for nodes
