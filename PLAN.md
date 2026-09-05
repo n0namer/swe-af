@@ -386,7 +386,7 @@ Batch 3 is closed. Next 30-minute Pareto move is Batch 4 durability/SourceLoop: 
 
 ### Batch 4 — Durability / SourceLoop gate
 
-Status: IN PROGRESS — STALE/NOISY RUNTIME CAPTURE REJECTED; CLEAN CANDIDATE REQUIRED
+Status: OPEN / DEFERRED BEHIND CURRENT REAL-TASK CAPABILITY GATES — stale/noisy runtime capture rejection is proven; clean exact durable SHA remains required after the active certification spine reaches the durability stage.
 
 Prerequisite: Batch 3 PASS/CLOSED above.
 
