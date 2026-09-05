@@ -52,9 +52,9 @@ Reconciled from live readback on 2026-09-01.
 
 ## Current Stage
 
-REAL-TASK QUALITY ACCEPTANCE / REVIEWER RELIABILITY / ANTI-DRIFT.
+OPENCLAW GOVERNOR / HUMAN CONTROL PLANE + REAL-TASK QUALITY ACCEPTANCE / ANTI-DRIFT.
 
-L2 semantic/structured-output acceptance and Batch 3 failure/recovery are PASS/CLOSED. Batch 4 durability remains open, but the latest real-repository acceptance introduced an earlier product gate: SWE produced a plausible patch with green native tests, yet independent semantic/lint checks found defects and the reviewer structured result failed to complete. Do not advance durability as the active priority until the same real task passes independent acceptance.
+L2 semantic/structured-output acceptance and Batch 3 failure/recovery are PASS/CLOSED. Batch 4 durability remains open. The active 2026-09-05 Pareto batch is the human-control vertical: replace the currently-disabled HAX dependency in this deployment with OpenClaw/Telegram over the existing AgentField pause/resume primitive, while preserving HAX compatibility for other deployments. In parallel, the real-task reviewer/full-loop quality gate remains open; do not call `implement_issue` L3 PASS until the same real task completes independent acceptance.
 
 ### Real-task reviewer gate + capability audit — 2026-09-05
 
