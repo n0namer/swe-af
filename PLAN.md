@@ -107,6 +107,25 @@ Maximum-output Pareto policy: spend human attention at decision boundaries, not 
 
 Fresh full-loop anti-drift: the repeated EvalGuard #3 execution `exec_20260905_075042_xi2na5he` completed `status=succeeded` at transport but `success=false`, `outcome=error`; coder produced commit `d7402d4aa01cf80f0efeeb1391849e39ca436e52`, while reviewer execution exceeded its 1800s agent-call limit. During that review the independent reviewer had already reproduced additional source-transformation failures. Therefore reviewer defect-detection quality improved, but whole-loop reviewer time/termination efficiency remains the nearest quality/liveness gate; do not call `implement_issue` L3 PASS yet.
 
+### Governor communication decision — OpenClaw / Telegram
+
+Decision: reuse the existing OpenClaw installation as the messaging/control bridge; do not create a second Telegram bot or parallel notification stack. Logical ownership stays separated: SWE executes work, the Governor decides AUTO vs ASK/escalation, OpenClaw transports messages and user replies, Telegram is the human cockpit.
+
+CURRENT OpenClaw readback on 2026-09-05:
+- Telegram channel `default` is configured, running, connected, polling, with no current channel error.
+- OpenClaw Gateway hooks are already enabled at `/hooks` with a dedicated redacted hook token; request-selected session keys are constrained to `hook:devteam:*`, and hook routing is restricted to agent `devteam`.
+- Canonical hook endpoint `POST /hooks/agent` supports `{message, agentId, sessionKey, deliver, channel, to, ...}`; `deliver:true` can send the agent's final reply to Telegram.
+- `devteam` already exists as an OpenClaw agent. Telegram currently has no top-level routing binding, so ordinary inbound Telegram traffic remains with the default `main`/Jarvis path unless a dedicated binding/topic is added.
+
+Pareto integration shape:
+1. Governor -> OpenClaw: authenticated `POST /hooks/agent`, `agentId=devteam`, `sessionKey=hook:devteam:swe:<execution-or-decision-id>`, `deliver=true`, Telegram target explicit when known. Payload must contain only bounded state/decision data; treat SWE-generated text as untrusted.
+2. OpenClaw -> human: Telegram notification presents goal, execution id, evidence summary, requested decision, risk, and allowed actions. Do not forward raw logs/secrets by default.
+3. Human -> Governor: preserve existing Jarvis/default Telegram routing rather than binding the whole Telegram account to `devteam`. Add a narrow SWE Governor command/tool path in OpenClaw (`status`, `approve`, `request_changes`, `reject`, `answer`, `cancel/resume`) keyed by execution/decision id; replies are translated to the canonical AgentField/HAX decision endpoint.
+4. Optional richer UX: a dedicated Telegram forum topic may route to `devteam` via topic `agentId` if the operator later wants a persistent SWE-only conversation. Do not hijack the existing default Telegram DM route merely for Governor traffic.
+5. Autonomous policy: low-risk bounded retry/review/repair remains AUTO; OpenClaw notifies only on meaningful state transitions. Human approval remains mandatory for secrets/permissions, material scope or architecture changes, destructive/external actions, and final acceptance when policy requires it.
+
+Implementation order: first build/verify the narrow bidirectional Governor tool contract against existing OpenClaw + AgentField/HAX APIs; then exercise one real decision flow end-to-end (`SWE waiting -> OpenClaw -> Telegram -> human decision -> OpenClaw -> HAX/AgentField resume`). No new persistent service is justified unless OpenClaw cannot host the required narrow tool/action safely.
+
 Fresh CURRENT readback on 2026-09-02 supersedes the older PID/provider-gate wording below for the active debug batch:
 
 - Permanent DEV workforce is container `1437789b5c4debc061992bec718132dcbccc66ac67e0b9e45ce1eea5b651c9e7` (`workforce-edshqtkwskg3lrczekhcmd71-105906341777`), image `edshqtkwskg3lrczekhcmd71_workforce:ffa6c6a56814b59da19903bd56c04f8cafdb44ae`, healthy, restart count `0`, OOM=`false`.
