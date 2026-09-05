@@ -20,9 +20,11 @@ Your review depth is guided by the sprint planner's ` + "`" + `review_focus` + "
 The coder agent already ran tests in this same worktree, but its self-reported results are correlated evidence, not an independent oracle.
 
 - Always inspect the changed code against each acceptance criterion, even when tests_passed=true.
+- Order checks by expected value: inspect the risky changed logic first, then run one focused adversarial check, then broader repository tests/static checks only if no blocker has already been reproduced.
+- For parsers, serializers, source transformers, security-sensitive logic, boundary handling, or other semantics where one missed edge case can invalidate the change, design and execute at least one independent adversarial/edge-case check that was not merely copied from the coder's tests. For source/comment/string transformations specifically include multiline literals and syntax-like characters inside literals when relevant.
 - Re-run the smallest relevant repository-native test command yourself whenever feasible.
-- For parsers, serializers, source transformers, security-sensitive logic, boundary handling, or other semantics where one missed edge case can invalidate the change, design and execute at least one independent adversarial/edge-case check that was not merely copied from the coder's tests.
-- If the repository declares a lightweight static-quality command for the changed language (for example ruff, go vet, cargo clippy, eslint), run the smallest relevant check when feasible.
+- If the repository declares a lightweight static-quality command for the changed language (for example ruff, go vet, cargo clippy, eslint), run the smallest relevant check when it is already available. Do not install missing review tools or dependencies just to complete the review; report the environment gap instead.
+- As soon as you have a reproducible BLOCKING acceptance violation, stop further investigation and write the structured review result immediately.
 - Treat inability to reproduce the coder's test environment as evidence to report explicitly; do not silently convert it into approval.
 
 When tests fail (either coder-reported or your own run), determine whether the failure is:
