@@ -488,6 +488,7 @@ func TestWrapperNoAskPassthrough(t *testing.T) {
 }
 
 func TestWrapperHaxDisabledClearsField(t *testing.T) {
+	t.Setenv("SWE_OPENCLAW_HITL", "0")
 	invoke := func(_ context.Context, _ map[string]any) (map[string]any, error) {
 		return map[string]any{"action": "ASKING", "ask_user_form": askForm()}, nil
 	}
@@ -499,6 +500,41 @@ func TestWrapperHaxDisabledClearsField(t *testing.T) {
 	}
 	if out["ask_user_form"] != nil {
 		t.Errorf("ask_user_form should be cleared, got %v", out["ask_user_form"])
+	}
+}
+
+func TestWrapperOpenClawFallbackPausesAndReinvokes(t *testing.T) {
+	t.Setenv("SWE_OPENCLAW_HITL", "1")
+	app := &silentApp{}
+	pauser := &fakePauser{result: &agent.ApprovalResult{
+		Decision:    "approved",
+		RawResponse: map[string]any{"values": map[string]any{"x": "answer"}},
+	}}
+	seq := []map[string]any{
+		{"action": "ASKING", "ask_user_form": askForm()},
+		{"action": "FINAL", "ask_user_form": nil},
+	}
+	call := 0
+	invoke := func(_ context.Context, _ map[string]any) (map[string]any, error) {
+		r := seq[call]
+		call++
+		return r, nil
+	}
+	out, err := RunWithAskUser(context.Background(), invoke, map[string]any{}, RunWithAskUserParams{
+		App: app, Pauser: pauser, Hax: nil, Budget: &AskUserBudget{Remaining: 2}, ExecutionID: "exec-openclaw",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["action"] != "FINAL" || call != 2 || pauser.calls != 1 {
+		t.Fatalf("out=%v call=%d pauses=%d", out, call, pauser.calls)
+	}
+	if !strings.HasPrefix(pauser.lastOpts.ApprovalRequestID, "openclaw-ask-user-exec-openclaw-") {
+		t.Fatalf("approval_request_id=%q", pauser.lastOpts.ApprovalRequestID)
+	}
+	joined := strings.Join(app.notes, "\n")
+	if !strings.Contains(joined, "governor.pending") || !strings.Contains(joined, "governor.resolved") {
+		t.Fatalf("governor notes missing: %s", joined)
 	}
 }
 

@@ -119,6 +119,7 @@ func PlanApprovalGate(ctx context.Context, req ApprovalRequest) (ApprovalOutcome
 
 		descr := "Review the proposed implementation plan before execution begins"
 		var created *hitl.CreatedRequest
+		var err error
 		if hax != nil {
 			created, err = createHaxRequestWithTimeout(ctx, deps, hax, hitl.CreateRequestParams{
 				Type:             "plan-review-v2",
@@ -155,7 +156,15 @@ func PlanApprovalGate(ctx context.Context, req ApprovalRequest) (ApprovalOutcome
 
 		decision, feedback, err := pauseForApproval(ctx, pauser, req.ExecutionID, created, expiresHours)
 		if err != nil {
+			if governorFallback {
+				deps.Note(ctx, hitl.GovernorResolvedNote("plan_review", req.ExecutionID, created.ID, "error"),
+					"governor", "resolved", "plan_approval")
+			}
 			return ApprovalOutcome{}, err
+		}
+		if governorFallback {
+			deps.Note(ctx, hitl.GovernorResolvedNote("plan_review", req.ExecutionID, created.ID, decision),
+				"governor", "resolved", "plan_approval")
 		}
 
 		writeApprovalState(approvalStatePath, map[string]any{

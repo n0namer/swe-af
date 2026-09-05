@@ -61,6 +61,12 @@ user_environment:
         because the installed OpenCode wrapper buffers stdout/stderr until the
         command exits; the SDK total timeout remains the bounded liveness guard.
       default: "0"
+    - name: SWE_OPENCLAW_HITL
+      description: >-
+        Use OpenClaw/Telegram as the human-in-the-loop surface when HAX is not
+        configured. Opt-in: set to 1 only where OpenClaw can reach this node's
+        AgentField logs and /webhooks/approval callback.
+      default: "0"
     - name: SWE_PRO_ENGINE
       description: >-
         High-performance coding engine (beta). On by default for nodes

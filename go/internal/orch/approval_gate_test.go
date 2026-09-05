@@ -180,6 +180,29 @@ func TestApprovalApprovedProceeds(t *testing.T) {
 	}
 }
 
+func TestApprovalOpenClawFallbackWithoutHax(t *testing.T) {
+	t.Setenv("SWE_OPENCLAW_HITL", "1")
+	fake := &fakePauser{decisions: []string{"approved"}}
+	defer wireHax(t, nil, fake)()
+
+	app, calls := replanApp()
+	deps := &Deps{App: app, NodeID: "swe-planner"}
+	plan := samplePlan()
+	out, err := PlanApprovalGate(context.Background(), req(deps, testCfg(t, 2), plan, t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Terminal || !reflect.DeepEqual(out.PlanResult, plan) {
+		t.Fatalf("fallback approval changed outcome: %+v", out)
+	}
+	if fake.calls != 1 {
+		t.Fatalf("expected one OpenClaw-backed pause, got %d", fake.calls)
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("approve must not replan, got %d calls", len(*calls))
+	}
+}
+
 // request_changes then approved -> replan invoked with feedback, bounded,
 // PlanResult revised.
 func TestApprovalChangesThenApproved(t *testing.T) {
