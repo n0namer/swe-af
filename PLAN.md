@@ -320,7 +320,7 @@ Stop conditions: no real coding canary while SWE is offline; no provider-secret 
 
 ### Batch 2 — Live-task diagnostic ladder: calculator → seeded bug
 
-Status: IN PROGRESS — L1 FIRST RUN EXPOSED FALSE SUCCESS
+Status: HISTORICAL / SUPERSEDED — this ladder exposed the fail-open and structured-output defects that were subsequently repaired; L2 structured-output reliability is now PASS/CLOSED.
 
 Prerequisite note: the first L1 run was intentionally executed against CURRENT loaded PID `7686` to expose actual runtime behavior before latest source reload. Results below therefore diagnose the loaded binary, not the newest `/src` delta.
 
