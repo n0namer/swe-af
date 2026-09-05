@@ -85,7 +85,27 @@ Capability audit contract: a feature is not PASS merely because source or a reas
 
 First capability-audit batch source gate PASS in CURRENT `/src/swe-af`: `go test` and matching `go vet` pass for `internal/node`, `internal/dag`, `internal/orch`, `internal/issue`, `internal/harnessx`, `internal/coding`, `internal/fast`, and `internal/pro`.
 
-Next Pareto batches: (1) rerun the SAME EvalGuard #3 through full `implement_issue` and require blocking review -> bounded coder repair -> repo-native + independent hidden oracle PASS; (2) one small two-issue real DAG task proving dependency order, parallel/level behavior, failure threshold, checkpoint and cleanup in one run; (3) one real `plan -> execute/build` task; (4) one delivery-path task covering resolve/CI/PR only after local semantic gates pass. Durability resumes after the currently tested live capabilities have real acceptance evidence.
+Next Pareto batches: (1) close the SAME EvalGuard #3 full-loop quality/liveness gate; (2) one small two-issue real DAG task proving dependency order, parallel/level behavior, failure threshold, checkpoint and cleanup in one run; (3) one real `plan -> execute/build` task; (4) one delivery-path task covering resolve/CI/PR only after local semantic gates pass. Durability resumes after the currently tested live capabilities have real acceptance evidence.
+
+### Human operating model — maximum-output mode
+
+Human/SWE boundary is explicit and sparse. The human is the governor of intent and gates, not a participant in every agent step.
+
+1. **Goal gate — human owns WHAT/WHY.** Supply a bounded goal/repo/constraints/acceptance criteria. For one known issue use `implement_issue`; for feature-level work use `plan` first, then `execute`/`build` only after plan quality is acceptable. Do not micromanage coder/reviewer prompts during normal execution.
+2. **Plan gate — human owns scope/blast/architecture approval.** With HAX enabled (`HAX_API_KEY` + pauser wiring), `build` pauses before execution and exposes PRD/architecture/issues. Human decisions are `approved`, `request_changes`, `rejected`, or expiry. `request_changes` is not cosmetic: SWE re-runs Architect -> Tech Lead -> Sprint Planner with the human feedback, bounded by `MaxPlanRevisionIterations`.
+3. **Clarification/credential gate — SWE may ask, human answers only missing authority/context.** HITL `ask_user` creates a form and genuinely transitions the execution to `waiting` until webhook resume; prior answers are injected back so the same question should not be re-asked. Environment scout may request scoped service credentials; secrets belong in the scoped credential store/environment, not in result text.
+4. **Exception gate — human intervenes on escalation, irreversible/external actions, or exhausted autonomous recovery.** Normal coder -> reviewer/QA -> fix iterations, issue-advisor actions, DAG checkpoint/resume and replanning should remain autonomous. Human intervention is warranted when scope/architecture must change, credentials/permissions are missing, risk is irreversible/external, or bounded recovery is exhausted.
+5. **Acceptance gate — human owns DONE criteria, independent oracle and delivery authorization.** Agent-written tests and reviewer approval are supporting evidence, not sole proof. Require project-native tests, risk-based independent acceptance, repo hygiene/provenance, and delivery/PR/CI evidence appropriate to the task before calling the work done.
+
+Recommended operating profiles:
+- **Precision / default:** `implement_issue` for an already-scoped issue, classic or proven Pro coding engine, independent reviewer, bounded repair, verifier; human only at exceptions/final acceptance.
+- **Feature / governed:** `plan` -> human plan review -> `execute`/`build`; use HAX approval for architecture/scope-sensitive work.
+- **Fast:** `swe-fast` only after its own L2/L3 certification; use for low-risk bounded tasks where turnaround dominates depth.
+- **Pro:** `SWE_PRO_ENGINE=1` only after Pro runtime acceptance; tune `SWE_PRO_VARIANT` and `SWE_PRO_MAX_COST` as effort/cost controls, not as correctness substitutes.
+
+Maximum-output Pareto policy: spend human attention at decision boundaries, not execution steps; spend test budget on independent oracles for high-risk semantics, not exhaustive duplicated self-tests; test capability groups end-to-end rather than 32 reasoners one by one; keep a cheap fail-fast ladder (schema/unit -> package test/vet -> live reasoner -> real-repo oracle -> delivery).
+
+Fresh full-loop anti-drift: the repeated EvalGuard #3 execution `exec_20260905_075042_xi2na5he` completed `status=succeeded` at transport but `success=false`, `outcome=error`; coder produced commit `d7402d4aa01cf80f0efeeb1391849e39ca436e52`, while reviewer execution exceeded its 1800s agent-call limit. During that review the independent reviewer had already reproduced additional source-transformation failures. Therefore reviewer defect-detection quality improved, but whole-loop reviewer time/termination efficiency remains the nearest quality/liveness gate; do not call `implement_issue` L3 PASS yet.
 
 Fresh CURRENT readback on 2026-09-02 supersedes the older PID/provider-gate wording below for the active debug batch:
 
