@@ -87,7 +87,7 @@ Capability audit contract: a feature is not PASS merely because source or a reas
 
 First capability-audit batch source gate PASS in CURRENT `/src/swe-af`: `go test` and matching `go vet` pass for `internal/node`, `internal/dag`, `internal/orch`, `internal/issue`, `internal/harnessx`, `internal/coding`, `internal/fast`, and `internal/pro`.
 
-Next Pareto batches: (1) close the SAME EvalGuard #3 full-loop quality/liveness gate; (2) one small two-issue real DAG task proving dependency order, parallel/level behavior, failure threshold, checkpoint and cleanup in one run; (3) one real `plan -> execute/build` task; (4) one delivery-path task covering resolve/CI/PR only after local semantic gates pass. Durability resumes after the currently tested live capabilities have real acceptance evidence.
+Authoritative Pareto certification spine: (1) close the SAME EvalGuard #3 full-loop quality/liveness gate; (2) one small two-issue real DAG task proving dependency order, parallel/level behavior, failure threshold, checkpoint and cleanup in one run; (3) one real governed `plan -> execute/build` task; (4) one delivery-path task covering resolve/CI/PR only after local semantic gates pass; (5) comparative Classic/Fast/Pro canaries on the same bounded task class; (6) clean-environment/bootstrap plus multi-project/concurrency acceptance; (7) durability/exact-SHA materialization; (8) repeated reliability across the proven spine. Historical batch chronology below is evidence history and does not override this order.
 
 ### Human operating model — maximum-output mode
 
