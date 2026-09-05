@@ -56,6 +56,37 @@ REAL-TASK QUALITY ACCEPTANCE / REVIEWER RELIABILITY / ANTI-DRIFT.
 
 L2 semantic/structured-output acceptance and Batch 3 failure/recovery are PASS/CLOSED. Batch 4 durability remains open, but the latest real-repository acceptance introduced an earlier product gate: SWE produced a plausible patch with green native tests, yet independent semantic/lint checks found defects and the reviewer structured result failed to complete. Do not advance durability as the active priority until the same real task passes independent acceptance.
 
+### Real-task reviewer gate + capability audit — 2026-09-05
+
+BMAD route: `bmad-help` -> `bmad-testarch-test-design` for risk/evidence coverage -> `bmad-quick-dev` for the smallest proven live fix. No duplicate test-plan artifact was created; this `PLAN.md` remains the SoT.
+
+Real-task evidence from `FreakyAdy/EvalGuard` issue #3, exact upstream `631cf297dd449bdd08112607818d3f154f078284`, coder commit `1b53eea4027b6e2219f0272b025f75dcd4991002`:
+- native mutation tests reached 11/11 PASS and independent rewardhack suite reached 19/19 PASS, yet hidden semantic acceptance reproduced a multiline-string `#` corruption and `ruff` found an unused import; self-tests were therefore insufficient as the sole oracle;
+- source inspection proved the reviewer prompt explicitly told the model to trust coder-reported passing tests. Live reviewer policy now treats coder tests as correlated evidence, requires risk-first independent edge checks for parser/transformer/boundary-sensitive code, uses available static checks, and stops to emit structured output after a reproduced blocking acceptance violation;
+- A/B reviewer on the unchanged bad commit independently recreated the multiline defect. With the default 300s idle watchdog it still lost the verdict because the installed `/usr/local/bin/opencode` wrapper buffers stdout/stderr until process exit, so the SDK sees false inactivity while OpenCode is actively testing;
+- causal discriminator with `AGENTFIELD_HARNESS_IDLE_SECONDS=0` and the SDK total timeout still bounded at 600s completed successfully: `exec_20260905_072404_73401dgs` / `run_20260905_072404_ixflwwef`, duration `1061333ms`, returned `approved=false`, `blocking=true` with the reproduced multiline-string acceptance violation. This proves both independent reviewer quality and the false-idle diagnosis;
+- SWE-owned `go/agentfield-package.yaml` now defaults `AGENTFIELD_HARNESS_IDLE_SECONDS="0"` so future installed processes do not apply a false idle-output watchdog to this buffered wrapper. This config change is source-only until the next normal install/materialization; CURRENT PID `288440` already carries the same env value from the successful discriminator.
+
+Capability audit contract: a feature is not PASS merely because source or a reasoner exists. Evidence levels are: L0 source/discovery only; L1 deterministic contract tests; L2 live reasoner/runtime smoke; L3 real-repository/system acceptance with an independent oracle. Highest current evidence:
+- discovery/registration surface — **L2 PASS**: `swe-planner` is active and CURRENT discovery reports 32 reasoners, including `build`, `plan`, `execute`, `resolve`, `resume_build`, `implement_issue`, verifier/CI/gitops stages and `pro_execute`; `internal/node` tests PASS;
+- structured-output controller — **L2 PASS**: exact-schema/incremental/recovery regressions PASS and live verifier/reviewer executions have completed with structured results;
+- `implement_issue` issue-level coding — **L3 PARTIAL**: real EvalGuard task produced a bounded real patch/commit, but full independent acceptance failed and the corrected reviewer has not yet been fed back through a complete coder self-repair rerun;
+- code reviewer / blocking feedback — **L3 PASS for defect detection, L3 rerun pending for whole loop**: unchanged bad EvalGuard commit is now independently rejected as blocking; next proof is full `implement_issue` -> reviewer blocking -> coder repair -> independent oracle PASS;
+- DAG scheduling/failure threshold — **L1 PASS / L2-L3 PENDING**: deterministic DAG tests PASS, including downstream-level abort behavior; no current real multi-issue DAG acceptance yet;
+- checkpoint/resume — **L2 PASS**: cancellation regression plus live `resume_build` smoke proved a completed issue is not repeated and unrelated sentinel state is preserved;
+- stale base SHA guard — **L2 PASS**: unit + live canary reject branch advance before worktree/LLM side effects;
+- worktree isolation/cleanup — **L2 PARTIAL**: issue-level worktree isolation and unrelated-file preservation are proven; a dedicated multi-issue/DAG cleanup oracle remains pending;
+- verifier — **L2 PASS / L3 PENDING**: direct live semantic canaries pass, but third-party real-task verifier acceptance has not yet completed end-to-end after reviewer repair;
+- fast path (`internal/fast`) — **L1 PASS / L2 PENDING**;
+- pro engine (`internal/pro`, `pro_execute`) — **L1 PASS + discovery present / L2 PENDING**;
+- feature-level `plan -> execute/build` — **L1 contract coverage exists / L2-L3 PENDING**; historical planning auth/provider failures are not current proof of the feature;
+- `resolve`, CI watcher/fixer, GitHub PR/finalization — **L0-L1 only / real runtime acceptance PENDING**;
+- durability/SourceLoop — **PARTIAL**: stale/noisy capture rejection is proven, clean exact durable SHA remains open.
+
+First capability-audit batch source gate PASS in CURRENT `/src/swe-af`: `go test` and matching `go vet` pass for `internal/node`, `internal/dag`, `internal/orch`, `internal/issue`, `internal/harnessx`, `internal/coding`, `internal/fast`, and `internal/pro`.
+
+Next Pareto batches: (1) rerun the SAME EvalGuard #3 through full `implement_issue` and require blocking review -> bounded coder repair -> repo-native + independent hidden oracle PASS; (2) one small two-issue real DAG task proving dependency order, parallel/level behavior, failure threshold, checkpoint and cleanup in one run; (3) one real `plan -> execute/build` task; (4) one delivery-path task covering resolve/CI/PR only after local semantic gates pass. Durability resumes after the currently tested live capabilities have real acceptance evidence.
+
 Fresh CURRENT readback on 2026-09-02 supersedes the older PID/provider-gate wording below for the active debug batch:
 
 - Permanent DEV workforce is container `1437789b5c4debc061992bec718132dcbccc66ac67e0b9e45ce1eea5b651c9e7` (`workforce-edshqtkwskg3lrczekhcmd71-105906341777`), image `edshqtkwskg3lrczekhcmd71_workforce:ffa6c6a56814b59da19903bd56c04f8cafdb44ae`, healthy, restart count `0`, OOM=`false`.
