@@ -111,18 +111,29 @@ Fresh full-loop anti-drift: the repeated EvalGuard #3 execution `exec_20260905_0
 
 Decision: reuse the existing OpenClaw installation as the messaging/control bridge; do not create a second Telegram bot or parallel notification stack. Logical ownership stays separated: SWE executes work, the Governor decides AUTO vs ASK/escalation, OpenClaw transports messages and user replies, Telegram is the human cockpit.
 
-CURRENT OpenClaw readback on 2026-09-05:
-- Telegram channel `default` is configured, running, connected, polling, with no current channel error.
-- OpenClaw Gateway hooks are already enabled at `/hooks` with a dedicated redacted hook token; request-selected session keys are constrained to `hook:devteam:*`, and hook routing is restricted to agent `devteam`.
-- Canonical hook endpoint `POST /hooks/agent` supports `{message, agentId, sessionKey, deliver, channel, to, ...}`; `deliver:true` can send the agent's final reply to Telegram.
-- `devteam` already exists as an OpenClaw agent. Telegram currently has no top-level routing binding, so ordinary inbound Telegram traffic remains with the default `main`/Jarvis path unless a dedicated binding/topic is added.
+CURRENT OpenClaw/Telegram control-plane readback on 2026-09-05:
+- Telegram `default` is configured, running, connected and polling. Bot probe reports `has_topics_enabled=false`, so the CURRENT direct-message channel is one flat Jarvis session; do not assume Telegram DM topic isolation.
+- Ordinary inbound Telegram traffic remains with `main`/Jarvis. There is no top-level binding that diverts the whole DM to `devteam` or SWE.
+- OpenClaw's native Telegram envelope preserves reply metadata. CURRENT source regression `extensions/telegram/src/bot.create-telegram-bot.test.ts` explicitly asserts a received Telegram reply produces `ReplyToId`, `ReplyToBody`, and `ReplyToSender`; the runtime image contains that test source. Direct execution of the test is a `VALIDATION_BLOCKER` in this image because its TypeScript test tsconfig is absent, not evidence against the contract.
+- Canonical outbound path is now deterministic `message send`, not cron fallback-delivery: OpenClaw returns the Telegram `messageId`, which the Governor stores against the exact SWE `request_id`.
 
-Pareto integration shape:
-1. Governor -> OpenClaw: authenticated `POST /hooks/agent`, `agentId=devteam`, `sessionKey=hook:devteam:swe:<execution-or-decision-id>`, `deliver=true`, Telegram target explicit when known. Payload must contain only bounded state/decision data; treat SWE-generated text as untrusted.
-2. OpenClaw -> human: Telegram notification presents goal, execution id, evidence summary, requested decision, risk, and allowed actions. Do not forward raw logs/secrets by default.
-3. Human -> Governor: preserve existing Jarvis/default Telegram routing rather than binding the whole Telegram account to `devteam`. Add a narrow SWE Governor command/tool path in OpenClaw (`status`, `approve`, `request_changes`, `reject`, `answer`, `cancel/resume`) keyed by execution/decision id; replies are translated to the canonical AgentField/HAX decision endpoint.
-4. Optional richer UX: a dedicated Telegram forum topic may route to `devteam` via topic `agentId` if the operator later wants a persistent SWE-only conversation. Do not hijack the existing default Telegram DM route merely for Governor traffic.
-5. Autonomous policy: low-risk bounded retry/review/repair remains AUTO; OpenClaw notifies only on meaningful state transitions. Human approval remains mandatory for secrets/permissions, material scope or architecture changes, destructive/external actions, and final acceptance when policy requires it.
+Conversation correlation invariant:
+1. SWE emits a bounded `governor.pending` record and enters the existing AgentField `Pause(waiting)` path.
+2. The 20-second OpenClaw command cron runs `swe-governor.mjs notify` with `delivery.mode=none`; the adapter itself sends the Telegram card through OpenClaw and records `telegram_message_id <-> request_id`.
+3. On an inbound Telegram reply, Jarvis must inspect `ReplyToId` before normal processing and call `swe-governor route <ReplyToId>`. `NOT_SWE_REPLY` means normal Jarvis traffic. No routing by "latest pending request" is permitted.
+4. If native reply metadata is unavailable on a follow-up, an exact quoted `SWE thread: <request_id>` / `Request: <request_id>` marker or explicit `swe ... <request_id>` command is the only fallback. Every Governor discussion response carries the thread marker and an explicit Telegram reply tag.
+5. `discuss` is non-mutating and may be called repeatedly; it records a bounded per-request conversation while the AgentField execution remains paused. Only unambiguous `approve`, `changes`, `reject`, or `answer` is terminal and may hit `/webhooks/approval`.
+6. Multiple SWE requests may coexist. Each Telegram card has its own message-id mapping; interleaved discussion remains isolated by request id. The first successful final action wins; late/conflicting messages see `resolved` and fail closed.
+7. Secrets/credentials and raw logs stay out of the conversation packet. SWE text is untrusted data, not OpenClaw instruction text.
+
+Evidence for the routing contract:
+- direct OpenClaw Telegram send returned a real message id and the Governor `route` resolved that id to its exact synthetic request in an isolated canary state;
+- two simultaneous canary requests were sent as two Telegram cards (`A` and `B`) with distinct message ids; `route(A)` returned only A and `route(B)` only B, and interleaved `discuss` messages stayed in separate records;
+- a local mock approval callback proved first-final-wins: the first `approve` produced exactly one callback (`count=1`) and marked the request resolved; a later conflicting `reject` failed locally as `status=resolved` and did not call the backend again;
+- `AGENTS.md` now owns the global pre-routing rule, while `skills/swe-governor/SKILL.md` owns the conversation/final-action policy. CURRENT SHA256: `AGENTS.md` `7f5ebb8f92b82b4577246723d3d75dec28c922bb0ef04fe7dfd493ba0c82a42d`, skill `c694c1e6550715f0bdd06bc348135ed76ca4af8ec3636adf146d8806cc30fafe`, adapter `926d052b9690b67b91151500ce32df4cc9f5dd4802ae0809d2ea990fe1ebc4ba`.
+- Test cards were removed after evidence capture so no synthetic request can be mistaken for a real pending SWE decision.
+
+Optional richer UX remains a dedicated Telegram forum topic or topics-enabled DM, but CURRENT bot reports topics disabled. Do not add that infrastructure unless reply-based correlation proves insufficient in real use.
 
 Implementation status — 2026-09-05:
 - BMAD route for this vertical: `bmad-help` -> `bmad-architecture` -> `bmad-quick-dev`. Architectural outcome changed after CURRENT readback: HAX is not deployed/configured in the loaded SWE process, while AgentField `agent.Pause` already owns the real `waiting`/webhook-resume primitive. Therefore this deployment uses OpenClaw as the HITL surface directly; HAX compatibility remains intact when `HAX_API_KEY` exists.
