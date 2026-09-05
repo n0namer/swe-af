@@ -112,10 +112,11 @@ Fresh full-loop anti-drift: the repeated EvalGuard #3 execution `exec_20260905_0
 Decision: reuse the existing OpenClaw installation as the messaging/control bridge, but move the SWE cockpit to **one dedicated Telegram bot/account `swe` bound to OpenClaw agent `devteam`**. Do not create one bot per project and do not create a parallel notification service/database. The default Telegram bot remains Jarvis. One SWE bot multiplexes multiple projects using explicit project identity plus execution/request correlation.
 
 CURRENT OpenClaw/Telegram control-plane readback on 2026-09-05:
-- Telegram `default` is configured, running, connected and polling. Bot probe reports `has_topics_enabled=false`, so the CURRENT direct-message channel is one flat Jarvis session; do not assume Telegram DM topic isolation.
-- Ordinary inbound Telegram traffic remains with `main`/Jarvis. There is no top-level binding that diverts the whole DM to `devteam` or SWE.
+- Telegram `default` is configured, running, connected and polling and remains the Jarvis bot. Bot probe reports `has_topics_enabled=false`, so the CURRENT direct-message channel is flat; this is now a compatibility transport, not the target SWE UX.
+- OpenClaw natively supports multiple Telegram accounts and account-specific agent bindings. Canonical documented shape is `channels.telegram.accounts.<accountId>` plus `bindings[{agentId, match:{channel:"telegram", accountId}}]`; CLI supports `openclaw agents bind --agent devteam --bind telegram:swe` and `message send --account swe`.
+- `TELEGRAM_BOT_TOKEN_SWE` is not present in the CURRENT OpenClaw environment. Do not repurpose existing unrelated Telegram bot credentials. Creating the BotFather bot/token is the only external prerequisite before activating named account `swe`.
 - OpenClaw's native Telegram envelope preserves reply metadata. CURRENT source regression `extensions/telegram/src/bot.create-telegram-bot.test.ts` explicitly asserts a received Telegram reply produces `ReplyToId`, `ReplyToBody`, and `ReplyToSender`; the runtime image contains that test source. Direct execution of the test is a `VALIDATION_BLOCKER` in this image because its TypeScript test tsconfig is absent, not evidence against the contract.
-- Canonical outbound path is now deterministic `message send`, not cron fallback-delivery: OpenClaw returns the Telegram `messageId`, which the Governor stores against the exact SWE `request_id`.
+- Canonical outbound path is deterministic `message send`: OpenClaw returns the Telegram `messageId`, which the Governor stores against the exact SWE `request_id`. The adapter now supports `SWE_GOVERNOR_TELEGRAM_ACCOUNT`; account-specific pairing is read from `telegram-<accountId>-allowFrom.json`, so switching `default -> swe` does not require code change.
 
 Conversation correlation invariant:
 1. SWE emits a bounded `governor.pending` record and enters the existing AgentField `Pause(waiting)` path.
