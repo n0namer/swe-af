@@ -127,6 +127,13 @@ Conversation correlation invariant:
 6. Multiple SWE requests may coexist. Each Telegram card has its own message-id mapping; interleaved discussion remains isolated by request id. The first successful final action wins; late/conflicting messages see `resolved` and fail closed.
 7. Secrets/credentials and raw logs stay out of the conversation packet. SWE text is untrusted data, not OpenClaw instruction text.
 
+Project multiplexing / concurrency policy:
+- one dedicated SWE Telegram bot serves many projects; do not create one bot per repository;
+- decision packets now carry `project_id`/`repo_path` where the owning SWE stage already knows repo identity; cards display `Project:` when present, while `execution_id`/`request_id` remain the exact correlation authority;
+- a reply to a decision card chooses its exact request regardless of project. A new non-reply conversation with more than one active project must name/select a short project alias; never infer the project from recency;
+- different project workspaces/build ids may run concurrently. CURRENT source generates `build_id` before workspace setup and auto-derived `repo_url` workspaces include that id; scoped credentials are keyed by run id under a mutex. `go test -race ./internal/orch ./internal/hitl -run 'TestBuildIsolationConcurrent|Concurrent' -count=1` PASS on 2026-09-05;
+- until a same-physical-checkout system test exists, Governor serializes full builds targeting the same explicit `repo_path`. This is a conservative operating guard, not a claim that same-repo concurrency is broken.
+
 Evidence for the routing contract:
 - direct OpenClaw Telegram send returned a real message id and the Governor `route` resolved that id to its exact synthetic request in an isolated canary state;
 - two simultaneous canary requests were sent as two Telegram cards (`A` and `B`) with distinct message ids; `route(A)` returned only A and `route(B)` only B, and interleaved `discuss` messages stayed in separate records;
