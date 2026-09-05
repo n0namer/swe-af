@@ -407,7 +407,7 @@ DoD:
 - exact `WORKING_DEV_SHA` is recorded. **PENDING**
 - repo tests pass on that exact durable SHA. **PENDING**
 
-Next 30-minute Pareto move: create one clean stale-safe publication candidate from CURRENT `dev` containing only the allowlisted live bytes above, validate its diff against both CURRENT `dev` and CURRENT live source, publish through the canonical repository publication lane, then run the same package test/vet gate on the exact candidate/durable SHA before acceptance. No product logic is to be edited in GitHub during this step; this is Lane-B canonicalization of already-tested live bytes.
+When the authoritative certification spine reaches durability, the next durability batch is: create one clean stale-safe publication candidate from CURRENT `dev` containing only the then-accepted live bytes, validate its diff against both CURRENT `dev` and CURRENT live source, publish through the canonical repository publication lane, then run the same package test/vet gate on the exact candidate/durable SHA before acceptance. Do not execute this Lane-B step early merely because the historical Batch-4 evidence exists.
 
 ### Batch 5 — Materialization and regression
 
