@@ -300,7 +300,7 @@ Validation and runtime evidence:
 
 ## Bounded Development Batches
 
-Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
+Historical execution chronology is retained below for evidence and recovery context. Current priority is owned by `Current Stage` + the authoritative certification spine above; stale `IN PROGRESS` labels in old batches must not override those current gates. Default batch size remains about 30 minutes: each active batch closes one coherent DoD gate and writes back this file, preferring the smallest 20% of work that removes the next 80% blocker.
 
 ### Batch 1 — Provider/bootstrap gate and SWE liveness
 
