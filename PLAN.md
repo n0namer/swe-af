@@ -304,7 +304,7 @@ Historical execution chronology is retained below for evidence and recovery cont
 
 ### Batch 1 — Provider/bootstrap gate and SWE liveness
 
-Status: IN PROGRESS
+Status: HISTORICAL / SUPERSEDED — provider/bootstrap/liveness are no longer the current gate; retained only as evidence chronology.
 
 DoD:
 1. Reconcile CURRENT topology/provider contract. **PASS**: legacy standalone SWE is removed; permanent DEV `edsh...` is current; isolated B is comparison-only.
