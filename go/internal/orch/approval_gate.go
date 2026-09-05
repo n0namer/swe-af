@@ -135,10 +135,16 @@ func PlanApprovalGate(ctx context.Context, req ApprovalRequest) (ApprovalOutcome
 			}
 		} else {
 			created = hitl.NewOpenClawApprovalRequest("plan-review", req.ExecutionID)
+			projectID := filepath.Base(filepath.Clean(req.RepoPath))
+			if strings.TrimSpace(cfg.RepoURL) != "" {
+				projectID = deriveRepoName(cfg.RepoURL)
+			}
 			deps.Note(ctx, hitl.GovernorPendingNote("plan_review", req.ExecutionID, created.ID, map[string]any{
 				"title":           title,
 				"description":     descr,
 				"goal":            runeTruncate(req.Goal, 800),
+				"project_id":      projectID,
+				"repo_path":       req.RepoPath,
 				"plan_summary":    runeTruncate(planSummary, 2400),
 				"issue_count":     len(issuesForTemplate),
 				"revision_number": revisionIter,

@@ -202,7 +202,11 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 			WebhookURL:  hitl.ApprovalWebhookURL(deps.AgentFieldServer),
 			NodeID:      deps.NodeID,
 			ExecutionID: ec.ExecutionID,
-			NoteLabel:   "product_manager",
+			Metadata: map[string]any{
+				"project_id": filepath.Base(filepath.Clean(repoPath)),
+				"repo_path":  repoPath,
+			},
+			NoteLabel: "product_manager",
 		})
 	if err != nil {
 		return nil, err
@@ -288,7 +292,11 @@ func RunEnvironmentScout(ctx context.Context, deps *Deps, input map[string]any) 
 			WebhookURL:  hitl.ApprovalWebhookURL(deps.AgentFieldServer),
 			NodeID:      deps.NodeID,
 			ExecutionID: ec.ExecutionID,
-			NoteLabel:   "environment_scout",
+			Metadata: map[string]any{
+				"project_id": filepath.Base(filepath.Clean(repoPath)),
+				"repo_path":  repoPath,
+			},
+			NoteLabel: "environment_scout",
 		})
 	if err != nil {
 		return nil, err

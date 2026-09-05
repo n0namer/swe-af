@@ -416,6 +416,11 @@ func RequestUserInputAndPause(
 		if spec.Description != nil {
 			decisionPayload["description"] = *spec.Description
 		}
+		for _, key := range []string{"project_id", "repo_path"} {
+			if raw, ok := p.Metadata[key].(string); ok && strings.TrimSpace(raw) != "" {
+				decisionPayload[key] = strings.TrimSpace(raw)
+			}
+		}
 		noteSafe(ctx, app, GovernorPendingNote("ask_user", p.ExecutionID, created.ID, decisionPayload),
 			"governor", "pending", "ask_user")
 	} else {
