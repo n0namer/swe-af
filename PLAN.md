@@ -52,9 +52,11 @@ Historical baseline captured from live readback on 2026-09-01. The dated evidenc
 
 ## Current Stage
 
-OPENCLAW GOVERNOR / HUMAN CONTROL PLANE + REAL-TASK QUALITY ACCEPTANCE / ANTI-DRIFT.
+REAL-TASK QUALITY ACCEPTANCE / SYSTEM CAPABILITY CERTIFICATION / ANTI-DRIFT. OpenClaw Governor is a parallel human-control workstream, not the primary blocker for SWE capability certification.
 
-L2 semantic/structured-output acceptance and Batch 3 failure/recovery are PASS/CLOSED. Batch 4 durability remains open. The active 2026-09-05 Pareto batch is the human-control vertical: replace the currently-disabled HAX dependency in this deployment with OpenClaw/Telegram over the existing AgentField pause/resume primitive, while preserving HAX compatibility for other deployments. In parallel, the real-task reviewer/full-loop quality gate remains open; do not call `implement_issue` L3 PASS until the same real task completes independent acceptance.
+L2 semantic/structured-output acceptance and Batch 3 failure/recovery are PASS/CLOSED. The current P0 product gate is the full `implement_issue` reviewer -> repair -> verifier -> independent-oracle loop; reviewer defect detection is proven, but the whole loop is not yet L3 PASS. After that, proceed through one real two-issue DAG, one governed `plan -> execute/build` feature, one delivery-path task, Fast/Pro comparative canaries, clean-environment/concurrency acceptance, then durability/exact-SHA closure and repeated reliability. Batch 4 durability remains open but is deliberately deferred behind these real capability gates.
+
+2026-09-06 anti-drift readback: CURRENT loaded `swe-planner` is PID `323418`, binary SHA256 `f61e4c9fb6dc35b98c264bd981d63a7c456be7b0b76a3ed1c81265fccb2d417f`, with `SWE_OPENCLAW_HITL=1` and `AGENTFIELD_HARNESS_IDLE_SECONDS=0`. Live source remains `/src/swe-af` at baseline `58c4e0d19081bc52363c120b7963a34cebb1e894` plus the preserved dirty runtime delta. Durable `dev` HEAD at reconciliation is `d47b838539199f310ef1ddc5d6790961f0fbcd0c`; PLAN-only commits must not be mistaken for loaded product identity.
 
 ### Real-task reviewer gate + capability audit — 2026-09-05
 
