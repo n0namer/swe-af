@@ -105,10 +105,10 @@ func RunWithAskUser(
 			return result, nil
 		}
 
-		if p.Hax == nil {
+		if p.Hax == nil && !OpenClawHITLEnabled() {
 			noteSafe(ctx, p.App, fmt.Sprintf(
-				"%s: LLM emitted ask_user_form but HAX is disabled — ignoring and proceeding with current decision", label),
-				"ask_user", "skipped", "hax_disabled")
+				"%s: LLM emitted ask_user_form but both HAX and OpenClaw HITL are disabled — ignoring and proceeding with current decision", label),
+				"ask_user", "skipped", "hitl_disabled")
 			return clearAskUserForm(result), nil
 		}
 		if budget.Remaining <= 0 {

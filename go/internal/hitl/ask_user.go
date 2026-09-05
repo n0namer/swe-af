@@ -13,8 +13,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 
@@ -46,6 +48,73 @@ func noteSafe(ctx context.Context, app App, message string, tags ...string) {
 	if app != nil {
 		app.Note(ctx, message, tags...)
 	}
+}
+
+var governorRequestSeq atomic.Uint64
+
+// OpenClawHITLEnabled enables the deployment-local OpenClaw/Telegram fallback
+// when HAX is not configured. It is opt-in so other SWE-AF installations keep
+// the historical HAX-disabled behaviour unless explicitly configured.
+func OpenClawHITLEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SWE_OPENCLAW_HITL"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+// NewOpenClawApprovalRequest creates a process-local approval request identity
+// for Agent.Pause when OpenClaw replaces HAX as the human interaction surface.
+// AgentField only requires the id to be unique for the life of the worker.
+func NewOpenClawApprovalRequest(kind, executionID string) *CreatedRequest {
+	seq := governorRequestSeq.Add(1)
+	clean := func(s string) string {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return "unknown"
+		}
+		var b strings.Builder
+		for _, r := range s {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+				b.WriteRune(r)
+			}
+		}
+		if b.Len() == 0 {
+			return "unknown"
+		}
+		return b.String()
+	}
+	return &CreatedRequest{ID: fmt.Sprintf("openclaw-%s-%s-%d", clean(kind), clean(executionID), seq)}
+}
+
+// GovernorPendingNote is the machine-readable contract consumed by the
+// OpenClaw cron bridge. Payloads must be bounded and must never contain secret
+// values; they describe only the decision the human needs to make.
+func GovernorPendingNote(kind, executionID, requestID string, payload map[string]any) string {
+	raw, err := json.Marshal(map[string]any{
+		"kind":         kind,
+		"execution_id": executionID,
+		"request_id":   requestID,
+		"payload":      payload,
+	})
+	if err != nil {
+		return fmt.Sprintf("governor.pending {\"kind\":%q,\"execution_id\":%q,\"request_id\":%q}", kind, executionID, requestID)
+	}
+	return "governor.pending " + string(raw)
+}
+
+// GovernorResolvedNote lets the poller distinguish a still-pending request
+// from an already-resolved one without maintaining a second source of truth.
+func GovernorResolvedNote(kind, executionID, requestID, decision string) string {
+	raw, _ := json.Marshal(map[string]any{
+		"kind":         kind,
+		"execution_id": executionID,
+		"request_id":   requestID,
+		"decision":     decision,
+	})
+	return "governor.resolved " + string(raw)
 }
 
 // BuildHaxFormPayload translates an AskUserForm into the hax form-builder
@@ -300,27 +369,66 @@ func RequestUserInputAndPause(
 		return schemas.AskUserResponse{Status: "error", Values: map[string]any{}, Error: &msg}
 	}
 
-	noteSafe(ctx, app, fmt.Sprintf("ask_user: submitting hax form-builder request (%q)", spec.Title),
-		"ask_user", "hax", "create_form_request")
+	governorFallback := hax == nil && OpenClawHITLEnabled()
+	var created *CreatedRequest
+	if hax != nil {
+		noteSafe(ctx, app, fmt.Sprintf("ask_user: submitting hax form-builder request (%q)", spec.Title),
+			"ask_user", "hax", "create_form_request")
 
-	created, err := hax.CreateRequest(ctx, CreateRequestParams{
-		Type:             "form-builder",
-		Payload:          payload,
-		Title:            spec.Title,
-		Description:      spec.Description,
-		ExpiresInSeconds: int(expiresHours * 3600),
-		UserID:           p.UserID,
-		WebhookURL:       p.WebhookURL,
-		Metadata:         p.Metadata,
-	})
-	if err != nil {
-		noteSafe(ctx, app, fmt.Sprintf("ask_user: hax create_request failed: %v", err),
-			"ask_user", "hax", "error")
-		msg := fmt.Sprintf("create_form_request failed: %v", err)
+		created, err = hax.CreateRequest(ctx, CreateRequestParams{
+			Type:             "form-builder",
+			Payload:          payload,
+			Title:            spec.Title,
+			Description:      spec.Description,
+			ExpiresInSeconds: int(expiresHours * 3600),
+			UserID:           p.UserID,
+			WebhookURL:       p.WebhookURL,
+			Metadata:         p.Metadata,
+		})
+		if err != nil {
+			noteSafe(ctx, app, fmt.Sprintf("ask_user: hax create_request failed: %v", err),
+				"ask_user", "hax", "error")
+			msg := fmt.Sprintf("create_form_request failed: %v", err)
+			return schemas.AskUserResponse{Status: "error", Values: map[string]any{}, Error: &msg}
+		}
+		noteSafe(ctx, app, fmt.Sprintf("ask_user: hax form request created (request_id=%s)", created.ID),
+			"ask_user", "hax", "submitted")
+	} else if governorFallback {
+		created = NewOpenClawApprovalRequest("ask-user", p.ExecutionID)
+		fields := make([]map[string]any, 0, len(spec.Fields))
+		for _, field := range spec.Fields {
+			entry := map[string]any{
+				"id":       field.ID,
+				"type":     field.Type,
+				"label":    field.Label,
+				"required": field.Required,
+			}
+			if len(field.Options) > 0 {
+				entry["options"] = field.Options
+			}
+			fields = append(fields, entry)
+		}
+		decisionPayload := map[string]any{
+			"title":   spec.Title,
+			"fields":  fields,
+			"actions": []string{"answer", "reject"},
+		}
+		if spec.Description != nil {
+			decisionPayload["description"] = *spec.Description
+		}
+		noteSafe(ctx, app, GovernorPendingNote("ask_user", p.ExecutionID, created.ID, decisionPayload),
+			"governor", "pending", "ask_user")
+	} else {
+		msg := "human input requested but no HAX or OpenClaw HITL transport is enabled"
 		return schemas.AskUserResponse{Status: "error", Values: map[string]any{}, Error: &msg}
 	}
-	noteSafe(ctx, app, fmt.Sprintf("ask_user: hax form request created (request_id=%s)", created.ID),
-		"ask_user", "hax", "submitted")
+
+	resolveGovernor := func(decision string) {
+		if governorFallback && created != nil {
+			noteSafe(ctx, app, GovernorResolvedNote("ask_user", p.ExecutionID, created.ID, decision),
+				"governor", "resolved", "ask_user")
+		}
+	}
 
 	// Pause the execution for approval. agent.Pause transitions it to "waiting"
 	// on the control plane and blocks until the /webhooks/approval callback
@@ -342,15 +450,18 @@ func RequestUserInputAndPause(
 		// error: the SDK returns decision="expired", handled below via
 		// parseApprovalResult -> status="timeout".
 		if errors.Is(err, context.DeadlineExceeded) {
+			resolveGovernor("expired")
 			noteSafe(ctx, app, "ask_user: pause expired without human response",
 				"ask_user", "pause", "timeout")
 			return schemas.AskUserResponse{Status: "timeout", Values: map[string]any{}}
 		}
+		resolveGovernor("error")
 		noteSafe(ctx, app, fmt.Sprintf("ask_user: pause raised: %v", err),
 			"ask_user", "pause", "error")
 		msg := fmt.Sprintf("pause failed: %v", err)
 		return schemas.AskUserResponse{Status: "error", Values: map[string]any{}, Error: &msg}
 	}
+	resolveGovernor(result.Decision)
 
 	// feedback = approval_result.feedback or None (empty collapses to nil, as in
 	// the Python _parse_approval_result_to_response).
