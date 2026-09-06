@@ -3,6 +3,7 @@ package coding
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
@@ -248,6 +249,19 @@ func TestVerifierTaskPrompt(t *testing.T) {
 		CompletedIssues: []map[string]any{}, FailedIssues: []map[string]any{}, SkippedIssues: []string{},
 	})
 	eq(t, "verifier B", gotB, golden(t, "task_verifier_b.txt"))
+}
+
+func TestHighRiskPromptsRequireExactDelimiterInLiteral(t *testing.T) {
+	for name, prompt := range map[string]string{
+		"reviewer": CodeReviewerSystemPrompt,
+		"verifier": VerifierSystemPrompt,
+	} {
+		for _, required := range []string{"exact delimiter being stripped", "non-comment quoted literal"} {
+			if !strings.Contains(prompt, required) {
+				t.Fatalf("%s prompt missing high-risk discriminator %q", name, required)
+			}
+		}
+	}
 }
 
 func TestIssueWriterTaskPrompt(t *testing.T) {
