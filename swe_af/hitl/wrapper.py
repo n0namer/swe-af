@@ -259,6 +259,19 @@ async def run_with_ask_user(
             )
             return _clear_ask_user_form(result)
 
+        if decision_context is not None:
+            context = (
+                decision_context
+                if isinstance(decision_context, DecisionRunContext)
+                else DecisionRunContext.model_validate(decision_context)
+            )
+            await _run_shadow_decision(
+                app=app,
+                spec=spec,
+                label=label,
+                context=context,
+            )
+
         budget.remaining -= 1
         app.note(
             f"{label}: pausing for ask_user_via_form "
