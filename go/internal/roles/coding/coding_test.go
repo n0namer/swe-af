@@ -445,6 +445,7 @@ func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 		"issue":         map[string]any{"name": "i"},
 		"qa_ran":        true,
 		"iteration_id":  "r1",
+		"ai_provider":   "open_code",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -453,6 +454,9 @@ func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	assertKeys(t, m, codeReviewResultKeys)
 	if strings.Join(mh.gotOpts.Tools, ",") != "Read,Write,Edit,Glob,Grep,Bash" {
 		t.Fatalf("reviewer tool set mismatch: %v", mh.gotOpts.Tools)
+	}
+	if got := mh.gotOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != `{"permission":{"task":"deny","external_directory":"deny"}}` {
+		t.Fatalf("reviewer OpenCode permission overlay mismatch: %q", got)
 	}
 
 	mhf := &mockHarness{fn: func(_ any) (*harness.Result, error) {

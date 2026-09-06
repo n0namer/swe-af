@@ -382,6 +382,13 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 		return nil, err
 	}
 
+	reviewerEnv := map[string]string{}
+	if provider == "opencode" {
+		// OpenCode does not currently enforce harness.Options.Tools. Keep the
+		// reviewer bounded to its own worktree and prevent hidden subagent
+		// expansion that can stall on external-directory permission prompts.
+		reviewerEnv["OPENCODE_CONFIG_CONTENT"] = `{"permission":{"task":"deny","external_directory":"deny"}}`
+	}
 	opts := harnessx.RoleOptions{
 		Provider:       provider,
 		Model:          in.Model,
@@ -390,6 +397,7 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 		PermissionMode: in.PermissionMode,
 		SystemPrompt:   prompts.CodeReviewerSystemPrompt,
 		Cwd:            in.WorktreePath,
+		Env:            reviewerEnv,
 	}.ToOptions()
 
 	parsed, result, hErr := harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, taskPrompt, opts)
