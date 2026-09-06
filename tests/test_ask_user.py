@@ -14,7 +14,7 @@ from swe_af.hitl.ask_user import (
     build_form_builder,
     request_user_input_and_pause,
 )
-from swe_af.hitl.wrapper import AskUserBudget, run_with_ask_user
+from swe_af.hitl.wrapper import AskUserBudget, DecisionCase, run_with_ask_user
 
 
 def _approval_result(
