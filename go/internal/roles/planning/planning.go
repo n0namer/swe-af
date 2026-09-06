@@ -81,6 +81,38 @@ func Handlers() map[string]Handler {
 	}
 }
 
+func newShadowDecisionResolver(
+	deps *Deps,
+	provider string,
+	model string,
+	cwd string,
+	permissionMode string,
+) hitl.ShadowDecisionResolver {
+	return func(ctx context.Context, in hitl.DecisionRunInput) (*hitl.DecisionCase, error) {
+		prompt, err := hitl.BuildShadowDecisionPrompt(in)
+		if err != nil {
+			return nil, err
+		}
+		opts := harnessx.RoleOptions{
+			Provider:       provider,
+			Model:          model,
+			MaxTurns:       6,
+			Tools:          []string{"Read", "Glob", "Grep"},
+			PermissionMode: permissionMode,
+			SystemPrompt:   hitl.ShadowDecisionSystemPrompt,
+			Cwd:            cwd,
+		}.ToOptions()
+		parsed, result, err := harnessx.Run[hitl.DecisionCase](ctx, deps.Harness, prompt, opts)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil || result.Parsed == nil {
+			return nil, errors.New("shadow HITL decision resolver returned no parsed result")
+		}
+		return parsed, nil
+	}
+}
+
 // ---------------------------------------------------------------------------
 // run_product_manager (HITL-wrapped, budget 2)
 // ---------------------------------------------------------------------------
@@ -206,7 +238,8 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 				"project_id": filepath.Base(filepath.Clean(repoPath)),
 				"repo_path":  repoPath,
 			},
-			NoteLabel: "product_manager",
+			NoteLabel:              "product_manager",
+			ShadowDecisionResolver: newShadowDecisionResolver(deps, provider, model, repoPath, permissionMode),
 		})
 	if err != nil {
 		return nil, err
@@ -296,7 +329,8 @@ func RunEnvironmentScout(ctx context.Context, deps *Deps, input map[string]any) 
 				"project_id": filepath.Base(filepath.Clean(repoPath)),
 				"repo_path":  repoPath,
 			},
-			NoteLabel: "environment_scout",
+			NoteLabel:              "environment_scout",
+			ShadowDecisionResolver: newShadowDecisionResolver(deps, provider, model, repoPath, permissionMode),
 		})
 	if err != nil {
 		return nil, err

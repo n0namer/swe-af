@@ -20,6 +20,38 @@ import (
 // (Read/Write/Glob/Grep/Bash), matching the Python tools= lists.
 var advisorTools = []string{"Read", "Write", "Glob", "Grep", "Bash"}
 
+func newShadowDecisionResolver(
+	deps *Deps,
+	provider string,
+	model string,
+	cwd string,
+	permissionMode string,
+) hitl.ShadowDecisionResolver {
+	return func(ctx context.Context, in hitl.DecisionRunInput) (*hitl.DecisionCase, error) {
+		prompt, err := hitl.BuildShadowDecisionPrompt(in)
+		if err != nil {
+			return nil, err
+		}
+		opts := harnessx.RoleOptions{
+			Provider:       provider,
+			Model:          model,
+			MaxTurns:       6,
+			Tools:          []string{"Read", "Glob", "Grep"},
+			PermissionMode: permissionMode,
+			SystemPrompt:   hitl.ShadowDecisionSystemPrompt,
+			Cwd:            cwd,
+		}.ToOptions()
+		parsed, result, err := harnessx.Run[hitl.DecisionCase](ctx, deps.Harness, prompt, opts)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil || result.Parsed == nil {
+			return nil, errors.New("shadow HITL decision resolver returned no parsed result")
+		}
+		return parsed, nil
+	}
+}
+
 // isFatal reports whether err is a non-retryable fatal harness error, which the
 // reasoners must propagate rather than swallow into a fallback.
 func isFatal(err error) bool {
@@ -199,7 +231,21 @@ func RunIssueAdvisor(ctx context.Context, deps *Deps, input map[string]any) (any
 		return nil, nil
 	}
 
-	resultMap, err := deps.runWithAskUser(ctx, invoke, initialKwargs(in.PriorUserResponses), "issue_advisor")
+	projectRepoPath := getStr(in.DAGStateSummary, "repo_path", cwd)
+	if projectRepoPath == "" {
+		projectRepoPath = cwd
+	}
+	resultMap, err := deps.runWithAskUser(
+		ctx,
+		invoke,
+		initialKwargs(in.PriorUserResponses),
+		"issue_advisor",
+		newShadowDecisionResolver(deps, provider, in.Model, cwd, in.PermissionMode),
+		map[string]any{
+			"project_id": filepath.Base(filepath.Clean(projectRepoPath)),
+			"repo_path":  cwd,
+		},
+	)
 	if err != nil {
 		if isFatal(err) {
 			return nil, err
@@ -330,7 +376,17 @@ func RunReplanner(ctx context.Context, deps *Deps, input map[string]any) (any, e
 		return nil, nil
 	}
 
-	resultMap, err := deps.runWithAskUser(ctx, invoke, initialKwargs(in.PriorUserResponses), "replanner")
+	resultMap, err := deps.runWithAskUser(
+		ctx,
+		invoke,
+		initialKwargs(in.PriorUserResponses),
+		"replanner",
+		newShadowDecisionResolver(deps, provider, in.ReplanModel, cwd, in.PermissionMode),
+		map[string]any{
+			"project_id": filepath.Base(filepath.Clean(cwd)),
+			"repo_path":  cwd,
+		},
+	)
 	if err != nil {
 		if isFatal(err) {
 			return nil, err
@@ -381,6 +437,8 @@ func (d *Deps) runWithAskUser(
 	invoke hitl.ReasonerInvoke,
 	kwargs map[string]any,
 	label string,
+	decisionResolver hitl.ShadowDecisionResolver,
+	metadata map[string]any,
 ) (map[string]any, error) {
 	var hax *hitl.HaxClient
 	if d.BuildHaxClient != nil {
