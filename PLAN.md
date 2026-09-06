@@ -216,7 +216,60 @@ BMAD Test Architecture DoD for this phase:
 
 CURRENT implementation state: source inspection confirms the optimal insertion point and built-in primitives, but permanent DEV mutation is **WRITEBLOCKED** by the current target registry: `/src/swe-af` is readable on `agentfield-dev-workforce`, while typed `fileAction create/apply_patch` is denied `out_of_scope` because that target lacks a writable live-patch capability. Do not bypass this guardrail with opaque shell writes and do not implement code by editing GitHub followed by redeploy. The intended first delta is `swe_af/hitl/decision.py` + bounded integration in `swe_af/hitl/wrapper.py` + `tests/test_ask_user.py`, then targeted pytest and canonical `make check` on the exact live source. A writable capability for the existing permanent DEV `/src/swe-af` owner (or an already-registered writable target for that same source) is the only implementation blocker.
 
-Nearest compulsory move: resolve that existing permanent-DEV write route without expanding target/env/blast. Once writable, implement **Batch 1 shadow resolver only**, verify `tests/test_ask_user.py` + `make check`, then exercise a synthetic two-project HITL run and observe Telegram decision/status events before enabling any autonomous terminal answer.
+### SWE capability inventory for HITL decision solving (2026-09-06)
+
+CURRENT source/discovery evidence supports the following capability surface relevant to local decision questions. External AgentField capability discovery is temporarily unavailable (`Bad Gateway`), so callability below is classified from current SWE source/runtime surface; public entrypoints are explicitly marked by `TAG_ENTRYPOINT`, while `run_*` role reasoners are internal-only and must be invoked by SWE orchestrators rather than called directly by an external caller.
+
+| Capability | CURRENT owner/surface | What it can contribute to a HITL decision | Mutation/risk profile | Recommended use |
+|---|---|---|---|---|
+| `build` | `swe_af.app.build` entrypoint | Full PRD→architecture→DAG→code→review→verify lifecycle | High: may modify repo/PR | **NO** for ordinary decision analysis; only if the decision itself is a real implementation project |
+| `plan` | `swe_af.app.plan` entrypoint | PM→Architect↔Tech Lead→Sprint Planner→Issue Writers; creates structured PRD/Architecture/Review/Issues | Planning/artifact writes, no coding intent | **YES, selectively** for complex product/architecture decisions where a mini-project plan is worth the cost |
+| `implement_issue` | issue router entrypoint (`swe_af.issue`) | One scoped implementation issue with existing issue contract | Mutating | **NO** for answer selection; **YES** only after decision when implementing the chosen option |
+| `resolve` | `swe_af.app.resolve` entrypoint | Existing PR repair: base merge, CI/review fixes, push | High/mutating/external | **NO** for decision support |
+| `resume_build` | `swe_af.app.resume_build` entrypoint | Resume crashed build from checkpoint | Mutating lifecycle | **NO** for decision support |
+| `execute` | internal/non-entrypoint | Execute a prior `plan_result` DAG; supports built-in coder loop or external coder | High/mutating | **NO** for decision analysis |
+| Fast build | `swe_af.fast.app.build` entrypoint | Lightweight plan→execute→verify, 5–10 minute class instead of full DAG | Mutating | **NO** for answer selection; possible later for cheap implementation experiments after a decision |
+| Product Manager | `run_product_manager` internal | Clarify goal, scope, acceptance criteria, `ask_user_form` | Read/reasoning + HITL | **YES** for product/scope questions |
+| Environment Scout | `run_environment_scout` internal | Detect env/credential requirements and HAX negotiation | Sensitive/HITL; may handle credentials through scoped store | **YES only as authority signal**; never let decision resolver invent/auto-answer secrets |
+| Architect | `run_architect` internal | Architecture alternatives, decisions, rationale grounded in repo/PRD | Read/reasoning | **YES** for architecture/design HITL |
+| Tech Lead | `run_tech_lead` internal | Critique architecture, scope issues, complexity | Read/reasoning | **YES** as independent critic/counterargument |
+| Sprint Planner | `run_sprint_planner` internal | Decompose accepted architecture into dependency-aware issues | Read/planning | **LIMITED**; useful for cost/implementation-impact estimates, not primary answerer |
+| Issue Writer | `run_issue_writer` internal | Turn plan item into implementation contract | Planning artifact write | **LIMITED** after a decision, not for selecting it |
+| Issue Advisor | `run_issue_advisor` internal | Diagnose local issue, guide strategy, deeper QA need | Read/reasoning | **YES** for local implementation/debug decisions |
+| Retry Advisor | `run_retry_advisor` internal | Diagnose failed attempt and choose retry strategy | Read/reasoning | **YES** when HITL is caused by a failed execution/retry choice |
+| Replanner | `run_replanner` internal | Re-plan after execution drift/failure | Planning/reasoning | **YES** when decision changes DAG/scope after failure |
+| Coder | `run_coder` internal | Implements code with repo tools; can use web search when enabled | High/mutating | **NO** as default decision role; possible **sandboxed experiment** only when a small reversible prototype is decisive |
+| QA | `run_qa` internal | Test/quality analysis of implementation | May execute tests | **YES** for correctness/test-strategy questions |
+| Code Reviewer | `run_code_reviewer` internal | Independent code review/risks | Read/reasoning | **YES** for implementation-risk council |
+| QA Synthesizer | `run_qa_synthesizer` internal | Synthesizes QA/review outcomes | Read/reasoning | **YES** as judge only when the decision is implementation-quality related |
+| Verifier | `run_verifier` internal | End-to-end acceptance verification | Executes tests/checks | **YES** for evidence after a decision or to discriminate options when checks are bounded/read-only to product state |
+| Integration Tester | `run_integration_tester` internal | Integration validation | Executes tests | **LIMITED** for empirical option comparison; not default |
+| Git init / merger / repo finalize / GitHub PR | internal GitOps roles | Branch/worktree/merge/finalize/PR lifecycle | High/mutating/external | **NO** for answer selection |
+| CI watcher/fixer | internal CI roles | Observe/fix CI | watcher read; fixer mutates | watcher **LIMITED** evidence source; fixer **NO** until decision made |
+| PR resolver | internal | Resolve review comments/CI on existing PR | Mutating | **NO** for decision selection |
+| HAX `AskUserForm` + `app.pause()` | `swe_af.hitl` | Existing authoritative human escalation/resume path; values return through `prior_user_responses` | Human state transition | **YES**, remains final fallback/override |
+| Structured schemas | PRD, Architecture, ReviewResult, IssueGuidance, DAG/verification schemas | Gives typed facts, alternatives, rationale, scope and acceptance state | Read-only data | **YES**, primary evidence before asking more models |
+| `router.harness()` | existing reasoner execution primitive | Run a bounded structured reasoning task with selected provider/model/tools/cwd | Depends on tools granted | **YES**, preferred Tier-1 decision resolver primitive with **read-only tools** |
+| Repo tools | harness `Read`/`Glob`/`Grep` | Current code/SoT/evidence retrieval | Read-only | **YES**, default grounding layer |
+| Web research | opencode built-ins `websearch`/`webfetch` when `OPENCODE_ENABLE_EXA=1` and `EXA_API_KEY` exist | Current external API/library/framework evidence | Network/read; source quality varies | **YES conditionally** when repo evidence is insufficient or freshness matters; not for questions already answered locally |
+| Separate SWE sub-execution | public `plan` or a dedicated future decision entrypoint | Treat a difficult HITL as a bounded local project with its own roles/evidence/result | Cost/latency; `build` would over-mutate | **YES for hard questions**, but use a **decision-only mini-project**, not a full `build` |
+
+Architecture refinement — **HITL as a local SWE decision subproject**:
+- The user's proposal is adopted with one constraint: do **not** call full `build` for every question. A HITL question is usually a local analysis problem, so the optimal reusable primitive is a bounded **Decision Run** inside SWE that can orchestrate existing roles without code mutation.
+- `Decision Run` input: parent `project_id`, parent `execution_id`, parent `request_id`, stage/role, `AskUserForm`, relevant PRD/Architecture/DAG/runtime context, time/evidence budget, and allowed decision policy.
+- `Decision Run` output: exact `DecisionCase` (`recommended_values`, alternatives, rationale, evidence refs, dissent/counterargument, risk, confidence, `AUTO|HUMAN|ABSTAIN`, consulted roles, elapsed/ETA, policy version). It must never create a second ambiguous authority chain: parent identifiers stay mandatory, and the child decision execution id is recorded as provenance only.
+- Routing heuristic: deterministic structured evidence first; then one `router.harness` resolver; then, only if ambiguity/risk remains, spawn a **small internal council** chosen from existing roles. Deep/web research is a tool escalation inside that decision run, not a mandatory separate service. Only after evidence exhaustion should HAX pause the parent SWE execution.
+- For broad architecture/product questions, the decision run may reuse a **planning-only** slice (PM + Architect + Tech Lead) as a local mini-project. For implementation/debug questions, use Issue Advisor + Reviewer/QA. For an empirical uncertainty, a bounded read-only/check experiment may be used; actual coder/build mutation requires the normal implementation authority and is not part of deciding by default.
+- The decision run is logically a child/sub-execution, not a new top-level user project: Telegram shows `Project`, parent `Execution`, `Decision`, consulted roles, recommendation/final result and current parent stage. This preserves one-chat multi-project isolation while allowing several decision runs concurrently.
+
+Pareto implementation order is updated:
+1. **Decision Run contract + shadow single-resolver** at the central HITL boundary; no auto-resume yet.
+2. **Role router** that selects at most 2–3 existing specialists based on decision class; independent first pass + judge only when needed.
+3. **Research escalation**: repo evidence → web/deep research when freshness/external facts are load-bearing; enforce source/evidence budget.
+4. **Telegram awareness events** for `decision_started`, recommendation, AUTO/HUMAN/ABSTAIN, final decision, parent stage/progress/ETA.
+5. **Calibrated AUTO** only after shadow comparison by decision class; HAX remains mandatory fallback.
+
+Nearest compulsory move: resolve the existing permanent-DEV write route without expanding target/env/blast, then implement **Decision Run shadow mode** rather than a generic one-shot resolver. The first code batch stays bounded to the central HITL owner and tests: add the typed DecisionCase/DecisionRun contract, invoke one read-only harness pass using current parent context, preserve existing HAX pause on every outcome, and emit a structured decision event. After that, add adaptive specialist routing; do not start with full `plan`/`build` per question.
 
 Fresh CURRENT readback on 2026-09-02 supersedes the older PID/provider-gate wording below for the active debug batch:
 
