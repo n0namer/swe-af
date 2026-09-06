@@ -88,9 +88,9 @@ func Handlers() map[string]Handler {
 // codingTools is the coder/qa allowed-tool list (Python passes this verbatim).
 var codingTools = []string{"Read", "Write", "Edit", "Bash", "Glob", "Grep"}
 
-// reviewerTools is the code-reviewer allowed-tool list. Note the ordering
-// differs from codingTools (Bash last) — kept verbatim from the Python call.
-var reviewerTools = []string{"Read", "Write", "Glob", "Grep", "Bash"}
+// reviewerTools is the code-reviewer allowed-tool list. Edit is required by
+// the incremental structured-output contract used to build the verdict file.
+var reviewerTools = []string{"Read", "Write", "Edit", "Glob", "Grep", "Bash"}
 
 // ---------------------------------------------------------------------------
 // run_coder

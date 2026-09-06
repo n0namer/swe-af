@@ -451,7 +451,7 @@ func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	}
 	m := asMap(t, out)
 	assertKeys(t, m, codeReviewResultKeys)
-	if strings.Join(mh.gotOpts.Tools, ",") != "Read,Write,Glob,Grep,Bash" {
+	if strings.Join(mh.gotOpts.Tools, ",") != "Read,Write,Edit,Glob,Grep,Bash" {
 		t.Fatalf("reviewer tool set mismatch: %v", mh.gotOpts.Tools)
 	}
 
