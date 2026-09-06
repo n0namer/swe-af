@@ -538,6 +538,95 @@ func TestWrapperOpenClawFallbackPausesAndReinvokes(t *testing.T) {
 	}
 }
 
+func TestWrapperShadowDecisionEmitsEventAndStillPauses(t *testing.T) {
+	t.Setenv("SWE_OPENCLAW_HITL", "1")
+	app := &silentApp{}
+	pauser := &fakePauser{result: &agent.ApprovalResult{
+		Decision:    "approved",
+		RawResponse: map[string]any{"values": map[string]any{"x": "human-answer"}},
+	}}
+	seq := []map[string]any{
+		{"action": "ASKING", "ask_user_form": askForm()},
+		{"action": "FINAL", "ask_user_form": nil},
+	}
+	call := 0
+	invoke := func(_ context.Context, kwargs map[string]any) (map[string]any, error) {
+		r := seq[call]
+		call++
+		return r, nil
+	}
+	resolverCalls := 0
+	resolver := func(_ context.Context, in DecisionRunInput) (*DecisionCase, error) {
+		resolverCalls++
+		if in.ProjectID != "swe-af" || in.ExecutionID != "exec-shadow" || in.Stage != "product_manager" || in.RepoPath != "/tmp/swe-af" || in.Form.Title != "Pick" {
+			t.Fatalf("decision input = %+v", in)
+		}
+		return &DecisionCase{
+			RecommendedValues: map[string]any{"x": "recommended"},
+			Rationale:         "Repository evidence prefers this option.",
+			Evidence:          []string{"README.md"},
+			Alternatives:      []string{"other"},
+			Risk:              "low",
+			Confidence:        0.91,
+			RecommendedMode:   "AUTO",
+			HumanRequired:     false,
+			ConsultedRoles:    []string{"single_resolver"},
+		}, nil
+	}
+	out, err := RunWithAskUser(context.Background(), invoke, map[string]any{}, RunWithAskUserParams{
+		App: app, Pauser: pauser, Hax: nil, Budget: &AskUserBudget{Remaining: 2},
+		ExecutionID: "exec-shadow", NoteLabel: "product_manager",
+		Metadata: map[string]any{"project_id": "swe-af", "repo_path": "/tmp/swe-af"},
+		ShadowDecisionResolver: resolver,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["action"] != "FINAL" || call != 2 || pauser.calls != 1 || resolverCalls != 1 {
+		t.Fatalf("out=%v call=%d pauses=%d resolver=%d", out, call, pauser.calls, resolverCalls)
+	}
+	joined := strings.Join(app.notes, "\n")
+	if !strings.Contains(joined, "HITL_DECISION_EVENT") || !strings.Contains(joined, `"project_id":"swe-af"`) || !strings.Contains(joined, `"recommended_mode":"AUTO"`) {
+		t.Fatalf("shadow decision note missing: %s", joined)
+	}
+}
+
+func TestWrapperShadowDecisionFailureFallsThroughToHuman(t *testing.T) {
+	t.Setenv("SWE_OPENCLAW_HITL", "1")
+	app := &silentApp{}
+	pauser := &fakePauser{result: &agent.ApprovalResult{
+		Decision:    "approved",
+		RawResponse: map[string]any{"values": map[string]any{"x": "human-answer"}},
+	}}
+	seq := []map[string]any{
+		{"action": "ASKING", "ask_user_form": askForm()},
+		{"action": "FINAL", "ask_user_form": nil},
+	}
+	call := 0
+	invoke := func(_ context.Context, _ map[string]any) (map[string]any, error) {
+		r := seq[call]
+		call++
+		return r, nil
+	}
+	resolver := func(_ context.Context, _ DecisionRunInput) (*DecisionCase, error) {
+		return nil, errors.New("provider unavailable")
+	}
+	out, err := RunWithAskUser(context.Background(), invoke, map[string]any{}, RunWithAskUserParams{
+		App: app, Pauser: pauser, Hax: nil, Budget: &AskUserBudget{Remaining: 2},
+		ExecutionID: "exec-fallback", NoteLabel: "issue_advisor",
+		ShadowDecisionResolver: resolver,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["action"] != "FINAL" || call != 2 || pauser.calls != 1 {
+		t.Fatalf("out=%v call=%d pauses=%d", out, call, pauser.calls)
+	}
+	if !strings.Contains(strings.Join(app.notes, "\n"), "shadow HITL decision resolver failed") {
+		t.Fatalf("resolver failure note missing: %v", app.notes)
+	}
+}
+
 func TestWrapperBudgetExhaustedClearsField(t *testing.T) {
 	hax, _ := newHaxTestServer(t, "r", "u")
 	pauser := &fakePauser{}
