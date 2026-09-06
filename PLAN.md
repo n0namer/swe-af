@@ -269,7 +269,7 @@ Pareto implementation order is updated:
 4. **Telegram awareness events** for `decision_started`, recommendation, AUTO/HUMAN/ABSTAIN, final decision, parent stage/progress/ETA.
 5. **Calibrated AUTO** only after shadow comparison by decision class; HAX remains mandatory fallback.
 
-Nearest compulsory move: resolve the existing permanent-DEV write route without expanding target/env/blast, then implement **Decision Run shadow mode** rather than a generic one-shot resolver. The first code batch stays bounded to the central HITL owner and tests: add the typed DecisionCase/DecisionRun contract, invoke one read-only harness pass using current parent context, preserve existing HAX pause on every outcome, and emit a structured decision event. After that, add adaptive specialist routing; do not start with full `plan`/`build` per question.
+Nearest compulsory move: Batch 1 source delta is now live and unit-proven; do **not** enable AUTO or add a council yet. First prove runtime activation with one real/synthetic `AskUserForm` that reaches an enabled Decision Run, require a structured `HITL_DECISION_EVENT` followed by the unchanged HAX human pause, and verify parent execution/request identity is preserved. Then canonicalize the accepted four-file runtime delta through the project source lifecycle; do not use GitHub editing as the coding loop. If runtime activation cannot be observed because AgentField discovery remains unavailable, report that exact evidence gap rather than redeploying blindly. Only after this acceptance start Batch 2 adaptive specialist routing/research escalation.
 
 Fresh CURRENT readback on 2026-09-02 supersedes the older PID/provider-gate wording below for the active debug batch:
 
