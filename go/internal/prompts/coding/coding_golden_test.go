@@ -256,7 +256,7 @@ func TestHighRiskPromptsRequireExactDelimiterInLiteral(t *testing.T) {
 		"reviewer": CodeReviewerSystemPrompt,
 		"verifier": VerifierSystemPrompt,
 	} {
-		for _, required := range []string{"exact delimiter being stripped", "non-comment quoted literal", "zero/empty output", "if-output guard"} {
+		for _, required := range []string{"single-line source sample", "ordinary quoted literal", "zero/empty output", "if-output guard"} {
 			if !strings.Contains(strings.ToLower(prompt), required) {
 				t.Fatalf("%s prompt missing high-risk discriminator %q", name, required)
 			}
