@@ -406,3 +406,117 @@ async def test_wrapper_max_iterations_clears_field_after_exhaust():
     # check before pausing and returns the cleared result.
     assert app.pause.await_count == 3
     assert budget.remaining == 10 - 3
+
+
+def test_wrapper_shadow_decision_emits_event_but_still_pauses():
+    spec = AskUserForm(
+        title="Choose backend",
+        fields=[AskUserFormField(id="x", type="input", label="X")],
+    )
+    reasoner_fn = AsyncMock(
+        side_effect=[
+            _result("ASKING", ask=spec),
+            _result("FINAL", ask=None),
+        ]
+    )
+    app = _silent_app()
+    app.harness = AsyncMock(
+        return_value=MagicMock(
+            parsed=DecisionCase(
+                recommended_values={"x": "recommended"},
+                rationale="Repository evidence prefers this option.",
+                evidence=["README.md"],
+                alternatives=["other"],
+                risk="low",
+                confidence=0.91,
+                recommended_mode="AUTO",
+                human_required=False,
+            )
+        )
+    )
+    response = MagicMock(
+        status="submitted", values={"x": "human-answer"}, feedback=None
+    )
+    pause_request = AsyncMock(return_value=response)
+
+    with patch(
+        "swe_af.hitl.wrapper.request_user_input_and_pause", pause_request
+    ):
+        out = asyncio.run(
+            run_with_ask_user(
+                reasoner_fn=reasoner_fn,
+                reasoner_kwargs={"prior_user_responses": []},
+                app=app,
+                hax_client=MagicMock(),
+                budget=AskUserBudget(remaining=2),
+                note_label="product_manager",
+                decision_context={
+                    "repo_path": ".",
+                    "stage": "product_manager",
+                    "model": "sonnet",
+                    "provider": "claude",
+                    "project_id": "project-test",
+                    "execution_id": "exec-test",
+                },
+            )
+        )
+
+    assert out.action == "FINAL"
+    app.harness.assert_awaited_once()
+    harness_kwargs = app.harness.await_args.kwargs
+    assert harness_kwargs["tools"] == ["Read", "Glob", "Grep"]
+    assert "Write" not in harness_kwargs["tools"]
+    pause_request.assert_awaited_once()
+    prior = reasoner_fn.await_args_list[1].kwargs["prior_user_responses"]
+    assert prior[0]["values"] == {"x": "human-answer"}
+    assert any(
+        "HITL_DECISION_EVENT" in str(call.args[0])
+        for call in app.note.call_args_list
+    )
+
+
+def test_wrapper_shadow_decision_failure_falls_through_to_human():
+    spec = AskUserForm(
+        title="Need decision",
+        fields=[AskUserFormField(id="x", type="input", label="X")],
+    )
+    reasoner_fn = AsyncMock(
+        side_effect=[
+            _result("ASKING", ask=spec),
+            _result("FINAL", ask=None),
+        ]
+    )
+    app = _silent_app()
+    app.harness = AsyncMock(side_effect=RuntimeError("provider unavailable"))
+    response = MagicMock(
+        status="submitted", values={"x": "human-answer"}, feedback=None
+    )
+    pause_request = AsyncMock(return_value=response)
+
+    with patch(
+        "swe_af.hitl.wrapper.request_user_input_and_pause", pause_request
+    ):
+        out = asyncio.run(
+            run_with_ask_user(
+                reasoner_fn=reasoner_fn,
+                reasoner_kwargs={"prior_user_responses": []},
+                app=app,
+                hax_client=MagicMock(),
+                budget=AskUserBudget(remaining=2),
+                note_label="issue_advisor",
+                decision_context={
+                    "repo_path": ".",
+                    "stage": "issue_advisor",
+                    "model": "sonnet",
+                    "provider": "claude",
+                },
+            )
+        )
+
+    assert out.action == "FINAL"
+    pause_request.assert_awaited_once()
+    assert reasoner_fn.await_count == 2
+    assert any(
+        "shadow HITL decision resolver failed" in str(call.args[0])
+        for call in app.note.call_args_list
+    )
