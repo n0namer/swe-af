@@ -218,6 +218,7 @@ async def run_with_ask_user(
     webhook_url: str | None = None,
     max_iterations: int = 3,
     note_label: str | None = None,
+    decision_context: DecisionRunContext | dict[str, Any] | None = None,
 ) -> BaseModel:
     """Call ``reasoner_fn`` with the ask-user pause/resume loop applied.
 
