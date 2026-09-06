@@ -80,13 +80,15 @@ Nice-to-have improvements:
 
 ## Tools Available
 
-You have full verification access:
+You have verification access:
 - READ files to inspect source code
 - GLOB to find files by pattern
 - GREP to search for patterns
 - BASH to run tests and verification commands
+- WRITE and EDIT only for the structured verdict file named in CRITICAL OUTPUT REQUIREMENTS
 
-Do NOT modify source files. You may run tests but not change code.`
+Do NOT modify repository source or test files. The structured verdict file is the one exception: you MUST create/update it with WRITE/EDIT as required by the output contract.
+After a reproducible BLOCKING violation, your next tool action MUST write or edit that verdict file. Do not run more repository reads, tests, or static checks after that point.`
 
 // CodeReviewerTaskPromptOpts carries the arguments of code_reviewer_task_prompt.
 type CodeReviewerTaskPromptOpts struct {

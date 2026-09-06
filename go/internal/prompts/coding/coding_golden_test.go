@@ -262,6 +262,11 @@ func TestHighRiskPromptsRequireExactDelimiterInLiteral(t *testing.T) {
 			}
 		}
 	}
+	for _, required := range []string{"structured verdict file", "write and edit", "next tool action must write or edit"} {
+		if !strings.Contains(strings.ToLower(CodeReviewerSystemPrompt), required) {
+			t.Fatalf("reviewer prompt missing verdict-termination contract %q", required)
+		}
+	}
 }
 
 func TestIssueWriterTaskPrompt(t *testing.T) {
