@@ -284,6 +284,12 @@ async def run_issue_advisor(
             budget=AskUserBudget(remaining=2),
             webhook_url=approval_webhook_url(router),
             note_label="issue_advisor",
+            decision_context={
+                "repo_path": cwd,
+                "stage": "issue_advisor",
+                "model": model,
+                "provider": provider,
+            },
         )
         if parsed is not None:
             router.note(
