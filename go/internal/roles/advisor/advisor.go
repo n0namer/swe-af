@@ -447,14 +447,16 @@ func (d *Deps) runWithAskUser(
 		hax = hitl.BuildHaxClientFromEnv()
 	}
 	return hitl.RunWithAskUser(ctx, invoke, kwargs, hitl.RunWithAskUserParams{
-		App:         d.App,
-		Pauser:      d.Pauser,
-		Hax:         hax,
-		Budget:      &hitl.AskUserBudget{Remaining: 2},
-		NodeID:      d.NodeID,
-		ExecutionID: executionIDFromContext(ctx),
-		WebhookURL:  hitl.ApprovalWebhookURL(d.AgentFieldServer),
-		NoteLabel:   label,
+		App:                    d.App,
+		Pauser:                 d.Pauser,
+		Hax:                    hax,
+		Budget:                 &hitl.AskUserBudget{Remaining: 2},
+		NodeID:                 d.NodeID,
+		ExecutionID:            executionIDFromContext(ctx),
+		WebhookURL:             hitl.ApprovalWebhookURL(d.AgentFieldServer),
+		Metadata:               metadata,
+		NoteLabel:              label,
+		ShadowDecisionResolver: decisionResolver,
 	})
 }
 
