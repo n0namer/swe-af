@@ -238,6 +238,12 @@ async def run_product_manager(
         budget=AskUserBudget(remaining=2),
         webhook_url=approval_webhook_url(router),
         note_label="product_manager",
+        decision_context={
+            "repo_path": repo_path,
+            "stage": "product_manager",
+            "model": model,
+            "provider": provider,
+        },
     )
 
     if parsed is None:
