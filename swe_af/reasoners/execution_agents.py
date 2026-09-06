@@ -414,6 +414,12 @@ async def run_replanner(
             budget=AskUserBudget(remaining=2),
             webhook_url=approval_webhook_url(router),
             note_label="replanner",
+            decision_context={
+                "repo_path": state.repo_path or ".",
+                "stage": "replanner",
+                "model": replan_model,
+                "provider": provider,
+            },
         )
         if parsed is not None:
             router.note(
