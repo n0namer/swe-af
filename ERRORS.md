@@ -53,3 +53,55 @@ Verification evidence:
 - Product recovery oracle: exit `1`, stdout `Error: Cannot divide by zero`, no traceback.
 - External-cwd suite after test recovery: 13 tests, `OK`.
 - Recovery execution `exec_20260902_120338_5ac3xq2q`: `succeeded`, `complete=true`, only `test_calculator.py` changed.
+
+## 2026-09-08 — Coder structured-output failure after real work must recover in-place
+
+Status: VERIFIED runtime lesson.
+
+Symptom:
+- Full `implement_issue` execution `exec_20260908_165317_24ztwr07` ended `failed_unrecoverable` even though the coder had already edited and committed the issue worktree.
+- The resulting coder commit `b9c2dde90623a55af12f026290d2ad9162608697` was independently invalid: exact-source Python compile failed with `SyntaxError: 'return' outside function`.
+- The coder role then failed during structured-output/schema completion, so the outer coding loop exited before reviewer/repair could recover the partial work.
+
+Root cause:
+- `RunCodingLoop` treated any non-fatal coder call error as immediately unrecoverable, without distinguishing an untouched worktree from a worktree that the failed coder had already modified or committed.
+- Therefore a transport/schema/output failure could terminate the orchestration after real product changes, bypassing the existing multi-iteration repair budget.
+
+Fix:
+- Fingerprint git HEAD + porcelain worktree state before each coder call.
+- If a non-fatal coder error leaves changed git state and coding iterations remain, preserve the same worktree, record `coder_retry` feedback requiring exact syntax/build/tests, and continue to the next coder iteration.
+- If the coder error leaves the worktree unchanged, keep the previous fail-fast behavior.
+
+Prevention:
+- Do not equate `coder call returned error` with `no work was produced`.
+- Before classifying a coder failure as unrecoverable, compare pre/post git state and preserve partial work only when that state changed.
+- The recovery iteration must distrust prior test claims and re-run validation on the exact worktree before completing.
+
+Verification evidence:
+- New regression `TestCoderExceptionAfterWorktreeChangeRetries` passes: iteration 1 commits partial work and returns a structured-output error; iteration 2 receives repair feedback and the loop completes instead of returning `failed_unrecoverable`.
+- Fresh real-repo execution `exec_20260908_180746_5l94yhja` subsequently completed successfully on EvalGuard #3 and produced final commit `c1442dd2878bbd09f43da5d6696e8326d7232a21`.
+
+## 2026-09-08 — Exact-source acceptance must bind the repository-local Python environment
+
+Status: VERIFIED runtime lesson.
+
+Symptom:
+- A test command invoked with a virtualenv executable from another EvalGuard clone reported passing tests even though the intended final worktree contained invalid code in an earlier run.
+- Later verifier runs also failed with `python: command not found` despite a valid repository-local Python environment being present as `venv/bin` rather than `.venv/bin`.
+
+Root cause:
+- Editable Python installs and absolute virtualenv executables can silently bind imports to a different checkout than the worktree being certified.
+- SWE role environment discovery recognized only `.venv/bin`, while real repositories may use either `.venv/bin` or `venv/bin`.
+
+Fix:
+- Exact acceptance commands bind `PYTHONPATH` to the intended worktree and put that worktree's repository-local virtualenv first in `PATH`.
+- Coder, reviewer, and verifier OpenCode role environments now recognize both `.venv/bin` and `venv/bin`, preferring `.venv` when both exist.
+
+Prevention:
+- Never accept a test PASS unless tested-source identity is proven; editable-install provenance from another checkout is insufficient.
+- For Python repo acceptance, verify the interpreter path and source import root together.
+- Support both common repository-local virtualenv layouts instead of assuming one naming convention.
+
+Verification evidence:
+- On exact final EvalGuard commit `c1442dd2878bbd09f43da5d6696e8326d7232a21`, Python compile PASS, focused tests 12/12 PASS, full suite 71/71 PASS, and hidden delimiter oracle 3/3 PASS when `PATH` and `PYTHONPATH` are bound to that worktree.
+- Standalone verifier `exec_20260908_191034_fqswvej5` used `/tmp/evalguard-issue-recovery/.worktrees/794aeb7d-evalguard-3/venv/bin/python` and completed terminally with `passed=true`, all 5 acceptance criteria PASS.
