@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/config"
 	"github.com/Agent-Field/SWE-AF/go/internal/dagutil"
@@ -12,7 +14,6 @@ import (
 	"github.com/Agent-Field/SWE-AF/go/internal/prompts/coding"
 	"github.com/Agent-Field/SWE-AF/go/internal/runtimex"
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
-	"os"
 	"strconv"
 )
 
@@ -62,6 +63,13 @@ func RunVerifier(ctx context.Context, deps *Deps, input map[string]any) (any, er
 		return nil, err
 	}
 
+	verifierEnv := map[string]string{}
+	if provider == "opencode" {
+		venvBin := filepath.Join(in.RepoPath, ".venv", "bin")
+		if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
+			verifierEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
 	opts := harnessx.RoleOptions{
 		Provider:       provider,
 		Model:          in.Model,
@@ -70,6 +78,7 @@ func RunVerifier(ctx context.Context, deps *Deps, input map[string]any) (any, er
 		PermissionMode: in.PermissionMode,
 		SystemPrompt:   coding.VerifierSystemPrompt,
 		Cwd:            in.RepoPath,
+		Env:            verifierEnv,
 	}.ToOptions()
 
 	parsed, result, err := harnessx.Run[schemas.VerificationResult](ctx, deps.Harness, taskPrompt, opts)

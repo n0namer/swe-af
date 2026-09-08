@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,6 +45,11 @@ func verifierInputMap() map[string]any {
 }
 
 func TestRunVerifierSuccess(t *testing.T) {
+	repoPath := t.TempDir()
+	venvBin := filepath.Join(repoPath, ".venv", "bin")
+	if err := os.MkdirAll(venvBin, 0o755); err != nil {
+		t.Fatalf("create verifier virtualenv dir: %v", err)
+	}
 	mh := &mockHarness{fn: func(_ int, dest any) (*harness.Result, error) {
 		d := dest.(*schemas.VerificationResult)
 		d.Passed = true
@@ -52,8 +59,11 @@ func TestRunVerifierSuccess(t *testing.T) {
 	}}
 	app := &captureApp{}
 	deps := &Deps{Harness: mh, App: app}
+	input := verifierInputMap()
+	input["repo_path"] = repoPath
+	input["ai_provider"] = "open_code"
 
-	out, err := RunVerifier(context.Background(), deps, verifierInputMap())
+	out, err := RunVerifier(context.Background(), deps, input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,6 +78,9 @@ func TestRunVerifierSuccess(t *testing.T) {
 	}
 	if got := app.messageWithTag("complete"); got != "Verifier complete: passed=True, summary=all good" {
 		t.Errorf("complete note = %q", got)
+	}
+	if got := mh.lastOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
+		t.Fatalf("verifier virtualenv PATH not preferred: %q", got)
 	}
 }
 
