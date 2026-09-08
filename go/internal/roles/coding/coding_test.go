@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -433,6 +435,11 @@ func TestRunQASuccessAndFallback(t *testing.T) {
 // tool set; schema/no-result failure is fail-closed and must never auto-approve.
 func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	nr := &noteRecorder{}
+	worktree := t.TempDir()
+	venvBin := filepath.Join(worktree, ".venv", "bin")
+	if err := os.MkdirAll(venvBin, 0o755); err != nil {
+		t.Fatalf("create reviewer virtualenv dir: %v", err)
+	}
 	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
 		rr := dest.(*schemas.CodeReviewResult)
 		rr.Approved = true
@@ -440,7 +447,7 @@ func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 		return &harness.Result{Parsed: dest}, nil
 	}}
 	out, err := RunCodeReviewer(context.Background(), newDeps(mh, nil, nr), map[string]any{
-		"worktree_path": "/wt",
+		"worktree_path": worktree,
 		"coder_result":  map[string]any{},
 		"issue":         map[string]any{"name": "i"},
 		"qa_ran":        true,
@@ -457,6 +464,9 @@ func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	}
 	if got := mh.gotOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != `{"permission":{"task":"deny","external_directory":"deny"}}` {
 		t.Fatalf("reviewer OpenCode permission overlay mismatch: %q", got)
+	}
+	if got := mh.gotOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
+		t.Fatalf("reviewer virtualenv PATH not preferred: %q", got)
 	}
 
 	mhf := &mockHarness{fn: func(_ any) (*harness.Result, error) {
