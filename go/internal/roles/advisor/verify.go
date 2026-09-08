@@ -65,9 +65,12 @@ func RunVerifier(ctx context.Context, deps *Deps, input map[string]any) (any, er
 
 	verifierEnv := map[string]string{}
 	if provider == "opencode" {
-		venvBin := filepath.Join(in.RepoPath, ".venv", "bin")
-		if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
-			verifierEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+		for _, venvName := range []string{".venv", "venv"} {
+			venvBin := filepath.Join(in.RepoPath, venvName, "bin")
+			if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
+				verifierEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+				break
+			}
 		}
 	}
 	opts := harnessx.RoleOptions{

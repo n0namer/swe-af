@@ -46,7 +46,7 @@ func verifierInputMap() map[string]any {
 
 func TestRunVerifierSuccess(t *testing.T) {
 	repoPath := t.TempDir()
-	venvBin := filepath.Join(repoPath, ".venv", "bin")
+	venvBin := filepath.Join(repoPath, "venv", "bin")
 	if err := os.MkdirAll(venvBin, 0o755); err != nil {
 		t.Fatalf("create verifier virtualenv dir: %v", err)
 	}

@@ -233,7 +233,7 @@ func TestRunCoderAppliesGuardrailAndCwd(t *testing.T) {
 
 func TestRunCoderPrefersRepoVirtualenvForOpenCode(t *testing.T) {
 	worktree := t.TempDir()
-	venvBin := filepath.Join(worktree, ".venv", "bin")
+	venvBin := filepath.Join(worktree, "venv", "bin")
 	if err := os.MkdirAll(venvBin, 0o755); err != nil {
 		t.Fatalf("create coder virtualenv dir: %v", err)
 	}

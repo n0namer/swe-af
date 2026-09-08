@@ -153,9 +153,12 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 
 	coderEnv := map[string]string{}
 	if provider == "opencode" {
-		venvBin := filepath.Join(in.WorktreePath, ".venv", "bin")
-		if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
-			coderEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+		for _, venvName := range []string{".venv", "venv"} {
+			venvBin := filepath.Join(in.WorktreePath, venvName, "bin")
+			if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
+				coderEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+				break
+			}
 		}
 	}
 	opts := harnessx.RoleOptions{
@@ -400,9 +403,12 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 		reviewerEnv["OPENCODE_CONFIG_CONTENT"] = `{"permission":{"task":"deny","external_directory":"deny"}}`
 		// Prefer a repository-owned virtualenv when present so reviewer-native
 		// test commands resolve the project's interpreter and dependencies.
-		venvBin := filepath.Join(in.WorktreePath, ".venv", "bin")
-		if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
-			reviewerEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+		for _, venvName := range []string{".venv", "venv"} {
+			venvBin := filepath.Join(in.WorktreePath, venvName, "bin")
+			if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
+				reviewerEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+				break
+			}
 		}
 	}
 	opts := harnessx.RoleOptions{
