@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -341,6 +342,64 @@ func TestCoderExceptionFailsUnrecoverable(t *testing.T) {
 	}
 	if !strings.Contains(res.ErrorMessage, "Coder agent failed") {
 		t.Errorf("error_message = %q, want to contain 'Coder agent failed'", res.ErrorMessage)
+	}
+}
+
+func TestCoderExceptionAfterWorktreeChangeRetries(t *testing.T) {
+	repo := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmdArgs := append([]string{"-C", repo}, args...)
+		cmd := exec.Command("git", cmdArgs...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@example.invalid")
+	runGit("config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(repo, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "app.py")
+	runGit("commit", "-m", "base")
+
+	coderCalls := 0
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		if strings.Contains(target, "run_coder") {
+			coderCalls++
+			if coderCalls == 1 {
+				if err := os.WriteFile(filepath.Join(repo, "app.py"), []byte("value =\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				runGit("add", "app.py")
+				runGit("commit", "-m", "partial coder work")
+				return nil, errors.New("structured output missing")
+			}
+			if feedback, _ := kwargs["feedback"].(string); !strings.Contains(feedback, "Inspect all existing changes") {
+				t.Fatalf("retry feedback did not require validation/repair: %q", feedback)
+			}
+			return map[string]any{"files_changed": []string{"app.py"}, "summary": "repaired", "complete": true}, nil
+		}
+		if strings.Contains(target, "run_code_reviewer") {
+			return map[string]any{"approved": true, "blocking": false, "summary": "Looks good", "debt_items": []any{}}, nil
+		}
+		return map[string]any{}, nil
+	}
+	issue := makeIssue("ISSUE-1", false)
+	issue["worktree_path"] = repo
+	ds := makeDAGState(t.TempDir())
+	ds.RepoPath = repo
+	res := run(t, issue, ds, callFn, makeConfig(t, map[string]any{"max_coding_iterations": 2}), nil)
+
+	if res.Outcome != schemas.IssueOutcomeCompleted || res.Attempts != 2 {
+		t.Fatalf("outcome=%s attempts=%d, want completed/2", res.Outcome, res.Attempts)
+	}
+	if coderCalls != 2 {
+		t.Fatalf("coder calls=%d, want 2", coderCalls)
+	}
+	if len(res.IterationHistory) < 2 || mapGetStr(res.IterationHistory[0], "action", "") != "coder_retry" {
+		t.Fatalf("iteration history=%v, want first action coder_retry", res.IterationHistory)
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -166,6 +167,7 @@ func RunCodingLoop(
 		memoryContext := readMemoryContext(memoryFn, issue)
 
 		// --- 1. CODER ---
+		coderStateBefore, coderStateOK := gitWorktreeFingerprint(worktreePath)
 		coderResult, cerr := callWithTimeout(ctx, timeout, fmt.Sprintf("coder:%s:iter%d", issueName, iteration),
 			func(c context.Context) (map[string]any, error) {
 				return callFn(c, nodeID+".run_coder", map[string]any{
@@ -192,6 +194,39 @@ func RunCodingLoop(
 				fmt.Sprintf("Coder agent failed: %s iter %d: %v", issueName, iteration, cerr),
 				[]string{"coding_loop", "coder_error", issueName},
 			)
+
+			// A coder can edit or even commit useful/partial work before its
+			// structured-output phase fails. If this iteration changed the git
+			// worktree, preserve the existing max-iteration recovery semantics:
+			// send the next coder back into the SAME worktree with explicit
+			// validation/repair feedback instead of discarding the partial work as
+			// immediately unrecoverable. Provider-only failures that leave the
+			// worktree untouched still fail fast exactly as before.
+			if iteration < maxIterations && coderStateOK && gitWorktreeChanged(worktreePath, coderStateBefore) {
+				summary := fmt.Sprintf("Coder iteration %d changed the worktree but failed to return a structured result: %v", iteration, cerr)
+				feedback = summary + "\nInspect all existing changes from the failed attempt. Run syntax/build and focused tests on the exact worktree, repair any failures, then finish the implementation and return the required structured result. Do not assume the previous commit or test claim is valid."
+				iterationHistory = append(iterationHistory, map[string]any{
+					"iteration":       iteration,
+					"action":          "coder_retry",
+					"summary":         summary,
+					"qa_passed":       nil,
+					"review_approved": false,
+					"review_blocking": false,
+					"path":            pathName(needsDeeperQA),
+				})
+				saveIterationState(dagState.ArtifactsDir, issueName, map[string]any{
+					"iteration":         iteration,
+					"feedback":          feedback,
+					"files_changed":     filesChanged,
+					"iteration_history": iterationHistory,
+				}, dagState.BuildID)
+				note(
+					fmt.Sprintf("Coder left partial work; retrying in-place: %s iter %d/%d", issueName, iteration+1, maxIterations),
+					[]string{"coding_loop", "coder_retry", issueName},
+				)
+				continue
+			}
+
 			return schemas.IssueResult{
 				IssueName:        issueName,
 				Outcome:          schemas.IssueOutcomeFailedUnrecoverable,
@@ -652,6 +687,28 @@ func runFlaggedPath(
 	summary = mapGetStr(synthesisResult, "summary", "")
 
 	return action, summary, reviewResult, qaResult, synthesisResult, nil
+}
+
+func gitWorktreeFingerprint(path string) (string, bool) {
+	if strings.TrimSpace(path) == "" {
+		return "", false
+	}
+	headCmd := exec.Command("git", "-C", path, "rev-parse", "HEAD")
+	head, err := headCmd.Output()
+	if err != nil {
+		return "", false
+	}
+	statusCmd := exec.Command("git", "-C", path, "status", "--porcelain=v1", "--untracked-files=all")
+	status, err := statusCmd.Output()
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(string(head)) + "\n--STATUS--\n" + string(status), true
+}
+
+func gitWorktreeChanged(path, before string) bool {
+	after, ok := gitWorktreeFingerprint(path)
+	return ok && after != before
 }
 
 // DetectStuckLoop ports _detect_stuck_loop: true if the last `window` iterations
