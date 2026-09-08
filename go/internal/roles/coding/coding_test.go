@@ -231,6 +231,26 @@ func TestRunCoderAppliesGuardrailAndCwd(t *testing.T) {
 	}
 }
 
+func TestRunCoderPrefersRepoVirtualenvForOpenCode(t *testing.T) {
+	worktree := t.TempDir()
+	venvBin := filepath.Join(worktree, ".venv", "bin")
+	if err := os.MkdirAll(venvBin, 0o755); err != nil {
+		t.Fatalf("create coder virtualenv dir: %v", err)
+	}
+	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	if _, err := RunCoder(context.Background(), newDeps(mh, nil, &noteRecorder{}), map[string]any{
+		"issue": map[string]any{"name": "venv"}, "worktree_path": worktree,
+		"ai_provider": "open_code", "model": "fcm",
+	}); err != nil {
+		t.Fatalf("RunCoder: %v", err)
+	}
+	if got := mh.gotOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
+		t.Fatalf("coder virtualenv PATH not preferred: %q", got)
+	}
+}
+
 // Contract: coder does NOT append the guardrail when web search is disabled.
 func TestRunCoderNoGuardrailWhenDisabled(t *testing.T) {
 	t.Setenv("OPENCODE_ENABLE_EXA", "")

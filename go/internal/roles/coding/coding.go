@@ -151,6 +151,13 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		return nil, err
 	}
 
+	coderEnv := map[string]string{}
+	if provider == "opencode" {
+		venvBin := filepath.Join(in.WorktreePath, ".venv", "bin")
+		if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
+			coderEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
 	opts := harnessx.RoleOptions{
 		Provider:       provider,
 		Model:          in.Model,
@@ -159,6 +166,7 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		PermissionMode: in.PermissionMode,
 		SystemPrompt:   tools.MaybeApplyCoderGuardrail(prompts.CoderSystemPrompt),
 		Cwd:            in.WorktreePath,
+		Env:            coderEnv,
 	}.ToOptions()
 
 	parsed, result, hErr := harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
