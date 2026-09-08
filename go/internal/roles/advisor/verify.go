@@ -82,6 +82,7 @@ func RunVerifier(ctx context.Context, deps *Deps, input map[string]any) (any, er
 		SystemPrompt:   coding.VerifierSystemPrompt,
 		Cwd:            in.RepoPath,
 		Env:            verifierEnv,
+		SchemaMode:     "single",
 	}.ToOptions()
 
 	parsed, result, err := harnessx.Run[schemas.VerificationResult](ctx, deps.Harness, taskPrompt, opts)

@@ -86,6 +86,11 @@ type RoleOptions struct {
 	// Env is the base environment for the subprocess. Run overlays the build's
 	// scoped credentials on top of this before invoking the harness.
 	Env map[string]string
+
+	// SchemaMode is an explicit per-role override for structured-output mode.
+	// Empty keeps SWE's centralized policy; narrow roles may request SDK single
+	// shot when incremental whole-file edits are empirically less reliable.
+	SchemaMode string
 }
 
 // ToOptions converts a RoleOptions into a harness.Options. Run injects scoped
@@ -109,5 +114,6 @@ func (r RoleOptions) ToOptions() harness.Options {
 		Cwd:            r.Cwd,
 		ProjectDir:     r.Cwd,
 		Env:            r.Env,
+		SchemaMode:     r.SchemaMode,
 	}
 }

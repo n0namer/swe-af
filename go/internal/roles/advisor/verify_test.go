@@ -82,6 +82,9 @@ func TestRunVerifierSuccess(t *testing.T) {
 	if got := mh.lastOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
 		t.Fatalf("verifier virtualenv PATH not preferred: %q", got)
 	}
+	if got := mh.lastOpts.SchemaMode; got != "single" {
+		t.Fatalf("verifier schema mode = %q, want single", got)
+	}
 }
 
 func TestRunVerifierFallbackListShape(t *testing.T) {
