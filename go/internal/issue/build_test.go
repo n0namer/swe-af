@@ -58,6 +58,48 @@ func initRepo(t *testing.T) string {
 	return repo
 }
 
+func TestEnsurePythonVirtualenvBootstrapsCleanPythonRepo(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 unavailable")
+	}
+	worktree := t.TempDir()
+	if err := os.WriteFile(filepath.Join(worktree, "pyproject.toml"), []byte("[project]\nname='demo'\nversion='0.0.1'\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	venvPath, created, err := ensurePythonVirtualenv(worktree)
+	if err != nil {
+		t.Fatalf("ensurePythonVirtualenv: %v", err)
+	}
+	if !created {
+		t.Fatal("expected virtualenv to be created")
+	}
+	if want := filepath.Join(worktree, ".venv"); venvPath != want {
+		t.Fatalf("venv path=%q want=%q", venvPath, want)
+	}
+	if _, err := os.Stat(filepath.Join(venvPath, "bin", "python")); err != nil {
+		t.Fatalf("bootstrapped python missing: %v", err)
+	}
+
+	venvPath2, created2, err := ensurePythonVirtualenv(worktree)
+	if err != nil {
+		t.Fatalf("second ensurePythonVirtualenv: %v", err)
+	}
+	if created2 || venvPath2 != venvPath {
+		t.Fatalf("second ensure created=%v path=%q, want false/%q", created2, venvPath2, venvPath)
+	}
+}
+
+func TestEnsurePythonVirtualenvSkipsNonPythonRepo(t *testing.T) {
+	path, created, err := ensurePythonVirtualenv(t.TempDir())
+	if err != nil {
+		t.Fatalf("ensurePythonVirtualenv: %v", err)
+	}
+	if path != "" || created {
+		t.Fatalf("non-Python repo got path=%q created=%v", path, created)
+	}
+}
+
 var planningTargets = map[string]bool{
 	"run_product_manager": true, "run_architect": true, "run_tech_lead": true,
 	"run_sprint_planner": true, "run_issue_writer": true, "run_environment_scout": true,

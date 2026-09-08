@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -116,7 +117,7 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 	if in.ExpectedBaseSHA != "" && baseSHA != in.ExpectedBaseSHA {
 		return nil, fmt.Errorf("implement_issue: stale base %s: expected %s, current %s", baseRef, in.ExpectedBaseSHA, baseSHA)
 	}
-	excludes := []string{".worktrees/"}
+	excludes := []string{".worktrees/", ".venv/", "venv/"}
 	if !filepath.IsAbs(in.ArtifactsDir) {
 		top := topPathSegment(in.ArtifactsDir)
 		if top != "" && top != "." && top != ".." {
@@ -149,6 +150,14 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 
 	if err := addWorktree(repoPath, worktreePath, branch, baseSHA); err != nil {
 		return nil, err
+	}
+	if venvPath, created, err := ensurePythonVirtualenv(worktreePath); err != nil {
+		removeWorktree(repoPath, worktreePath)
+		deleteBranch(repoPath, branch)
+		return nil, err
+	} else if created {
+		deps.note(ctx, fmt.Sprintf("Issue build %s: bootstrapped Python virtualenv at %s", buildID, venvPath),
+			"issue_build", "environment", "python_venv")
 	}
 	deps.note(ctx,
 		fmt.Sprintf("Issue build %s: %s on %s (base %s @ %.12s)",
@@ -427,6 +436,38 @@ func maybeCreatePR(
 		return url
 	}
 	return ""
+}
+
+func ensurePythonVirtualenv(worktreePath string) (string, bool, error) {
+	pythonProject := false
+	for _, marker := range []string{"pyproject.toml", "setup.py", "setup.cfg"} {
+		if info, err := os.Stat(filepath.Join(worktreePath, marker)); err == nil && !info.IsDir() {
+			pythonProject = true
+			break
+		}
+	}
+	if !pythonProject {
+		return "", false, nil
+	}
+
+	for _, name := range []string{".venv", "venv"} {
+		path := filepath.Join(worktreePath, name)
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			return path, false, nil
+		}
+	}
+
+	python3, err := exec.LookPath("python3")
+	if err != nil {
+		return "", false, fmt.Errorf("implement_issue: Python project requires python3 to bootstrap a local virtualenv: %w", err)
+	}
+	cmd := exec.Command(python3, "-m", "venv", ".venv")
+	cmd.Dir = worktreePath
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", false, fmt.Errorf("implement_issue: bootstrap Python virtualenv: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return filepath.Join(worktreePath, ".venv"), true, nil
 }
 
 // topPathSegment returns the first path component of a relative path — the
