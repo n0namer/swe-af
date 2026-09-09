@@ -249,6 +249,9 @@ func TestRunCoderPrefersRepoVirtualenvForOpenCode(t *testing.T) {
 	if got := mh.gotOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
 		t.Fatalf("coder virtualenv PATH not preferred: %q", got)
 	}
+	if got := mh.gotOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != `{"permission":{"external_directory":"deny"}}` {
+		t.Fatalf("coder OpenCode permission overlay = %q", got)
+	}
 }
 
 // Contract: coder does NOT append the guardrail when web search is disabled.
