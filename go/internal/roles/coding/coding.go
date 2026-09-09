@@ -28,7 +28,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Agent-Field/agentfield/sdk/go/ai"
