@@ -267,6 +267,11 @@ func TestHighRiskPromptsRequireExactDelimiterInLiteral(t *testing.T) {
 			t.Fatalf("reviewer prompt missing verdict-termination contract %q", required)
 		}
 	}
+	for _, required := range []string{"boundary-negative discriminator", "not copied", "trailing-newline", "formatting-only change", "fail that criterion conservatively"} {
+		if !strings.Contains(strings.ToLower(VerifierSystemPrompt), required) {
+			t.Fatalf("verifier prompt missing boundary-negative contract %q", required)
+		}
+	}
 }
 
 func TestIssueWriterTaskPrompt(t *testing.T) {
