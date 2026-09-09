@@ -105,3 +105,78 @@ Prevention:
 Verification evidence:
 - On exact final EvalGuard commit `c1442dd2878bbd09f43da5d6696e8326d7232a21`, Python compile PASS, focused tests 12/12 PASS, full suite 71/71 PASS, and hidden delimiter oracle 3/3 PASS when `PATH` and `PYTHONPATH` are bound to that worktree.
 - Standalone verifier `exec_20260908_191034_fqswvej5` used `/tmp/evalguard-issue-recovery/.worktrees/794aeb7d-evalguard-3/venv/bin/python` and completed terminally with `passed=true`, all 5 acceptance criteria PASS.
+
+## 2026-09-09 — Reviewer structured output must not assemble verdict files in the product worktree
+
+Status: VERIFIED runtime lesson.
+
+Symptom:
+- EvalGuard repeat-5 reached coder repair, reviewer approval, and verifier 5/5 PASS, but final delivery correctly failed closed because reviewer OpenCode left `?? .review_verdict.json` in the product worktree.
+- The branch diff itself was otherwise scoped to exactly the three declared product files.
+
+Root cause:
+- Reviewer used incremental structured-output assembly, so its transport-level verdict JSON was materialized in the role cwd, which is the product worktree.
+- Delivery hygiene therefore treated reviewer transport state as a product mutation.
+
+Fix:
+- Set reviewer-only `RoleOptions.SchemaMode="single"` while leaving coder incremental and verifier single-shot.
+- Preserve reviewer OpenCode permission overlay (`task=deny`, `external_directory=deny`) and keep the final Git cleanliness guard unchanged.
+
+Prevention:
+- Structured role outputs are runtime artifacts, not product files; their ownership must be explicit at the role boundary.
+- Never whitelist transport scratch by filename in the delivery guard.
+- Prefer role-local transport configuration over weakening final Git cleanliness checks.
+
+Verification evidence:
+- Deterministic reviewer regression, targeted/full Go test/build/vet gates passed on the exact live source.
+- Loaded planner generation SHA256 `6260583d91662f242d9471872a35385791cb64b350b952e95a2eedf38c3016ae` ran repeat-7 reviewer `exec_20260909_100454_xxwg4zkc` to `approved=true`, `blocking=false` with a clean worktree and no `.review_verdict.json`.
+
+## 2026-09-09 — Final verifier must execute an independent boundary-negative variant
+
+Status: VERIFIED runtime lesson.
+
+Symptom:
+- Repeat-9 completed `success=true`; reviewer approved and verifier reported 5/5 PASS.
+- An independent post-run oracle on the exact worktree found that `CommentDocstringStripMutator.mutate("x = 1")` returned a mutation whose only change was an added trailing newline, violating the explicit no-formatting-only-mutation criterion.
+
+Root cause:
+- Final verification reused repository/coder happy-path evidence and did not independently vary a representation boundary relevant to no-op/normalization behavior.
+- A clean input with a trailing newline passed while the equivalent clean input without the trailing newline failed, so ordinary tests were insufficient to certify the criterion.
+
+Fix:
+- Add a verifier `Boundary-negative discriminator`: for no-op, idempotency, normalization, preservation, parser/serializer, or boundary-sensitive criteria, execute at least one independent variant not copied from coder tests.
+- For source/text transforms, explicitly vary trailing-newline presence/absence, whitespace/minimal input, and relevant delimiter/quote form; formatting-only changes fail the criterion conservatively.
+
+Prevention:
+- A verifier criterion cannot pass solely from agent-written tests when the criterion has a meaningful representation boundary.
+- Keep an independent acceptance layer that varies the input shape, not just the expected business behavior.
+- When an independent boundary discriminator contradicts prior PASS evidence, the discriminator wins and the criterion must fail.
+
+Verification evidence:
+- Prompt/golden regressions plus full Go test/build/vet passed and were loaded in planner SHA256 `4e07d56ad23f6df9d2759bb7937029be5a75263b47174dd949ffd07061451794`.
+- Verifier canary `exec_20260909_173118_xncpgrv7` explicitly compared clean source with and without a trailing newline, reproduced the formatting-only mutation, changed criterion 4 to FAIL, and produced overall FAIL 4/5 with the correct owning fix in `python_mutator.py`.
+
+## 2026-09-09 — OpenCode verifier must be noninteractive and repository-local
+
+Status: VERIFIED runtime lesson.
+
+Symptom:
+- The first isolated hardened-verifier canary delegated to `@explore` and then stalled on `external_directory=ask` despite final verification being intended as an unattended, repository-local role.
+- No semantic verdict could be trusted while the hidden subagent was waiting for a permission decision.
+
+Root cause:
+- OpenCode does not currently enforce the verifier's harness tool list strongly enough to prevent hidden task/subagent delegation.
+- Without a role-level permission overlay, a noninteractive verifier could enter a permission-prompt path outside the intended repository boundary.
+
+Fix:
+- For OpenCode verifier runs, set `OPENCODE_CONFIG_CONTENT` permission overlay to `task=deny` and `external_directory=deny`.
+- Keep verifier `SchemaMode="single"` and repository-local cwd/environment binding.
+
+Prevention:
+- Noninteractive acceptance roles must not depend on permission prompts or hidden subagents.
+- Enforce repository locality at the runtime permission layer, not only in natural-language prompts.
+- Treat a verifier that waits for interactive permission as inconclusive, not as a semantic application failure.
+
+Verification evidence:
+- Regression coverage asserts the exact OpenCode permission overlay and full Go test/build/vet gates pass.
+- On the next loaded generation, verifier canary `exec_20260909_173118_xncpgrv7` stayed in the primary repo-local agent path, did not enter `@explore` / `external_directory=ask`, and proceeded to the independent boundary test that correctly failed criterion 4.
