@@ -491,6 +491,9 @@ func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	if got := mh.gotOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
 		t.Fatalf("reviewer virtualenv PATH not preferred: %q", got)
 	}
+	if got := mh.gotOpts.SchemaMode; got != "single" {
+		t.Fatalf("reviewer schema mode = %q, want single", got)
+	}
 
 	mhf := &mockHarness{fn: func(_ any) (*harness.Result, error) {
 		return &harness.Result{IsError: true, ErrorMessage: "review-parse", Parsed: nil}, nil

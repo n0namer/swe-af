@@ -425,6 +425,7 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 		SystemPrompt:   prompts.CodeReviewerSystemPrompt,
 		Cwd:            in.WorktreePath,
 		Env:            reviewerEnv,
+		SchemaMode:     "single",
 	}.ToOptions()
 
 	parsed, result, hErr := harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, taskPrompt, opts)
