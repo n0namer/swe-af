@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -146,10 +147,9 @@ func scrubTrackedJunk(worktreePath, issueName string) (string, error) {
 		fmt.Sprintf("chore(%s): untrack bytecode caches", issueName))
 }
 
-// commitAll commits any uncommitted changes inside the (isolated) worktree.
-// `add -A` is safe here precisely because the worktree belongs to this build
-// alone; bytecode junk is excluded. Returns the new commit sha, or "" when
-// there was nothing to commit.
+// commitAll commits any uncommitted changes inside the isolated worktree.
+// It is retained for legacy/unscoped issue specs. Scoped issue builds should
+// prefer commitScoped so temporary diagnostics cannot become deliverables.
 func commitAll(worktreePath, message string) (string, error) {
 	if !isDirty(worktreePath) {
 		return "", nil
@@ -162,6 +162,65 @@ func commitAll(worktreePath, message string) (string, error) {
 		return "", gitOpsErrf("git add -A failed: %s", detail)
 	}
 	return commitIndex(worktreePath, message)
+}
+
+func commitScoped(worktreePath, message string, allowed []string) (string, error) {
+	if len(allowed) == 0 {
+		return commitAll(worktreePath, message)
+	}
+	args := []string{"add", "-A", "--"}
+	args = append(args, allowed...)
+	if _, detail, code := runGit(worktreePath, args...); code != 0 {
+		return "", gitOpsErrf("git add scoped paths failed: %s", detail)
+	}
+	out, _, code := runGit(worktreePath, "diff", "--cached", "--name-only")
+	if code != 0 || strings.TrimSpace(out) == "" {
+		return "", nil
+	}
+	return commitIndex(worktreePath, message)
+}
+
+func worktreeStatusPaths(worktreePath string) []string {
+	out, _, code := runGit(worktreePath, "status", "--porcelain=v1", "--untracked-files=all")
+	if code != 0 || strings.TrimSpace(out) == "" {
+		return nil
+	}
+	var paths []string
+	for _, line := range strings.Split(out, "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		path := strings.TrimSpace(line[3:])
+		if idx := strings.LastIndex(path, " -> "); idx >= 0 {
+			path = path[idx+4:]
+		}
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+func unexpectedPaths(paths, allowed []string) []string {
+	if len(allowed) == 0 {
+		return nil
+	}
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, p := range allowed {
+		p = filepath.ToSlash(strings.TrimSpace(p))
+		if p != "" {
+			allowedSet[p] = struct{}{}
+		}
+	}
+	var unexpected []string
+	for _, p := range paths {
+		norm := filepath.ToSlash(strings.TrimSpace(p))
+		if _, ok := allowedSet[norm]; !ok && norm != "" {
+			unexpected = append(unexpected, norm)
+		}
+	}
+	sort.Strings(unexpected)
+	return unexpected
 }
 
 // newCommits returns commits on branch since baseSHA, oldest first; empty when
