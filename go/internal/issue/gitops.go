@@ -168,8 +168,25 @@ func commitScoped(worktreePath, message string, allowed []string) (string, error
 	if len(allowed) == 0 {
 		return commitAll(worktreePath, message)
 	}
+	var stage []string
+	for _, path := range allowed {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(worktreePath, filepath.FromSlash(path))); err == nil {
+			stage = append(stage, path)
+			continue
+		}
+		if _, _, code := runGit(worktreePath, "ls-files", "--error-unmatch", "--", path); code == 0 {
+			stage = append(stage, path)
+		}
+	}
+	if len(stage) == 0 {
+		return "", nil
+	}
 	args := []string{"add", "-A", "--"}
-	args = append(args, allowed...)
+	args = append(args, stage...)
 	if _, detail, code := runGit(worktreePath, args...); code != 0 {
 		return "", gitOpsErrf("git add scoped paths failed: %s", detail)
 	}
@@ -194,11 +211,17 @@ func worktreeStatusPaths(worktreePath string) []string {
 		if idx := strings.LastIndex(path, " -> "); idx >= 0 {
 			path = path[idx+4:]
 		}
-		if path != "" {
+		if path != "" && !isDeliveryJunk(path) {
 			paths = append(paths, path)
 		}
 	}
 	return paths
+}
+
+func isDeliveryJunk(path string) bool {
+	norm := filepath.ToSlash(path)
+	return strings.Contains(norm, "__pycache__/") || strings.HasSuffix(norm, "/__pycache__") ||
+		strings.HasSuffix(norm, ".pyc") || strings.HasSuffix(norm, ".pyo")
 }
 
 func unexpectedPaths(paths, allowed []string) []string {

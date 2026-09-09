@@ -101,6 +101,7 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 	}
 	planned := spec.ToPlannedIssue(in.AdditionalContext)
 	plannedName, _ := planned["name"].(string)
+	allowedPaths := scopedIssuePaths(spec)
 
 	// --- Setup (validation errors raise: they are the caller's to fix) ------
 	repoPath, err := filepath.Abs(in.RepoPath)
@@ -190,6 +191,7 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 	var debtItems []map[string]any
 	var verification map[string]any
 	prURL := ""
+	deliveryError := ""
 	var commits []string
 	var filesChanged []string
 	stat := ""
@@ -228,9 +230,10 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 			deps.note(ctx, fmt.Sprintf("Junk scrub failed: %v", err),
 				"issue_build", "error")
 		}
-		if _, err := commitAll(
+		if _, err := commitScoped(
 			worktreePath,
 			fmt.Sprintf("chore(%s): checkpoint uncommitted issue work", plannedName),
+			allowedPaths,
 		); err != nil {
 			deps.note(ctx, fmt.Sprintf("Checkpoint commit failed: %v", err),
 				"issue_build", "error")
@@ -244,7 +247,31 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 			verification = runVerification(ctx, deps, cfg, execCfg, spec, planned,
 				worktreePath, absArtifacts, loopSummary)
 		}
-		if cfg.EnableGithubPR && codingOK && len(commits) > 0 {
+
+		// Delivery is a separate fail-closed gate: semantic approval cannot make
+		// a branch acceptable when it contains files outside the caller's scoped
+		// issue contract or leaves the final worktree dirty.
+		commits = newCommits(repoPath, baseSHA, branch)
+		filesChanged = changedFiles(repoPath, baseSHA, branch)
+		stat = diffStat(repoPath, baseSHA, branch)
+		unexpectedCommitted := unexpectedPaths(filesChanged, allowedPaths)
+		dirtyPaths := worktreeStatusPaths(worktreePath)
+		if len(unexpectedCommitted) > 0 || len(dirtyPaths) > 0 {
+			var parts []string
+			if len(unexpectedCommitted) > 0 {
+				parts = append(parts, "unexpected committed files: "+strings.Join(unexpectedCommitted, ", "))
+			}
+			if len(dirtyPaths) > 0 {
+				parts = append(parts, "dirty final worktree: "+strings.Join(dirtyPaths, ", "))
+			}
+			deliveryError = "GIT_DELIVERY: " + strings.Join(parts, "; ")
+			if errorMessage == "" {
+				errorMessage = deliveryError
+			}
+			deps.note(ctx, deliveryError, "issue_build", "git_delivery", "error")
+		}
+
+		if cfg.EnableGithubPR && codingOK && len(commits) > 0 && deliveryError == "" {
 			prURL = maybeCreatePR(ctx, deps, cfg, execCfg, spec, planned,
 				repoPath, worktreePath, branch, baseRef, absArtifacts,
 				loopSummary, debtItems)
@@ -261,7 +288,7 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 
 	codingOK := completedOutcomes[outcomeValue]
 	verifyOK := verification == nil || isTruthyBool(verification["passed"])
-	success := codingOK && len(commits) > 0 && verifyOK
+	success := codingOK && len(commits) > 0 && verifyOK && deliveryError == ""
 
 	summary := fmt.Sprintf("%s: %s, %d commit(s), %d file(s) changed",
 		plannedName, outcomeValue, len(commits), len(filesChanged))
@@ -436,6 +463,28 @@ func maybeCreatePR(
 		return url
 	}
 	return ""
+}
+
+func scopedIssuePaths(spec *Spec) []string {
+	if spec == nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	for _, group := range [][]string{spec.FilesToModify, spec.FilesToCreate} {
+		for _, raw := range group {
+			path := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+			if path == "" || path == "." || filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
+				continue
+			}
+			if _, ok := seen[path]; ok {
+				continue
+			}
+			seen[path] = struct{}{}
+			out = append(out, path)
+		}
+	}
+	return out
 }
 
 func ensurePythonVirtualenv(worktreePath string) (string, bool, error) {

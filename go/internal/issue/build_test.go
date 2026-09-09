@@ -293,6 +293,45 @@ func TestUncommittedCoderWorkGetsCheckpointCommit(t *testing.T) {
 	}
 }
 
+func TestScopedIssueRejectsUnexpectedDeliveryFiles(t *testing.T) {
+	repo := initRepo(t)
+	rec := &recorder{}
+	inner := scriptedCallFn(t, rec, scriptOpts{coderCommits: false, coderWrites: true})
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		if strings.HasSuffix(target, "run_coder") {
+			worktree, _ := kwargs["worktree_path"].(string)
+			if err := os.WriteFile(filepath.Join(worktree, "debug_test.py"), []byte("print('debug')\n"), 0o644); err != nil {
+				return nil, err
+			}
+		}
+		return inner(ctx, target, kwargs)
+	}
+	result := runImplement(t, repo, callFn, map[string]any{
+		"issue": map[string]any{
+			"title":               "Scoped feature",
+			"description":         "Modify only feature.py.",
+			"acceptance_criteria": []any{"feature.py is updated"},
+			"files_to_modify":     []any{"feature.py"},
+		},
+		"config": map[string]any{"verify": true},
+	})
+
+	if result["success"] != false {
+		t.Fatalf("success = %v, want false", result["success"])
+	}
+	if got, _ := result["error_message"].(string); !strings.Contains(got, "GIT_DELIVERY") || !strings.Contains(got, "debug_test.py") {
+		t.Fatalf("error_message = %q, want GIT_DELIVERY/debug_test.py", got)
+	}
+	branch, _ := result["branch"].(string)
+	tracked := gitT(t, repo, "ls-tree", "-r", "--name-only", branch)
+	if strings.Contains(tracked, "debug_test.py") {
+		t.Fatalf("unexpected debug file was committed:\n%s", tracked)
+	}
+	if !strings.Contains(tracked, "feature.py") {
+		t.Fatalf("allowed feature.py missing from branch:\n%s", tracked)
+	}
+}
+
 func TestBytecodeJunkNeverLandsOnBranch(t *testing.T) {
 	// The real coder runs tests in the worktree, generating __pycache__, and
 	// a sloppy model may even commit it. Neither may reach the branch.
