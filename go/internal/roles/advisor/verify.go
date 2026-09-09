@@ -65,6 +65,10 @@ func RunVerifier(ctx context.Context, deps *Deps, input map[string]any) (any, er
 
 	verifierEnv := map[string]string{}
 	if provider == "opencode" {
+		// OpenCode does not currently enforce harness.Options.Tools. Verification
+		// must remain noninteractive and repository-local: hidden subagents can
+		// otherwise stall on external-directory permission prompts.
+		verifierEnv["OPENCODE_CONFIG_CONTENT"] = `{"permission":{"task":"deny","external_directory":"deny"}}`
 		for _, venvName := range []string{".venv", "venv"} {
 			venvBin := filepath.Join(in.RepoPath, venvName, "bin")
 			if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
