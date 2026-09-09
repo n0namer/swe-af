@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -508,6 +509,66 @@ func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	}
 	if out2 != nil {
 		t.Fatalf("expected nil reviewer result on schema failure, got %v", out2)
+	}
+}
+
+func TestRunCodeReviewerArchivesOnlyNewUntrackedScratch(t *testing.T) {
+	nr := &noteRecorder{}
+	worktree := t.TempDir()
+	if err := exec.Command("git", "init", "-q", worktree).Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	preexisting := filepath.Join(worktree, "preexisting.txt")
+	if err := os.WriteFile(preexisting, []byte("caller-owned\n"), 0o644); err != nil {
+		t.Fatalf("write preexisting file: %v", err)
+	}
+	archiveParent := filepath.Join(filepath.Dir(worktree), ".reviewer-scratch")
+	t.Cleanup(func() { _ = os.RemoveAll(archiveParent) })
+
+	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
+		if err := os.WriteFile(filepath.Join(worktree, "adversarial_check.py"), []byte("print('probe')\n"), 0o644); err != nil {
+			t.Fatalf("write reviewer scratch: %v", err)
+		}
+		rr := dest.(*schemas.CodeReviewResult)
+		rr.Approved = true
+		rr.Blocking = false
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	if _, err := RunCodeReviewer(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"worktree_path": worktree,
+		"coder_result":  map[string]any{},
+		"issue":         map[string]any{"name": "i"},
+		"iteration_id":  "scratch-1",
+		"ai_provider":   "open_code",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(worktree, "adversarial_check.py")); !os.IsNotExist(err) {
+		t.Fatalf("reviewer scratch still in product worktree: err=%v", err)
+	}
+	if got, err := os.ReadFile(preexisting); err != nil || string(got) != "caller-owned\n" {
+		t.Fatalf("pre-existing untracked file was not preserved: got=%q err=%v", got, err)
+	}
+	matches, err := filepath.Glob(filepath.Join(
+		archiveParent,
+		reviewerScratchSegment(filepath.Base(worktree)),
+		reviewerScratchSegment("scratch-1"),
+		"run-*",
+		"adversarial_check.py",
+	))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("archived reviewer scratch matches=%v err=%v", matches, err)
+	}
+	if got, err := os.ReadFile(matches[0]); err != nil || string(got) != "print('probe')\n" {
+		t.Fatalf("archived reviewer scratch content got=%q err=%v", got, err)
+	}
+	status, err := exec.Command("git", "-C", worktree, "status", "--short").Output()
+	if err != nil {
+		t.Fatalf("git status: %v", err)
+	}
+	if got := strings.TrimSpace(string(status)); got != "?? preexisting.txt" {
+		t.Fatalf("unexpected final worktree status: %q", got)
 	}
 }
 

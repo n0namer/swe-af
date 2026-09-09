@@ -430,7 +430,22 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 		SchemaMode:     "single",
 	}.ToOptions()
 
+	untrackedBefore, untrackedErr := reviewerUntrackedPaths(in.WorktreePath)
+	if untrackedErr != nil {
+		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer scratch tracking unavailable: %s: %s", issueName, untrackedErr.Error()), "code_reviewer", "scratch_tracking", "warning")
+	}
+
 	parsed, result, hErr := harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, taskPrompt, opts)
+	if untrackedErr == nil {
+		archived, archiveRoot, archiveErr := archiveNewReviewerScratch(in.WorktreePath, in.IterationID, untrackedBefore)
+		if archiveErr != nil {
+			deps.Note.Note(ctx, fmt.Sprintf("Code reviewer scratch archival failed: %s: %s", issueName, archiveErr.Error()), "code_reviewer", "scratch_tracking", "error")
+			return nil, fmt.Errorf("code reviewer scratch archival failed for %s: %w", issueName, archiveErr)
+		}
+		if len(archived) > 0 {
+			deps.Note.Note(ctx, fmt.Sprintf("Code reviewer archived scratch files: %s: %s -> %s", issueName, strings.Join(archived, ", "), archiveRoot), "code_reviewer", "scratch_tracking", "archived")
+		}
+	}
 	if hErr != nil {
 		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer agent failed: %s: %s", issueName, hErr.Error()), "code_reviewer", "error")
 		return nil, fmt.Errorf("code reviewer agent failed for %s: %w", issueName, hErr)
@@ -447,6 +462,77 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 		issueName, pyBool(parsed.Approved), pyBool(parsed.Blocking)), "code_reviewer", "complete")
 	parsed.IterationID = in.IterationID
 	return parsed, nil
+}
+
+func reviewerUntrackedPaths(worktreePath string) (map[string]struct{}, error) {
+	cmd := exec.Command("git", "-C", worktreePath, "ls-files", "--others", "--exclude-standard", "-z")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	paths := map[string]struct{}{}
+	for _, rel := range strings.Split(string(out), "\x00") {
+		if rel != "" {
+			paths[rel] = struct{}{}
+		}
+	}
+	return paths, nil
+}
+
+func archiveNewReviewerScratch(worktreePath, iterationID string, before map[string]struct{}) ([]string, string, error) {
+	after, err := reviewerUntrackedPaths(worktreePath)
+	if err != nil {
+		return nil, "", err
+	}
+	var created []string
+	for rel := range after {
+		if _, existed := before[rel]; !existed {
+			created = append(created, rel)
+		}
+	}
+	if len(created) == 0 {
+		return nil, "", nil
+	}
+	sort.Strings(created)
+
+	archiveBase := filepath.Join(filepath.Dir(worktreePath), ".reviewer-scratch", reviewerScratchSegment(filepath.Base(worktreePath)), reviewerScratchSegment(iterationID))
+	if err := os.MkdirAll(archiveBase, 0o755); err != nil {
+		return nil, "", err
+	}
+	archiveRoot, err := os.MkdirTemp(archiveBase, "run-")
+	if err != nil {
+		return nil, "", err
+	}
+	for _, rel := range created {
+		clean := filepath.Clean(rel)
+		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
+			return nil, archiveRoot, fmt.Errorf("unsafe reviewer scratch path %q", rel)
+		}
+		src := filepath.Join(worktreePath, clean)
+		dst := filepath.Join(archiveRoot, clean)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return nil, archiveRoot, err
+		}
+		if err := os.Rename(src, dst); err != nil {
+			return nil, archiveRoot, fmt.Errorf("archive reviewer scratch %q: %w", rel, err)
+		}
+	}
+	return created, archiveRoot, nil
+}
+
+func reviewerScratchSegment(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "unknown"
+	}
+	return b.String()
 }
 
 // ---------------------------------------------------------------------------
