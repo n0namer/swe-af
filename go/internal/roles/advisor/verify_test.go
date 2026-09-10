@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -87,6 +88,53 @@ func TestRunVerifierSuccess(t *testing.T) {
 	}
 	if got := mh.lastOpts.SchemaMode; got != "single" {
 		t.Fatalf("verifier schema mode = %q, want single", got)
+	}
+}
+
+func TestRunVerifierArchivesOnlyNewUntrackedScratch(t *testing.T) {
+	repoPath := t.TempDir()
+	if err := exec.Command("git", "init", "-q", repoPath).Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	preexisting := filepath.Join(repoPath, "caller-owned.txt")
+	if err := os.WriteFile(preexisting, []byte("keep\n"), 0o644); err != nil {
+		t.Fatalf("write preexisting: %v", err)
+	}
+	archiveParent := filepath.Join(filepath.Dir(repoPath), ".verifier-scratch")
+	t.Cleanup(func() { _ = os.RemoveAll(archiveParent) })
+
+	mh := &mockHarness{fn: func(_ int, dest any) (*harness.Result, error) {
+		if err := os.WriteFile(filepath.Join(repoPath, "verification_result.json"), []byte("{}\n"), 0o644); err != nil {
+			t.Fatalf("write verifier scratch: %v", err)
+		}
+		d := dest.(*schemas.VerificationResult)
+		d.Passed = false
+		d.Summary = "boundary failure"
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	deps := &Deps{Harness: mh, App: &captureApp{}}
+	input := verifierInputMap()
+	input["repo_path"] = repoPath
+
+	if _, err := RunVerifier(context.Background(), deps, input); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoPath, "verification_result.json")); !os.IsNotExist(err) {
+		t.Fatalf("verifier scratch still in product worktree: err=%v", err)
+	}
+	if got, err := os.ReadFile(preexisting); err != nil || string(got) != "keep\n" {
+		t.Fatalf("pre-existing untracked file changed: got=%q err=%v", got, err)
+	}
+	matches, err := filepath.Glob(filepath.Join(archiveParent, verifierScratchSegment(filepath.Base(repoPath)), "run-*", "verification_result.json"))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("archived verifier scratch matches=%v err=%v", matches, err)
+	}
+	status, err := exec.Command("git", "-C", repoPath, "status", "--short").Output()
+	if err != nil {
+		t.Fatalf("git status: %v", err)
+	}
+	if got := strings.TrimSpace(string(status)); got != "?? caller-owned.txt" {
+		t.Fatalf("unexpected final worktree status: %q", got)
 	}
 }
 

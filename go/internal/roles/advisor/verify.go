@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/config"
 	"github.com/Agent-Field/SWE-AF/go/internal/dagutil"
@@ -14,7 +18,6 @@ import (
 	"github.com/Agent-Field/SWE-AF/go/internal/prompts/coding"
 	"github.com/Agent-Field/SWE-AF/go/internal/runtimex"
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
-	"strconv"
 )
 
 // ---------------------------------------------------------------------------
@@ -89,7 +92,21 @@ func RunVerifier(ctx context.Context, deps *Deps, input map[string]any) (any, er
 		SchemaMode:     "single",
 	}.ToOptions()
 
+	untrackedBefore, untrackedErr := verifierUntrackedPaths(in.RepoPath)
+	if untrackedErr != nil {
+		deps.note(ctx, fmt.Sprintf("Verifier scratch tracking unavailable: %v", untrackedErr), "verifier", "warning")
+	}
+
 	parsed, result, err := harnessx.Run[schemas.VerificationResult](ctx, deps.Harness, taskPrompt, opts)
+	if untrackedErr == nil {
+		archived, archiveRoot, archiveErr := archiveNewVerifierScratch(in.RepoPath, untrackedBefore)
+		if archiveErr != nil {
+			return nil, fmt.Errorf("verifier scratch archival failed: %w", archiveErr)
+		}
+		if len(archived) > 0 {
+			deps.note(ctx, fmt.Sprintf("Verifier archived scratch files: %s -> %s", strings.Join(archived, ", "), archiveRoot), "verifier", "scratch_archived")
+		}
+	}
 	if err != nil {
 		if isFatal(err) {
 			return nil, err
@@ -109,6 +126,77 @@ func RunVerifier(ctx context.Context, deps *Deps, input map[string]any) (any, er
 		Summary:         "Verifier agent failed to produce a valid result.",
 		SuggestedFixes:  []string{"Re-run verification manually."},
 	}, nil
+}
+
+func verifierUntrackedPaths(repoPath string) (map[string]struct{}, error) {
+	cmd := exec.Command("git", "-C", repoPath, "ls-files", "--others", "--exclude-standard", "-z")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	paths := map[string]struct{}{}
+	for _, rel := range strings.Split(string(out), "\x00") {
+		if rel != "" {
+			paths[rel] = struct{}{}
+		}
+	}
+	return paths, nil
+}
+
+func archiveNewVerifierScratch(repoPath string, before map[string]struct{}) ([]string, string, error) {
+	after, err := verifierUntrackedPaths(repoPath)
+	if err != nil {
+		return nil, "", err
+	}
+	var created []string
+	for rel := range after {
+		if _, existed := before[rel]; !existed {
+			created = append(created, rel)
+		}
+	}
+	if len(created) == 0 {
+		return nil, "", nil
+	}
+	sort.Strings(created)
+
+	archiveBase := filepath.Join(filepath.Dir(repoPath), ".verifier-scratch", verifierScratchSegment(filepath.Base(repoPath)))
+	if err := os.MkdirAll(archiveBase, 0o755); err != nil {
+		return nil, "", err
+	}
+	archiveRoot, err := os.MkdirTemp(archiveBase, "run-")
+	if err != nil {
+		return nil, "", err
+	}
+	for _, rel := range created {
+		clean := filepath.Clean(rel)
+		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
+			return nil, archiveRoot, fmt.Errorf("unsafe verifier scratch path %q", rel)
+		}
+		src := filepath.Join(repoPath, clean)
+		dst := filepath.Join(archiveRoot, clean)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return nil, archiveRoot, err
+		}
+		if err := os.Rename(src, dst); err != nil {
+			return nil, archiveRoot, fmt.Errorf("archive verifier scratch %q: %w", rel, err)
+		}
+	}
+	return created, archiveRoot, nil
+}
+
+func verifierScratchSegment(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "unknown"
+	}
+	return b.String()
 }
 
 // ---------------------------------------------------------------------------
