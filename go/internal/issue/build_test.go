@@ -628,6 +628,29 @@ func TestBlockingReviewFailsButSalvagesCommits(t *testing.T) {
 	}
 }
 
+func TestBlockingReviewDoesNotCheckpointUncommittedPartialWork(t *testing.T) {
+	repo := initRepo(t)
+	rec := &recorder{}
+	result := runImplement(t, repo,
+		scriptedCallFn(t, rec, scriptOpts{
+			coderWrites: true,
+			reviewerReplies: []map[string]any{
+				{"approved": false, "blocking": true, "summary": "missing required test"},
+			},
+		}),
+		map[string]any{"config": map[string]any{"verify": false}})
+
+	if result["success"] != false || result["outcome"] != "failed_unrecoverable" {
+		t.Fatalf("result = %v / %v", result["success"], result["outcome"])
+	}
+	if commits, ok := result["commits"].([]string); ok && len(commits) != 0 {
+		t.Fatalf("failed issue checkpointed partial work: %v", commits)
+	}
+	if branch, _ := result["branch"].(string); branch != "" {
+		t.Fatalf("failed uncommitted partial work should not become a delivery branch: %q", branch)
+	}
+}
+
 func TestNoCommitsDeletesBranch(t *testing.T) {
 	repo := initRepo(t)
 	rec := &recorder{}

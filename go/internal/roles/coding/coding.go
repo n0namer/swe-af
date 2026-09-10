@@ -227,6 +227,21 @@ func isRecoverableCoderHarnessError(err error) bool {
 		strings.Contains(msg, "Stream error occurred")
 }
 
+func reviewerVerdictOnlyPrompt(original string) string {
+	return original + `
+
+## RECOVERY MODE — VERDICT ONLY
+
+A previous reviewer process stalled. Do not restart broad exploration and do not delegate to subagents.
+
+1. Inspect the current git diff and the issue acceptance criteria first.
+2. Run at most the smallest focused discriminator/test needed to decide correctness; do not run broad suites unless they are the only available evidence.
+3. Do not modify source or test files.
+4. Immediately write the required structured review verdict and finish. If required evidence cannot be obtained, fail closed with a blocking evidence gap instead of continuing to investigate.
+
+The objective of this recovery pass is a bounded, auditable verdict — not more exploration.`
+}
+
 func coderFinishOnlyPrompt(original string) string {
 	return original + `
 
@@ -456,6 +471,11 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 	}
 
 	parsed, result, hErr := harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, taskPrompt, opts)
+	if hErr != nil && isRecoverableCoderHarnessError(hErr) {
+		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer transport stalled; retrying once in verdict-only mode: %s", issueName), "code_reviewer", "retry")
+		retryPrompt := reviewerVerdictOnlyPrompt(taskPrompt)
+		parsed, result, hErr = harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, retryPrompt, opts)
+	}
 	if untrackedErr == nil {
 		archived, archiveRoot, archiveErr := archiveNewReviewerScratch(in.WorktreePath, in.IterationID, untrackedBefore)
 		if archiveErr != nil {

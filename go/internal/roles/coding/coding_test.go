@@ -524,6 +524,48 @@ func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	}
 }
 
+func TestRunCodeReviewerRetriesNoProgressOnceInVerdictOnlyMode(t *testing.T) {
+	nr := &noteRecorder{}
+	worktree := t.TempDir()
+	if err := exec.Command("git", "init", "-q", worktree).Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	calls := 0
+	var prompts []string
+	mh := &mockHarness{fnWithOpts: func(prompt string, dest any, _ harness.Options) (*harness.Result, error) {
+		calls++
+		prompts = append(prompts, prompt)
+		if calls == 1 {
+			return nil, errors.New("CLI command made no progress for 90s: opencode run --format json")
+		}
+		rr := dest.(*schemas.CodeReviewResult)
+		rr.Approved = true
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	out, err := RunCodeReviewer(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"worktree_path": worktree,
+		"coder_result":  map[string]any{},
+		"issue":         map[string]any{"name": "review-stall"},
+		"iteration_id":  "review-retry",
+	})
+	if err != nil {
+		t.Fatalf("expected reviewer recovery, got %v", err)
+	}
+	if calls != 2 || len(prompts) != 2 {
+		t.Fatalf("expected one reviewer retry, calls=%d prompts=%d", calls, len(prompts))
+	}
+	if strings.Contains(prompts[0], "RECOVERY MODE") || !strings.Contains(prompts[1], "RECOVERY MODE — VERDICT ONLY") {
+		t.Fatalf("expected only retry to use verdict-only prompt: %q", prompts)
+	}
+	m := asMap(t, out)
+	if m["approved"] != true || m["iteration_id"] != "review-retry" {
+		t.Fatalf("unexpected recovered reviewer result: %v", m)
+	}
+	if !nr.hasTag("retry") {
+		t.Fatal("expected reviewer retry note")
+	}
+}
+
 func TestRunCodeReviewerArchivesOnlyNewUntrackedScratch(t *testing.T) {
 	nr := &noteRecorder{}
 	worktree := t.TempDir()
