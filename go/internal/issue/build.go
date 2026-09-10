@@ -230,19 +230,21 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 			deps.note(ctx, fmt.Sprintf("Junk scrub failed: %v", err),
 				"issue_build", "error")
 		}
-		if _, err := commitScoped(
-			worktreePath,
-			fmt.Sprintf("chore(%s): checkpoint uncommitted issue work", plannedName),
-			allowedPaths,
-		); err != nil {
-			deps.note(ctx, fmt.Sprintf("Checkpoint commit failed: %v", err),
-				"issue_build", "error")
+		codingOK := completedOutcomes[outcomeValue]
+		if codingOK {
+			if _, err := commitScoped(
+				worktreePath,
+				fmt.Sprintf("chore(%s): checkpoint uncommitted issue work", plannedName),
+				allowedPaths,
+			); err != nil {
+				deps.note(ctx, fmt.Sprintf("Checkpoint commit failed: %v", err),
+					"issue_build", "error")
+			}
 		}
 		commits = newCommits(repoPath, baseSHA, branch)
 		filesChanged = changedFiles(repoPath, baseSHA, branch)
 		stat = diffStat(repoPath, baseSHA, branch)
 
-		codingOK := completedOutcomes[outcomeValue]
 		if cfg.Verify && codingOK && len(commits) > 0 {
 			verification = runVerification(ctx, deps, cfg, execCfg, spec, planned,
 				worktreePath, absArtifacts, loopSummary)
