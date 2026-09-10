@@ -159,7 +159,7 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		// fail closed instead of prompting on external-directory access. Hidden
 		// permission asks cannot be answered in the non-interactive pipeline and
 		// otherwise leave a healthy provider run stuck indefinitely.
-		coderEnv["OPENCODE_CONFIG_CONTENT"] = `{"permission":{"external_directory":"deny"}}`
+		coderEnv["OPENCODE_CONFIG_CONTENT"] = `{"permission":{"task":"deny","external_directory":"deny"}}`
 		for _, venvName := range []string{".venv", "venv"} {
 			venvBin := filepath.Join(in.WorktreePath, venvName, "bin")
 			if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
