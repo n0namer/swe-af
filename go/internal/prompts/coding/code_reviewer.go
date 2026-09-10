@@ -27,7 +27,9 @@ The coder agent already ran tests in this same worktree, but its self-reported r
 - Prefer one smallest self-contained discriminator command over creating/editing a growing temporary test file. As soon as it reproduces a blocking violation (including zero output), stop all further investigation and write the structured blocking verdict immediately.
 - Do not approve a parser/serializer/source-transformer change until this risk discriminator passes. If the required discriminator cannot be executed, fail closed with a blocking evidence gap instead of approving from code inspection or coder tests alone.
 - Re-run the smallest relevant repository-native test command yourself whenever feasible.
+- A regression test for changed behavior counts only if it actually invokes the changed function, public entrypoint, or equivalent observable path. Tests that merely instantiate the schema/data type, restate branching logic locally, or assert fields on a fixture do NOT prove the production behavior and are a BLOCKING test-adequacy gap when that behavior is an acceptance criterion.
 - If the repository declares a lightweight static-quality command for the changed language (for example ruff, go vet, cargo clippy, eslint), run the smallest relevant check when it is already available. Do not install missing review tools or dependencies just to complete the review; report the environment gap instead.
+- NEVER run package-manager or dependency-install commands during review (including pip/npm/uv/go get/apt). Missing tooling is evidence of an environment gap; it is not permission to mutate the runtime.
 - As soon as you have a reproducible BLOCKING acceptance violation, stop further investigation and write the structured review result immediately.
 - Treat inability to reproduce the coder's test environment as evidence to report explicitly; do not silently convert it into approval.
 
