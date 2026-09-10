@@ -54,14 +54,18 @@ func (n *noteRecorder) hasTag(tag string) bool {
 // router.harness. It scripts the (*harness.Result, error) reply and records the
 // options it was called with (so guardrail/cwd/tools can be asserted).
 type mockHarness struct {
-	fn      func(dest any) (*harness.Result, error)
-	gotOpts harness.Options
-	called  bool
+	fn         func(dest any) (*harness.Result, error)
+	fnWithOpts func(prompt string, dest any, opts harness.Options) (*harness.Result, error)
+	gotOpts    harness.Options
+	called     bool
 }
 
-func (m *mockHarness) Harness(_ context.Context, _ string, _ map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
+func (m *mockHarness) Harness(_ context.Context, prompt string, _ map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
 	m.called = true
 	m.gotOpts = opts
+	if m.fnWithOpts != nil {
+		return m.fnWithOpts(prompt, dest, opts)
+	}
 	return m.fn(dest)
 }
 
@@ -374,8 +378,10 @@ func TestRunCoderTransportErrorFailsClosed(t *testing.T) {
 func TestRunCoderRetriesNoProgressOnceInPlace(t *testing.T) {
 	nr := &noteRecorder{}
 	calls := 0
-	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
+	var prompts []string
+	mh := &mockHarness{fnWithOpts: func(prompt string, dest any, _ harness.Options) (*harness.Result, error) {
 		calls++
+		prompts = append(prompts, prompt)
 		if calls == 1 {
 			return nil, errors.New("CLI command made no progress for 300s: opencode run --format json")
 		}
@@ -394,6 +400,12 @@ func TestRunCoderRetriesNoProgressOnceInPlace(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("expected exactly one retry, calls=%d", calls)
+	}
+	if len(prompts) != 2 || strings.Contains(prompts[0], "RECOVERY MODE") || !strings.Contains(prompts[1], "RECOVERY MODE — FINISH EXISTING WORK ONLY") {
+		t.Fatalf("expected only retry prompt to enter finish-only recovery mode, prompts=%q", prompts)
+	}
+	if !strings.Contains(prompts[1], "Inspect git status and the existing diff first") || !strings.Contains(prompts[1], "Immediately write the required structured output file and finish") {
+		t.Fatalf("finish-only retry prompt missing completion contract: %q", prompts[1])
 	}
 	m := asMap(t, out)
 	if m["complete"] != true || m["iteration_id"] != "it-stall" {

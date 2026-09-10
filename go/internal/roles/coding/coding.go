@@ -183,11 +183,14 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 	if hErr != nil && isRecoverableCoderHarnessError(hErr) {
 		// A no-progress watchdog is a liveness guard, not a semantic verdict. The
 		// first OpenCode process may already have edited/tested the worktree before
-		// its provider stream stalls. Retry once in the SAME worktree so the second
-		// process can observe and finish that partial work instead of discarding it.
-		// Keep this narrow: fatal/schema/provider failures remain fail-closed.
-		deps.Note.Note(ctx, fmt.Sprintf("Coder transport stalled; retrying once in-place: %s", issueName), "coder", "retry")
-		parsed, result, hErr = harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
+		// its provider stream stalls. Retry once in the SAME worktree, but switch
+		// to a finish-only recovery prompt: re-running the original exploration
+		// prompt made the second process repeat work and stall again after a valid
+		// partial source edit. Keep this narrow: fatal/schema/provider failures
+		// remain fail-closed.
+		deps.Note.Note(ctx, fmt.Sprintf("Coder transport stalled; retrying once in finish-only mode: %s", issueName), "coder", "retry")
+		retryPrompt := coderFinishOnlyPrompt(taskPrompt)
+		parsed, result, hErr = harnessx.Run[schemas.CoderResult](ctx, deps.Harness, retryPrompt, opts)
 	}
 	if hErr != nil {
 		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, hErr.Error()), "coder", "error")
@@ -222,6 +225,23 @@ func isRecoverableCoderHarnessError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "CLI command made no progress") ||
 		strings.Contains(msg, "Stream error occurred")
+}
+
+func coderFinishOnlyPrompt(original string) string {
+	return original + `
+
+## RECOVERY MODE — FINISH EXISTING WORK ONLY
+
+A previous coder process stalled after it may already have changed this worktree. Do not restart exploration and do not delegate to subagents.
+
+1. Inspect git status and the existing diff first.
+2. Preserve correct existing edits; make only the smallest changes still required by the acceptance criteria.
+3. Create any required tests that are still missing.
+4. Run the focused validation requested by the issue. If its runner is unavailable, record that fact and run the strongest available syntax/build check instead.
+5. Review git status, stage only intentional source/test files, and commit them on the current branch.
+6. Immediately write the required structured output file and finish.
+
+Do not spend time re-investigating already-obvious code. The objective of this recovery pass is completion: tests, validation, clean bounded commit, structured result.`
 }
 
 func providerErrorFromMessages(messages []map[string]any) string {
