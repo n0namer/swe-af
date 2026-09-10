@@ -53,8 +53,8 @@ user_environment:
       description: Coding runtime for every role (claude_code | open_code | codex)
       default: open_code
     - name: SWE_DEFAULT_MODEL
-      description: Override the model id for every role (e.g. openai/deepseek-ai/DeepSeek-V4-Flash-0731)
-      default: openai/deepseek-ai/DeepSeek-V4-Flash-0731
+      description: Virtual FCM model id used by every SWE role; FCM owns upstream model routing
+      default: fcm/fcm
     - name: AGENTFIELD_HARNESS_IDLE_SECONDS
       description: >-
         Idle-output watchdog for harness CLI subprocesses. SWE defaults this to 0
