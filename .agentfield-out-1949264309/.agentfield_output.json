@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "dimension_id": "goroutine-safety",
+      "dimension_name": "Goroutine Safety Analysis",
+      "file_path": "/src/swe-af/go/internal/harnessx/schema.go",
+      "line_start": 230,
+      "line_end": 312,
+      "severity": "important",
+      "title": "Goroutine leak on panic in executeStructured",
+      "body": "The startStructuredOutputCapture function starts a goroutine that runs indefinitely until cancelled. In executeStructured (line 114), the cleanup function is called immediately after app.Harness returns, but there is no defer statement. If app.Harness panics, the cleanup function is never called, causing the goroutine to leak indefinitely. The goroutine will continue looping, calling filepath.Glob every 20ms and consuming CPU resources.",
+      "evidence": "Step 1: executeStructured calls startStructuredOutputCapture at line 114, which starts a goroutine that loops until cancelled\nStep 2: The goroutine executes `for { scan(); select { case <-watchCtx.Done(): return; case <-ticker.C: } }` indefinitely\nStep 3: If app.Harness(ctx, prompt, schema, &dest, opts) at line 115 panics, the function stack unwinds\nStep 4: The cleanup function stopOutputCapture() at line 116 is never called due to the panic\nStep 5: The goroutine continues running indefinitely, calling filepath.Glob every 20ms without cleanup",
+      "suggestion": "Modify executeStructured to use a defer statement to ensure cleanup is called even if app.Harness panics. Change the pattern from: `stopOutputCapture := startStructuredOutputCapture[T](ctx, opts.ProjectDir, schema); result, err := app.Harness(...); capturedOutput := stopOutputCapture()` to: `var capturedOutput []byte; stopOutputCapture := startStructuredOutputCapture[T](ctx, opts.ProjectDir, schema); defer func() { capturedOutput = stopOutputCapture() }(); result, err := app.Harness(...)`",
+      "tags": ["goroutine-leak", "resource-management", "panic-handling"]
+    }
+  ],
+  "sub_reviews": []
+}

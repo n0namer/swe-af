@@ -1,16 +1,16 @@
 {
   "findings": [
     {
-      "dimension_id": "error-handling-consistency",
-      "dimension_name": "Inconsistent error propagation pattern",
+      "dimension_id": "seeddefaults-error-masking",
+      "dimension_name": "seedDefaults error masking potential diagnostic issues",
       "file_path": "/src/swe-af/go/internal/harnessx/schema.go",
-      "line_start": 134,
-      "line_end": 134,
-      "severity": "important",
-      "title": "Inconsistent error propagation after CLI no-progress recovery",
-      "body": "At line 134, the code returns `return nil, result, err` for any error that doesn't contain 'CLI command made no progress'. However, the recovery logic at lines 122-131 already sets error to nil when recovery succeeds. This creates an inconsistent pattern: for CLI no-progress errors, recovery attempts are made and error is set to nil on success, but for other errors, the original error is returned immediately without any recovery attempts.",
-      "evidence": "Step 1: Line 115 calls app.Harness, potentially returning error\nStep 2: Line 121 checks if error contains 'CLI command made no progress'\nStep 3: If yes, lines 122-131 attempt recovery and return with error=nil on success\nStep 4: Line 134 returns `nil, result, err` for all other errors without any recovery attempts\nStep 5: This creates inconsistent behavior - CLI no-progress errors get recovery attempts, other errors don't, even if they might be recoverable through the same mechanisms",
-      "suggestion": "Consider adding a general recovery mechanism for non-fatal errors before the fallback at line 134. This would ensure consistent recovery behavior across different types of harness failures, not just CLI no-progress errors."
+      "line_start": 150,
+      "line_end": 152,
+      "severity": "critical",
+      "title": "seedDefaults masks diagnostic information about system failures",
+      "body": "The seedDefaults fallback at lines 150-152 silently converts potential diagnostic information into a default-seeded value, hiding critical system issues. When result == nil (indicating a fundamental API/auth/provider failure) or result.Parsed == nil due to unexpected errors, the code returns a default value with nil error instead of propagating the diagnostic information. This violates the error handling principle that billing/auth/provider failures should not be hidden behind default values.",
+      "evidence": "Step 1: app.Harness returns result, err where result could be nil due to API failures\nStep 2: fatal.CheckFatalHarnessError already filters out some fatal errors at line 137\nStep 3: But if result is nil due to non-fatal but diagnostic-worthy errors, line 150 triggers seedDefaults\nStep 4: Line 151 returns &seeded, result, nil - masking the fact that result was nil and hiding potentially important diagnostic information\nStep 5: Callers like Run cannot distinguish between successful execution and system failures that were masked by defaults",
+      "suggestion": "Add diagnostic information preservation before seedDefaults fallback. Either: 1) Keep the original result when result == nil to preserve diagnostic information, or 2) Add error context in the result.FailureType to distinguish actual failures from fallback scenarios, ensuring diagnostic errors are not masked as successful default-seeded responses."
     }
   ],
   "sub_reviews": []
