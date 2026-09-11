@@ -450,7 +450,7 @@ func TestRoleOptionsOpenCodeUsesOnlySWEOwnedBinary(t *testing.T) {
 	}
 }
 
-func TestRunCentralizesOpenCodeIncrementalSchemaMode(t *testing.T) {
+func TestRunCentralizesOpenCodeSingleSchemaMode(t *testing.T) {
 	seenMode := ""
 	mh := &mockHarness{
 		fn: func(_ context.Context, _ string, _ map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
@@ -466,8 +466,8 @@ func TestRunCentralizesOpenCodeIncrementalSchemaMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if seenMode != "incremental" {
-		t.Fatalf("central structured controller must enable incremental mode, got %q", seenMode)
+	if seenMode != "single" {
+		t.Fatalf("central structured controller must avoid forced incremental tool loops, got %q", seenMode)
 	}
 	if out == nil || out.Scope != "large" {
 		t.Fatalf("unexpected parsed result: %+v", out)
