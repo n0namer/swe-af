@@ -52,6 +52,11 @@ user_environment:
     - name: SWE_DEFAULT_RUNTIME
       description: Coding runtime for every role (claude_code | open_code | codex)
       default: open_code
+    - name: SWE_OPENCODE_BIN
+      description: >-
+        Path to the SWE-owned OpenCode wrapper/binary used when the coding runtime
+        is open_code. Set this explicitly when the wrapper is not discoverable by
+        the node runner.
     - name: SWE_DEFAULT_MODEL
       description: Virtual FCM model id used by every SWE role; FCM owns upstream model routing
       default: fcm/fcm
