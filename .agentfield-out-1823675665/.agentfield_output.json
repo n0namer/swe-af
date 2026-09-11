@@ -1,0 +1,29 @@
+{
+  "findings": [
+    {
+      "dimension_id": "structured-output-recovery-logic",
+      "dimension_name": "executeStructured error handling and fallback behavior",
+      "file_path": "/src/swe-af/go/internal/harnessx/schema.go",
+      "line_start": 143,
+      "line_end": 143,
+      "severity": "important",
+      "title": "Incorrect condition for schema recovery attempt",
+      "body": "The condition `if result != nil && result.Parsed == nil && (result.FailureType == harness.FailureSchema || result.FailureType == harness.FailureNoOutput || result.FailureType == harness.FailureNone)` at line 143-144 has a logical issue. It requires both result != nil AND result.Parsed == nil, which means if result is nil entirely, this recovery block is skipped and the code falls through to the seedDefaults fallback at line 150. This creates inconsistent recovery behavior - schema recovery is only attempted for non-nil results with nil parsed data, but not for nil results entirely.",
+      "evidence": "Step 1: executeStructured calls app.Harness at line 115 and gets a result with possible error\nStep 2: If result is nil but err is nil (indicating a systemic issue), lines 143-144 skip schema recovery because result == nil fails the condition\nStep 3: Code falls through to line 150 which triggers seedDefaults for nil results\nStep 4: This creates inconsistent behavior - schema recovery handles FailureSchema/NoneNoOutput types, but seedDefaults handles nil results entirely, missing the opportunity for schema recovery in cases where result is nil but error might contain recoverable structured data",
+      "suggestion": "Fix the condition to explicitly handle both cases: if (result != nil && result.Parsed == nil && ...) for existing schema recovery logic, and add a separate check for result == nil cases that should attempt schema recovery from captured output before falling back to seedDefaults."
+    },
+    {
+      "dimension_id": "seeddefaults-fallback-condition",
+      "dimension_name": "seedDefaults fallback logic",
+      "file_path": "/src/swe-af/go/internal/harnessx/schema.go",
+      "line_start": 150,
+      "line_end": 150,
+      "severity": "important",
+      "title": "Overly broad seedDefaults trigger condition",
+      "body": "The condition `if result == nil || result.Parsed == nil` at line 150 is too broad. It triggers seedDefaults not just for legitimate fallback cases but also when result.Parsed is nil due to other reasons like valid empty results or struct types where nil parsed data is expected. This could mask legitimate empty results with default-seeded values, changing the semantic meaning of the response.",
+      "evidence": "Step 1: Some schemas may legitimately return empty results where result.Parsed is nil\nStep 2: Line 150 condition treats this as a failure condition requiring seedDefaults\nStep 3: seedDefaults() creates a new zero-value instance and overwrites the potentially intentional empty result\nStep 4: This changes the semantic meaning - instead of preserving intentional empty results, the code forces a default-seeded value",
+      "suggestion": "Restrict the seedDefaults fallback to only cases where there's actual evidence of failure, not just nil parsed data. Consider checking FailureType and other diagnostic fields to distinguish between legitimate empty results and actual parsing failures."
+    }
+  ],
+  "sub_reviews": []
+}
