@@ -92,6 +92,11 @@ func Handlers() map[string]Handler {
 // codingTools is the coder/qa allowed-tool list (Python passes this verbatim).
 var codingTools = []string{"Read", "Write", "Edit", "Bash", "Glob", "Grep"}
 
+// openCodeNoInstallPermissionOverlay keeps autonomous read/test/build commands
+// available while fail-closing dependency installation and cross-worktree
+// virtualenv execution. The current worktree virtualenv is prepended to PATH.
+const openCodeNoInstallPermissionOverlay = `{"permission":{"task":"deny","external_directory":"deny","bash":{"*":"allow","pip install *":"deny","pip3 install *":"deny","python -m pip install *":"deny","python3 -m pip install *":"deny","uv pip install *":"deny","uv add *":"deny","npm install *":"deny","npm i *":"deny","pnpm install *":"deny","pnpm add *":"deny","yarn install *":"deny","yarn add *":"deny","go get *":"deny","apt install *":"deny","apt-get install *":"deny","apk add *":"deny","*/.worktrees/*/.venv/bin/*":"deny","*/.worktrees/*/venv/bin/*":"deny"}}}`
+
 // reviewerTools is the code-reviewer allowed-tool list. Edit is required by
 // the incremental structured-output contract used to build the verdict file.
 var reviewerTools = []string{"Read", "Write", "Edit", "Glob", "Grep", "Bash"}
@@ -159,7 +164,7 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		// fail closed instead of prompting on external-directory access. Hidden
 		// permission asks cannot be answered in the non-interactive pipeline and
 		// otherwise leave a healthy provider run stuck indefinitely.
-		coderEnv["OPENCODE_CONFIG_CONTENT"] = `{"permission":{"task":"deny","external_directory":"deny"}}`
+		coderEnv["OPENCODE_CONFIG_CONTENT"] = openCodeNoInstallPermissionOverlay
 		for _, venvName := range []string{".venv", "venv"} {
 			venvBin := filepath.Join(in.WorktreePath, venvName, "bin")
 			if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
