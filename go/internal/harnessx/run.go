@@ -10,6 +10,12 @@ import (
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
 )
 
+// OpenCodeNoInstallPermissionOverlay keeps autonomous read/test/build commands
+// available while fail-closing dependency installation and cross-worktree
+// virtualenv execution. Role code may prepend the current worktree's virtualenv
+// to PATH; absolute sibling-worktree runners remain denied.
+const OpenCodeNoInstallPermissionOverlay = `{"permission":{"task":"deny","external_directory":"deny","bash":{"*":"allow","pip install *":"deny","pip3 install *":"deny","python -m pip install *":"deny","python3 -m pip install *":"deny","uv pip install *":"deny","uv add *":"deny","npm install *":"deny","npm i *":"deny","pnpm install *":"deny","pnpm add *":"deny","yarn install *":"deny","yarn add *":"deny","go get *":"deny","apt install *":"deny","apt-get install *":"deny","apk add *":"deny","*/.worktrees/*/.venv/bin/*":"deny","*/.worktrees/*/venv/bin/*":"deny"}}}`
+
 // runIDFromContext extracts the build's run ID from the reasoner execution
 // context. In production this reads agent.ExecutionContextFrom(ctx).RunID, which
 // the SDK populates on the handler's ctx before dispatch. It is a package var

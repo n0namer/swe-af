@@ -254,7 +254,7 @@ func TestRunCoderPrefersRepoVirtualenvForOpenCode(t *testing.T) {
 	if got := mh.gotOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
 		t.Fatalf("coder virtualenv PATH not preferred: %q", got)
 	}
-	if got := mh.gotOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != `{"permission":{"task":"deny","external_directory":"deny"}}` {
+	if got := mh.gotOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != harnessx.OpenCodeNoInstallPermissionOverlay {
 		t.Fatalf("coder OpenCode permission overlay = %q", got)
 	}
 }
@@ -498,7 +498,7 @@ func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	if strings.Join(mh.gotOpts.Tools, ",") != "Read,Write,Edit,Glob,Grep,Bash" {
 		t.Fatalf("reviewer tool set mismatch: %v", mh.gotOpts.Tools)
 	}
-	if got := mh.gotOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != `{"permission":{"task":"deny","external_directory":"deny"}}` {
+	if got := mh.gotOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != harnessx.OpenCodeNoInstallPermissionOverlay {
 		t.Fatalf("reviewer OpenCode permission overlay mismatch: %q", got)
 	}
 	if got := mh.gotOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {

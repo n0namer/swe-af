@@ -13,6 +13,7 @@ import (
 
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
 
+	"github.com/Agent-Field/SWE-AF/go/internal/harnessx"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
 )
@@ -83,7 +84,7 @@ func TestRunVerifierSuccess(t *testing.T) {
 	if got := mh.lastOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
 		t.Fatalf("verifier virtualenv PATH not preferred: %q", got)
 	}
-	if got := mh.lastOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != `{"permission":{"task":"deny","external_directory":"deny"}}` {
+	if got := mh.lastOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != harnessx.OpenCodeNoInstallPermissionOverlay {
 		t.Fatalf("verifier OpenCode permission overlay = %q", got)
 	}
 	if got := mh.lastOpts.SchemaMode; got != "single" {
