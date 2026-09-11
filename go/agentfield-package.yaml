@@ -61,6 +61,11 @@ user_environment:
         because the installed OpenCode wrapper buffers stdout/stderr until the
         command exits; the SDK total timeout remains the bounded liveness guard.
       default: "0"
+    - name: AGENT_CALLBACK_URL
+      description: >-
+        Public base URL the control plane uses to call this node. Required for
+        containerized or remote deployments where localhost is not reachable
+        from the control plane.
     - name: SWE_OPENCLAW_HITL
       description: >-
         Use OpenClaw/Telegram as the human-in-the-loop surface when HAX is not
