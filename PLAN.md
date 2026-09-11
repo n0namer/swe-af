@@ -53,6 +53,20 @@ BROWNFIELD RECOVERY / PROVIDER ENABLEMENT / SEMANTIC ACCEPTANCE.
 
 Infrastructure bootstrap, exact-SHA reconciliation, discovery, and one real SWE SourceLoop capture are already proven. The first failed prerequisite in CURRENT permanent DEV is provider/bootstrap enablement: SWE is intentionally not started because its declared Anthropic/OpenRouter provider gate is unsatisfied. The evidence ladder is therefore provider contract -> SWE active/ready -> non-mutating smoke -> bounded `implement_issue`.
 
+### 2026-09-11 L3 semantic acceptance checkpoint
+
+Current gate: **FCM-only full L3 acceptance on `qa-synthesizer-fcm-l3-19`**.
+
+Fresh runtime readback shows live source identity remains `58c4e0d19081bc52363c120b7963a34cebb1e894` plus a large intentional dirty delta. The l3-19 issue worktree is terminal enough to contain bounded commit `53c2cca` on base `2c37498`, touching only `swe_af/reasoners/execution_agents.py` and `tests/test_qa_synthesizer_direct_schema.py`; its only remaining untracked product-tree item is `.agentfield-out-1432774580/` containing the coder completion envelope.
+
+Independent operator acceptance rejects `53c2cca` as final L3 evidence. Its new tests now *do* invoke the production function `run_qa_synthesizer`, closing the l3-18 vacuous-test defect, but the committed implementation still uses `hasattr(...)`/duck typing instead of strict `QASynthesisResult` validation. By contrast, the current live `/src/swe-af` delta already contains the minimal stricter repair: `isinstance(result, QASynthesisResult)` plus an explicit error note before fail-safe fallback, and a production-path regression test that exercises both a real BLOCK result and a non-schema object.
+
+Validation status is **PARTIAL / VALIDATION_BLOCKER**: system `python3` is available, but `pytest` is not installed and there is no repo `.venv`; installing test dependencies is explicitly forbidden for this acceptance lane, so no PASS may be claimed from this container alone. Previous prompt/role hardening and `make check` evidence remain historical evidence only until the exact current live delta is revalidated in an environment that already has the canonical test runner.
+
+Closed DoD so far: bounded candidate commit exists; regression now exercises the changed production entrypoint; live repair is strict-schema rather than duck-typed. Still open: prove actual OpenCode argv `-m fcm/fcm` for l3-19 from preserved runtime evidence; prove reviewer did not install dependencies and correctly graded test adequacy; prove repair/verifier/delivery behavior; remove/archive `.agentfield-out-*` outside the product worktree; run canonical tests without installing missing tooling; verify tested identity equals delivered identity.
+
+One next move: recover the l3-19 reviewer/verifier/wrapper evidence and exact process/model provenance from preserved runtime artifacts; then validate the existing strict live repair with the smallest already-provisioned canonical runner. Do not add broader prompt rules or install dependencies merely to manufacture a green test.
+
 ## Bounded Development Batches
 
 Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
