@@ -1,28 +1,16 @@
 {
   "findings": [
     {
-      "dimension_id": "structured-output-recovery-logic",
-      "dimension_name": "executeStructured error handling and fallback behavior",
+      "dimension_id": "error-handling-consistency",
+      "dimension_name": "Inconsistent error propagation pattern",
       "file_path": "/src/swe-af/go/internal/harnessx/schema.go",
-      "line_start": 143,
-      "line_end": 143,
+      "line_start": 134,
+      "line_end": 134,
       "severity": "important",
-      "title": "Incorrect condition for schema recovery attempt",
-      "body": "The condition `if result != nil && result.Parsed == nil && (result.FailureType == harness.FailureSchema || result.FailureType == harness.FailureNoOutput || result.FailureType == harness.FailureNone)` at line 143-144 has a logical issue. It requires both result != nil AND result.Parsed == nil, which means if result is nil entirely, this recovery block is skipped and the code falls through to the seedDefaults fallback at line 150. This creates inconsistent recovery behavior - schema recovery is only attempted for non-nil results with nil parsed data, but not for nil results entirely.",
-      "evidence": "Step 1: executeStructured calls app.Harness at line 115 and gets a result with possible error\nStep 2: If result is nil but err is nil (indicating a systemic issue), lines 143-144 skip schema recovery because result == nil fails the condition\nStep 3: Code falls through to line 150 which triggers seedDefaults for nil results\nStep 4: This creates inconsistent behavior - schema recovery handles FailureSchema/NoneNoOutput types, but seedDefaults handles nil results entirely, missing the opportunity for schema recovery in cases where result is nil but error might contain recoverable structured data",
-      "suggestion": "Fix the condition to explicitly handle both cases: if (result != nil && result.Parsed == nil && ...) for existing schema recovery logic, and add a separate check for result == nil cases that should attempt schema recovery from captured output before falling back to seedDefaults."
-    },
-    {
-      "dimension_id": "seeddefaults-fallback-condition",
-      "dimension_name": "seedDefaults fallback logic",
-      "file_path": "/src/swe-af/go/internal/harnessx/schema.go",
-      "line_start": 150,
-      "line_end": 150,
-      "severity": "important",
-      "title": "Overly broad seedDefaults trigger condition",
-      "body": "The condition `if result == nil || result.Parsed == nil` at line 150 is too broad. It triggers seedDefaults not just for legitimate fallback cases but also when result.Parsed is nil due to other reasons like valid empty results or struct types where nil parsed data is expected. This could mask legitimate empty results with default-seeded values, changing the semantic meaning of the response.",
-      "evidence": "Step 1: Some schemas may legitimately return empty results where result.Parsed is nil\nStep 2: Line 150 condition treats this as a failure condition requiring seedDefaults\nStep 3: seedDefaults() creates a new zero-value instance and overwrites the potentially intentional empty result\nStep 4: This changes the semantic meaning - instead of preserving intentional empty results, the code forces a default-seeded value",
-      "suggestion": "Restrict the seedDefaults fallback to only cases where there's actual evidence of failure, not just nil parsed data. Consider checking FailureType and other diagnostic fields to distinguish between legitimate empty results and actual parsing failures."
+      "title": "Inconsistent error propagation after CLI no-progress recovery",
+      "body": "At line 134, the code returns `return nil, result, err` for any error that doesn't contain 'CLI command made no progress'. However, the recovery logic at lines 122-131 already sets error to nil when recovery succeeds. This creates an inconsistent pattern: for CLI no-progress errors, recovery attempts are made and error is set to nil on success, but for other errors, the original error is returned immediately without any recovery attempts.",
+      "evidence": "Step 1: Line 115 calls app.Harness, potentially returning error\nStep 2: Line 121 checks if error contains 'CLI command made no progress'\nStep 3: If yes, lines 122-131 attempt recovery and return with error=nil on success\nStep 4: Line 134 returns `nil, result, err` for all other errors without any recovery attempts\nStep 5: This creates inconsistent behavior - CLI no-progress errors get recovery attempts, other errors don't, even if they might be recoverable through the same mechanisms",
+      "suggestion": "Consider adding a general recovery mechanism for non-fatal errors before the fallback at line 134. This would ensure consistent recovery behavior across different types of harness failures, not just CLI no-progress errors."
     }
   ],
   "sub_reviews": []
