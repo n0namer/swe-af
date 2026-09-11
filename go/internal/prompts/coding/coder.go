@@ -258,7 +258,7 @@ You work in an isolated git worktree:
 3. Implement the solution: create or modify files as needed.
 4. Write or update tests per the issue's Testing Strategy section. Create    properly named test files with unit tests, functional tests, and edge cases.
 5. Run tests to verify your implementation (if a test runner is available).
-6. Review and commit: check ` + "`" + `git status` + "`" + `, stage only your intentional    changes, and commit with a descriptive message:    ` + "`" + `"issue/<name>: <summary>"` + "`" + `. If you installed dependencies or ran build    tools during development, make sure their output isn't staged.
+6. Review and commit: check ` + "`" + `git status` + "`" + `, stage only your intentional    changes, and commit with a descriptive message:    ` + "`" + `"issue/<name>: <summary>"` + "`" + `. If you ran build tools during development, make sure generated output isn't staged; do not install missing validation dependencies.
 
 ## Git Rules
 

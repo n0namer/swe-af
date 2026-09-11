@@ -67,6 +67,16 @@ Closed DoD so far: bounded candidate commit exists; regression now exercises the
 
 One next move: recover the l3-19 reviewer/verifier/wrapper evidence and exact process/model provenance from preserved runtime artifacts; then validate the existing strict live repair with the smallest already-provisioned canonical runner. Do not add broader prompt rules or install dependencies merely to manufacture a green test.
 
+### 2026-09-11 L3-20 checkpoint
+
+Fresh same-case run `qa-synthesizer-fcm-l3-20` was executed from a planner rebuilt from exact live source. Actual process readback closed the FCM routing gate: both `/afhome/bin/opencode ... -m fcm/fcm` and the real OpenCode child argv contained `-m fcm/fcm`. The coder produced bounded commit `9e2877f` touching only `swe_af/reasoners/execution_agents.py` and `tests/test_qa_synthesizer_direct_schema.py`; it did not run dependency-install commands and did not manufacture a green test result when pytest was unavailable (`tests_passed` remained non-PASS).
+
+Independent operator inspection found the candidate tests still invalid: they passed a nonexistent `router=` keyword to `run_qa_synthesizer`, and one fallback assertion contradicted the real fail-safe summary. Hardened reviewer independently reproduced these defects, used no dependency installs, and correctly returned `approved=false, blocking=true`. Therefore the previous reviewer semantic fail-open is not reproduced on l3-20.
+
+The run did not reach repair/verifier/delivery because the temporary process-only planner disappeared after the blocking review; no live planner PID or listener on `127.0.0.1:8005` remained. Classify this as a current `AGENTFIELD_RUNTIME` / operator-session lifecycle blocker until a concrete process-exit cause is proven; do not relabel it as FCM/provider failure. The Go reviewer prompt already contains the stop-after-first-reproducible-blocker rule, so no broader duplicate reviewer prompt rule is justified from this run.
+
+Current DoD: FCM argv PASS; coder no-install behavior PASS; reviewer fail-closed semantic grading PASS; repair/verifier/delivery still OPEN. One next move: remove the remaining contradictory coder prompt sentence that normalizes prior dependency installs, validate exact live prompts, then relaunch the same case under a detached process-only planner whose lifetime is not coupled to a managed terminal session. Continue to require exact worktree/commit/operator evidence before L3 PASS.
+
 ## Bounded Development Batches
 
 Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
