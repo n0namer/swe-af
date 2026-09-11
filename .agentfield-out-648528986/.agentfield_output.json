@@ -1,0 +1,12 @@
+{
+  "body": "",
+  "confidence": 0.7,
+  "evidence": "",
+  "file_path": "",
+  "holds": true,
+  "line_end": 0,
+  "line_start": 0,
+  "severity": "important",
+  "suggestion": null,
+  "title": ""
+}
