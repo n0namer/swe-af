@@ -1,0 +1,88 @@
+{
+  "obligations": [
+    {
+      "id": "OBL-01",
+      "where": "go/internal/issue/build.go — delivery gate: `unexpectedCommitted := unexpectedPaths(filesChanged, allowedPaths)` and `dirtyPaths := worktreeStatusPaths(worktreePath)`; `if len(unexpectedCommitted) > 0 || len(dirtyPaths) > 0 { deliveryError = \"GIT_DELIVERY: ...\" }`, which forces `success = codingOK && len(commits) > 0 && verifyOK && deliveryError == \"\"`",
+      "relies_on": "scopedIssuePaths(spec) in the same file, which builds allowedPaths ONLY from spec.FilesToModify + spec.FilesToCreate (sanitizing away absolute/'..'/empty paths); and the coder prompts (go/internal/prompts/coding/coder.go) that direct the agent to also create test files in project test dirs and let it 'modify files as needed'",
+      "property": "Every file the coder legitimately changes or creates for a completed issue must appear verbatim (git path == spec path, slash-normalized) in files_to_modify/files_to_create — including tests, configs and renames — otherwise the checkpoint commit skips it (commitScoped stages only allowed paths) and the delivery gate fail-closes a semantically correct build. Any spec that under-lists its deliverable set must fail delivery; verify whether planned issue specs actually enumerate tests."
+    },
+    {
+      "id": "OBL-02",
+      "where": "go/internal/issue/build.go — `excludes := []string{\".worktrees/\", \".venv/\", \"venv/\"}` passed to `ensureLocalExcludes(repoPath, excludes)` after ensurePythonVirtualenv creates `<worktree>/.venv`; and go/internal/issue/gitops.go — `worktreeStatusPaths(worktreePath)` lists `git status --porcelain=v1 --untracked-files=all` minus isDeliveryJunk (pycache/.pyc/.pyo only)",
+      "relies_on": "ensureLocalExcludes writing `.venv/` and `venv/` into the MAIN repo's `.git/info/exclude` (gitops.go:344), and git sharing that common-dir exclude file with the linked worktree under `.worktrees/<id>-<name>/`",
+      "property": "The shared info/exclude file must apply inside the linked worktree so the bootstrapped `.venv` never appears in worktreeStatusPaths output; if the exclude does not apply to worktrees (or is written after status is computed), every Python issue build gets dirtyPaths non-empty, deliveryError is set, and no PR is ever created (maybeCreatePR is gated on deliveryError == \"\")."
+    },
+    {
+      "id": "OBL-03",
+      "where": "go/internal/harnessx/schema.go — executeStructured: `if strings.Contains(err.Error(), \"CLI command made no progress\") { ... recover ... }` returning `(recovered, result, nil)`; and go/internal/roles/coding/coding.go — isRecoverableCoderHarnessError matching `\"CLI command made no progress\"` and `\"Stream error occurred\"` to trigger the one-shot finish-only/verdict-only retry",
+      "relies_on": "The AgentField Go SDK harness package: the exact error strings it emits for the idle/no-progress watchdog and OpenCode stream failures, and the documented behavior that it deletes its temporary `.agentfield-out-*` output directory before returning the no-progress error",
+      "property": "The SDK error text must contain these exact substrings (and only for stall-class liveness failures, not semantic ones). If the SDK rewords, both the salvage path and the coder/reviewer single-retry path silently stop firing; conversely any other error carrying 'Stream error occurred' triggers an unbounded-worktree retry. Verify what messages the vendored SDK actually produces."
+    },
+    {
+      "id": "OBL-04",
+      "where": "go/internal/harnessx/schema.go — startStructuredOutputCapture: `pattern := filepath.Join(projectDir, \".agentfield-out-*\")`, reading `filepath.Join(newDirs[0], \".agentfield_output.json\")`, failing closed when more than one new dir appears; called with `opts.ProjectDir` in executeStructured",
+      "relies_on": "The SDK harness/CLI contract: it must create its structured-output directory under opts.ProjectDir (which RoleOptions.ToOptions sets = role Cwd = the issue worktree / repoPath) named `.agentfield-out-*` containing `.agentfield_output.json`, and remove it before returning; also this repo's .gitignore/excludes, which do NOT list `.agentfield-out-*`",
+      "property": "Output-dir location, name and file name must match the glob exactly and only one such dir may be created per Run invocation (else ambiguous=true and salvage silently yields nothing). Because `.agentfield-out-*` is untracked-and-not-ignored, a surviving dir after a failed run falls inside reviewerUntrackedPaths/verifierUntrackedPaths and will be os.Rename'd away by archiveNewReviewerScratch/archiveNewVerifierScratch before anyone can inspect it — the SDK must really delete it on the no-progress path for the interaction to be benign."
+    },
+    {
+      "id": "OBL-05",
+      "where": "go/internal/harnessx/schema.go — recoverStructuredText: the CoderResult-only branch `if reflect.TypeOf((*T)(nil)).Elem().Name() == \"CoderResult\" { var normalized T; json.Unmarshal(candidate, &normalized); ... compiled.Validate(normalizedData) ... }`",
+      "relies_on": "CoderResult.UnmarshalJSON in go/internal/schemas/defaults.go: its default-seeding (`*c = defaultCoderResult()` with Complete=true) must materialize every field so the re-marshaled object validates against schemaFor[CoderResult](); and the generated schema's required properties for CoderResult",
+      "property": "The default-seeded CoderResult must itself be schema-valid against the invopop-reflected schema (as compiled by santhosh-tekuri/jsonschema/v5, which must also accept the $schema draft the reflector emits). If any required property has no default, recovery silently never succeeds for coder runs and every stalled coder falls through to the hard error path."
+    },
+    {
+      "id": "OBL-06",
+      "where": "go/internal/schemas/defaults.go — CoderResult.UnmarshalJSON: weak-model `agent_retro` string is rewritten to `json.Marshal(map[string]any{\"summary\": retroText})` stored back into raw[\"agent_retro\"]",
+      "relies_on": "The downstream consumers of agent_retro: swe_af/execution/coding_loop.py:184 (`retro = coder_result.get(\"agent_retro\", {})` then `_memory_set(..., f\"retros/{issue_name}\", retro)`) and go/internal/coding/memory.go:113 (`if retro := coderResult[\"agent_retro\"]; isTruthy(retro)`), plus the CoderResult JSON schema where agent_retro is a free-form map (schemas/execution.go:383)",
+      "property": "Consumers must treat the normalized `{\"summary\": \"...\"}` shape as a meaningful retro (or at least not crash on it), and the schema must accept a map with a single `summary` key — otherwise the tolerance layer quietly produces retros that read as empty/opaque downstream."
+    },
+    {
+      "id": "OBL-07",
+      "where": "go/internal/node/node.go — resolveAIConfig: `if strings.TrimSpace(os.Getenv(\"AI_BASE_URL\")) == \"\" { if base := os.Getenv(\"OPENAI_BASE_URL\"); base != \"\" { c.BaseURL = base } }` and `c.Timeout = 30 * time.Minute` before `c.Validate()`",
+      "relies_on": "ai.DefaultConfig() in the AgentField Go SDK: (a) that it reads AI_BASE_URL itself, so the override only fires when the SDK-native var is absent; (b) that Validate() accepts a 30m Timeout; and (c) every reasoner-level timeout that wraps direct AI calls (e.g. callWithTimeout budgets in the coding loop, HITL DecisionTimeout of 20s in go/internal/hitl/wrapper.go) being the effective outer bound",
+      "property": "The SDK must populate BaseURL from AI_BASE_URL when set (else the override clobbers an SDK-managed base) and no caller may assume the previous 30s client timeout; conversely the 30m ceiling must not exceed any outer per-call deadline that relies on failing fast."
+    },
+    {
+      "id": "OBL-08",
+      "where": "opencode.json — new providers: gonka `\"options\": {\"apiKey\": \"{env:OPENAI_API_KEY}\", \"baseURL\": \"{env:AI_BASE_URL}\"}` and fcm `\"env\": [\"LLM_BROKER_API_KEY\"], \"baseURL\": \"{env:LLM_BROKER_BASE_URL}\"`; paired with go/agentfield-package.yaml making OPENAI_API_KEY the only required key and `SWE_DEFAULT_MODEL` defaulting to `fcm/fcm`",
+      "relies_on": "The harness Options.Env / hitl.InjectCredentialsIntoEnv path (go/internal/harnessx/run.go) that builds the OpenCode subprocess environment: it must propagate AI_BASE_URL (for gonka) and LLM_BROKER_API_KEY/LLM_BROKER_BASE_URL (for fcm) from the node process into the CLI, and the runtime must actually have LLM_BROKER_* set even though the package contract does not list them",
+      "property": "For the default fcm/fcm model to work, LLM_BROKER_API_KEY and LLM_BROKER_BASE_URL must be present in the OpenCode subprocess env (the package contract's require_one_of does not guarantee them); for gonka, AI_BASE_URL must reach the CLI — node.go only maps OPENAI_BASE_URL into the Go-side ai.Config, not into the opencode env. If env propagation drops either, baseURL resolves empty and calls hit the wrong endpoint with the Gonka/broker key."
+    },
+    {
+      "id": "OBL-09",
+      "where": "go/internal/roles/coding/coding.go — `reviewerEnv[\"OPENCODE_CONFIG_CONTENT\"] = harnessx.OpenCodeNoInstallPermissionOverlay` with the comment 'Keep autonomous task/subagent delegation available to the coder, but fail closed instead of prompting on external-directory access' — while the overlay itself sets `\"task\":\"deny\"` and `\"external_directory\":\"deny\"` (go/internal/harnessx/run.go OpenCodeNoInstallPermissionOverlay)",
+      "relies_on": "OpenCode's OPENCODE_CONFIG_CONTENT permission semantics for the `task` and `external_directory` keys, and the coder/reviewer system prompts plus recovery prompts (coderFinishOnlyPrompt says 'do not delegate to subagents'; reviewerVerdictOnlyPrompt likewise) that tell the agent what delegation it may use",
+      "property": "The comment's claim and the overlay must agree: with task:\"deny\" no role fed this overlay may delegate to subagents, so no prompt path (base coder prompt, recovery prompts, shadow decision resolver) may rely on the task tool being available; and 'deny' on external_directory must actually suppress the hidden permission prompt rather than stall the run, since the pipeline is non-interactive."
+    },
+    {
+      "id": "OBL-10",
+      "where": "go/internal/harnessx/run.go — executeStructured: `if opts.Provider == \"opencode\" && opts.SchemaMode == \"\" { opts.SchemaMode = \"incremental\" }`; RoleOptions.ToOptions copies `SchemaMode: r.SchemaMode`; RunCodeReviewer and RunVerifier (roles/advisor/verify.go) pass `SchemaMode: \"single\"`",
+      "relies_on": "The AgentField SDK `harness.Options` struct: a `SchemaMode` field must exist with exactly these accepted values (\"\", \"incremental\", \"single\") and defined per-provider behavior — including which modes are valid for claude/codex as well as opencode",
+      "property": "The SDK must accept/interpret these strings as intended (empty = provider default, incremental = SDK-built envelope, single = one-shot); if the SDK expects different tokens or ignores unknown values, the per-role override degrades silently and the centralized 'opencode→incremental' policy either never applies or errors on every call."
+    },
+    {
+      "id": "OBL-11",
+      "where": "go/internal/roles/planning/planning.go — RunProductManager direct-AI path: `directModel := strings.TrimPrefix(model, \"openai/\")`; `resp, aiErr := deps.AI.AI(ctx, taskPrompt, ai.WithSystem(...), ai.WithModel(directModel), ai.WithSchema(schemas.PRD{}))`, used whenever `deps.AI != nil` (wired unconditionally in go/internal/node/register.go as `AI: n.App`)",
+      "relies_on": "The node-level ai.Config produced by resolveAIConfig (node.go): its implicit provider and BaseURL (incl. the OPENAI_BASE_URL fallback) must route to the same [OI]-compatible backend the harness would use for model `fcm/fcm` (default SWE_DEFAULT_MODEL), and the SDK ai client's model-id convention must accept a `provider/model` composite (or a bare id) the same way the OpenCode `fcm` provider does",
+      "property": "The direct AI path must reach the FCM/Gonka endpoint with a model id the endpoint recognizes; `fcm/fcm` passed to ai.WithModel must not be sent verbatim to the [OI] API as an invalid model name (OpenCode treats it as provider 'fcm' + model 'fcm', the SDK AI client may not perform that split). If it does not hold, every PM run on the default config fails at resp.Into or the provider."
+    },
+    {
+      "id": "OBL-12",
+      "where": "go/internal/orch/resolve.go — `remoteBefore := remoteBranchSHA(ctx, repoPath, in.HeadBranch)` before run_pr_resolver, then on resolverReportInvalid: `verdict := classifyRemoteAdvance(remoteBefore, remoteAfter, localHeadSHA(ctx, repoPath))`; Attribution requires `localHead == remoteAfter` and sets `resolveResult[\"pushed\"] = true`",
+      "relies_on": "The pr_resolver agent pushing from THIS workspace clone (so its push tip equals repoPath's local HEAD), plus git semantics: `ls-remote origin` returning the full 40-char SHA comparable to `rev-parse HEAD`, and no third-party force-push landing between the localHead read and remoteAfter read",
+      "property": "Only this workspace's own push may be attributed; classifyRemoteAdvance must never set pushed=true when another actor moved the branch (Attributed requires exact SHA equality). The final success verdict stays `fixed && pushed` with 5b never raising fixed — verify the pr_resolver really pushes from this clone and that mapStr-based sentinel matching against ci.InvalidResolverReport covers every fallback shape run_pr_resolver can return (Go-only today; any Python pr-resolver fallback text would evade resolverReportInvalid)."
+    },
+    {
+      "id": "OBL-13",
+      "where": "go/internal/hitl/ask_user.go — OpenClaw fallback: `created = NewOpenClawApprovalRequest(\"ask-user\", p.ExecutionID)` (ID = `openclaw-<kind>-<execution>-<seq>` from a process-local atomic counter), noteSafe(GovernorPendingNote(...)), then agent.Pause blocked until the `/webhooks/approval` callback; PlanApprovalGate (orch/approval_gate.go) reuses the same scheme for plan-review",
+      "relies_on": "The SDK agent.Pause implementation: which id it registers for callback matching (must accept this client-chosen CreatedRequest.ID) and how /webhooks/approval authenticates callers; plus worker lifetime — the counter resets on process restart while an execution stays 'waiting'",
+      "property": "The webhook resolution must match this exact request id and the endpoint must be protected so only the OpenClaw bridge can resolve approvals (the PR narrative flags this as unevidenced); and the id must stay unique for the life of any worker that may hold a paused execution — a node restart that reuses `openclaw-...-<seq>` for a different pending decision would let one callback resolve the wrong gate. Also the wrapper's skip guard `if p.Hax == nil && !OpenClawHITLEnabled()` and RequestUserInputAndPause's governorFallback must evaluate SWE_OPENCLAW_HITL identically so no path pauses with no transport or drops a form that does have one."
+    },
+    {
+      "id": "OBL-14",
+      "where": "go/internal/coding/loop.go — runDefaultPath: reviewer error now `return \"\", \"\", nil, fmt.Errorf(\"reviewer failed for %s: %w\", issueName, rerr)` (previously approved=true fallback), and `} else { // blocking ... action = \"fix\" }` replacing the old `block` action; runFlaggedPath likewise returns the review error instead of an approving fallback",
+      "relies_on": "The caller of runDefaultPath/runFlaggedPath inside RunCodingLoop: it must convert this returned error into bounded iteration feedback (mirroring the new coder partial-work retry branch) rather than aborting the whole build; and the non-convergence guards — DetectStuckLoop (which by its doc counts non-blocking fix cycles) plus maxIterations — must still bound a blocking→fix cycle that now loops instead of terminating",
+      "property": "A failing or blocking reviewer must lead to a bounded retry-with-feedback, never an infinite fix loop (the stuck-detector's window/definition must still trip for blocking fix cycles) and never a silent approve-on-failure; verify the loop's error handling path for reviewer errors actually produces feedback and consumes an iteration."
+    }
+  ]
+}
