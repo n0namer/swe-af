@@ -18,7 +18,7 @@ func TestProbeCoderDefaultValidates(t *testing.T) {
 	// Compile exactly as recoverStructuredText does (checks $schema draft acceptance).
 	sbb, _ := json.Marshal(schema)
 	compiler := tekjsonschema.NewCompiler()
-	if err := compiler.AddResource("mem://probe.json", bytesReader(sbb)); err != nil {
+	if err := compiler.AddResource("mem://probe.json", strings.NewReader(string(sbb))); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	compiled, err := compiler.Compile("mem://probe.json")
