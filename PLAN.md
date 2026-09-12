@@ -445,16 +445,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-**F06 is reproduced and root-caused.** A Go AgentField planner restart can leave an accepted execution `running` because the Go SDK does not provide the per-process `instance_id` required by the control-plane restart-reap contract. The backstop stale reaper is too slow for autonomous no-overlap safety. FB-0 remains blocked until the supporting AgentField Go-agent restart contract is fixed and re-proven.
+F06 restart/state convergence is **VERIFIED/CLOSED for the current process-only runtime**. The production milestone remains blocked because autonomous full-Build acceptance is still 0/3; the next unknown must come from FB-0 attempt 5, not more infrastructure speculation.
 
 THIS BATCH:
-F06 fault injection and owner diagnosis are complete. No further SWE-AF product-code mutation is justified in this gate. The next implementation batch, after explicit supporting-platform scope authorization, is: add AgentField Go SDK process-instance parity with Python, add deterministic registration/heartbeat/restart tests, validate exact AgentField source, rebuild the existing DEV stack from exact pins, and rerun the same F06 probe before any FB-0 work.
+start FB-0 attempt 5 from clean frozen baseline `cdc39105e92937e0085410a656346471b2dc6834` using planner `/tmp/swe-planner-f06-sdk-20260913`, route `fcm/fcm`, and the already-proven recovery configuration. After START perform zero operator task-code edits; observe process/artifact/effect truth and stop at the first new evidence-backed lifecycle blocker.
 
 NORTH-STAR DELTA:
-converted a recurring stale-state/orphan symptom into an exact cross-component contract defect with reproducible execution evidence and a minimal authoritative owner-layer remedy; avoided an incorrect SWE retry/stale-timeout workaround.
+F06 removed the stale-running/orphan safety blocker: Go Agent processes now have stable per-process identity, shutdown cancels in-flight reasoners, and the same restart fault converges terminally with zero overlapping mutator. The critical path returns to autonomous Build correctness.
 
 STOP CONDITION:
-reached for this batch: the first F06 divergence is captured and root-caused. Do not start a second writer, FB-0, or a speculative control-plane-only upgrade. Persistent AgentField SDK/control-plane mutation is a supporting-platform release boundary and requires explicit authorization before APPLY.
+either FB-0 attempt 5 reaches autonomous terminal success and then passes canonical Go validation + independent oracle, or it identifies the first new full-lifecycle blocker. Write that blocker back before any further framework mutation. Durable publication of local AgentField commit `b1602458...` is required before a clean deployed-runtime milestone, but is not allowed to displace the current correctness gate.
 
 ## Acceptance Metrics Per Task
 
