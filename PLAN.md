@@ -305,16 +305,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-production acceptance has not yet exercised the top-level autonomous `orch.Build` lifecycle. Component-level `implement_issue` evidence is useful but insufficient; MICRO-2 proved a repairable verifier failure can terminate there without self-repair.
+FB-0 now reaches the correct OpenCode/FCM Product Manager path but exact PRD structured output fails under SWE's forced OpenCode `SchemaMode=single`. Compatibility audit proves pinned and current AgentField SDK suites are green, simple live structured output passes, exact PRD single-mode fails by copying the schema itself, and exact PRD incremental-mode passes on the same OpenCode/FCM/model stack.
 
 THIS BATCH:
-materialize a frozen local baseline from CURRENT tested `/src/swe-af`, then run exactly one `swe-planner.build` canary with the production recovery controls enabled (replanning, issue advisor/retries, integration testing, verifier-fix cycles, deterministic Git). Keep the proven `fcm/fcm` route. Disable only external GitHub PR/CI side effects for this first canary because they are outside the already-authorized local scope; do not claim CI coverage.
+make one bounded SWE policy correction only: Product Manager explicitly requests `SchemaMode=incremental`. Do not upgrade AgentField, change model/router, alter FCM, or globally switch all roles. Prove RED on PM harness options, apply the one-role change in `/src/swe-af`, run targeted planning + full Go validation, review the delta, rebuild the planner, then repeat the exact FB-0 full-Build canary from a clean frozen CURRENT baseline.
 
 NORTH-STAR DELTA:
-replace micro-harness confidence with direct evidence about whether the full SWE controller can autonomously plan, implement, validate, repair, verify and finalize one real SWE-AF change without operator task-code edits.
+unblock full-Build planning with a contract mode already proven executable on the exact PRD schema and current routed model, while preserving all other variables for causal evidence.
 
 STOP CONDITION:
-either the full Build reaches terminal success and then passes independent canonical validation/oracle, or one run identifies the first evidence-backed missing contract in the full lifecycle. At that point stop, write back, and repair only that proven framework gap before retrying the same canary.
+PM option RED -> GREEN, full Go suite PASS, rebuilt planner healthy, then the same FB-0 either advances beyond Product Manager or identifies the next single full-lifecycle blocker. Stop at that first new blocker and write it back before any further framework mutation.
 
 ## Acceptance Metrics Per Task
 
