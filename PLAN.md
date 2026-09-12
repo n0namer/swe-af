@@ -90,10 +90,13 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
   - runtime duration `2,092,499 ms` (~34.9 min); coder artifact reports `fallback_count=1`, `peak_models_routed=3`; numeric token/RUB cost is not recorded -> `EVIDENCE_MISSING`, not zero;
   - model-produced commit `8d28dcd49176d640853f333023ac842935b3a528` changed `go/internal/dag/executor.go` + `executor_test.go`, but reviewer explicitly noted the resume test did not actually exercise resume; reviewer PASS was therefore insufficient;
   - operator BMAD test-design / TDD review replaced the weak test with a deterministic downstream-interruption -> real `WithResume(true)` oracle. RED reproduced lost completed-state; minimal GREEN added immediate checkpoint after completed/failed/skipped results;
-  - final local task branch head `b0ebb1b` is clean; exact commit recovery tests PASS and `git diff --check` PASS;
-  - full candidate `go test ./...` has exactly one failure, `TestLevelFailureThresholdAborts`; the same failure reproduces on the exact base, so it is a pre-existing baseline failure and not a regression from this task;
-  - CURRENT live `/src/swe-af` already contained equivalent immediate-checkpoint semantics plus `TestResumeAfterCancellationDoesNotRepeatCompletedIssue`; that test PASS and fresh full CURRENT `/usr/local/go/bin/go test ./... -count=1` PASS;
-  - verdict: independently accepted fresh task **1/3** with explicit pre-existing target-base test limitation; it also satisfies the milestone's recovery/no-duplicate and multi-file task requirements. Duplicate effects observed: 0.
+  - BMAD test-design exposed a false-positive reviewer gate: the model-authored resume test did not execute the real resume path. A deterministic RED reproduced the gap; the bounded repair aligned the task branch with the already-proven CURRENT recovery semantics and corrected the stale baseline threshold assertion to test the real invariant (downstream issue `c` never executes despite bounded repair attempts);
+  - final exact task branch head `0cfe48c` is clean and changes only `go/internal/dag/executor.go` + `executor_test.go` relative to base;
+  - exact-commit targeted tests `TestResumeAfterCancellationDoesNotRepeatCompletedIssue|TestLevelFailureThresholdAborts` PASS;
+  - exact-commit full `/usr/local/go/bin/go test ./... -count=1` PASS;
+  - independent temporary oracle (not committed into the candidate) exercised interruption -> checkpoint -> real resume and observed effect counts `a=1`, `b=1`; PASS, then the oracle file was removed before commit;
+  - `git diff --check` PASS; duplicate effects observed: 0;
+  - verdict: independently accepted fresh task **1/3** with exact tested identity = delivered identity `0cfe48c`; it also satisfies the milestone's recovery/no-duplicate and multi-file task requirements.
 - Because L3-26 failed after L3-24/L3-25, those historical positives alone do not satisfy the fresh production streak; PR-1 starts the new controlled streak at 1/3.
 
 ### Supporting systems / non-P0 debt
