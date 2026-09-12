@@ -89,7 +89,42 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
 - Exact reflected PRD schema is only `1403` compact bytes (~350 estimated tokens), so AgentField `SchemaMode=auto` would **not** switch to incremental (`auto` threshold = 4000 estimated tokens). Explicit per-role policy is required for this schema/model pair.
 - CURRENT FCM runtime telemetry has one model with signal: `routerai/z-ai/glm-5.3-flash`, 6/6 successful backend calls. This is the strongest current model evidence but is not yet per-execution correlated.
 - Separate parity debt: commit `c8ff657` (2026-08-24) reduced Go planning/issue-writer defaults from architecture/Python `150` turns to `2`. However AgentField OpenCode provider ignores `Options.MaxTurns` entirely in both pinned and current upstream, so this does **not** explain the current OpenCode PM failure. It remains a cross-provider parity/config debt, not this batch's fix.
-- Decision: **do not upgrade AgentField as a speculative fix**. Current evidence localizes FB-0 PM failure to SWE's structured-output policy (`single`) interacting with the currently routed model on the PRD contract. Minimal next fix is PM-specific incremental schema mode, followed by the exact same full-Build canary.
+- Decision for PM/structured output: **do not upgrade AgentField as a speculative fix**. That failure was localized to SWE's structured-output policy interacting with the routed model and was repaired independently.
+
+### AgentField F06 restart/state convergence audit
+
+Controlled fault injection reproduced a distinct platform defect outside SWE task code:
+- exact execution: `exec_20260912_214730_j8rp9ycc` / run `run_20260912_214730_vtmgqo7a`, reasoner `swe-planner.run_git_init`;
+- execution was observed `running`, planner PID `529917` then received SIGTERM, and the same tested binary/env restarted as PID `535405`;
+- control-plane still reported the execution `running` at +0.5s, +2s, +5s, +20s and at later readback; old PID became a zombie, new planner was healthy/active, no OpenCode mutator remained, and the sacrificial main worktree stayed clean;
+- control-plane logs showed new planner registration but no terminalization/reap event for that execution. A second writer was intentionally **not** started after the first divergence.
+
+Deployed platform identity:
+- Coolify app `universal-solver-agentfield-exact-dev-git-20260825`, repository `n0namer/universal-solver`, branch `ops/pr-af-fcm-shared-20260902`, deployment commit `ffa6c6a56814b59da19903bd56c04f8cafdb44ae`;
+- compose pins AgentField control-plane/runtime source to exact SHA `4d337c1ae5104418311fcba414a1c2f85c2abb89` (2026-08-24).
+
+Root cause contract:
+- control-plane `AgentNode.InstanceID` explicitly defines a per-OS-process identity used to orphan/reap in-flight work after restart;
+- the Go AgentField SDK `NodeRegistrationRequest` has **no `instance_id` field**, in both deployed pin and current upstream; search of current `sdk/go` finds no `instance_id`/`InstanceID` support;
+- Python AgentField SDK is the reference implementation: it generates a fresh UUID4-hex `agent_instance_id` per `Agent` process and sends it in registration and heartbeats, with dedicated regression tests;
+- control-plane restart detection in both deployed and current code requires non-empty old/new instance IDs and a change between them. Therefore the Go planner is treated as a legacy opt-out and immediate restart reap cannot fire;
+- graceful Go SDK shutdown calls `/api/v1/nodes/:node_id/shutdown`, but the deployed handler updates node presence/status only; it does not terminalize accepted executions;
+- Go SDK then waits up to 5s in `http.Server.Shutdown`; long-running handler/subprocess lifetime is not independently proven contained after process exit;
+- stale cleanup is only a backstop: deployed defaults are `stale_execution_timeout=30m`, `cleanup_interval=1h`, insufficient as an autonomous no-overlap guarantee.
+
+Upstream chronology:
+- deployed `4d337...` already contains the basic restart reason and whole-agent reap path, so the defect is **not** absence of the status constant;
+- `2d7fc7264a7aaf5dd36fa4ed05ad55f8a297e117` (2026-08-31) adds instance-scoped reap/read identity and restart safety improvements;
+- `2638b9e92a1f9ee6c6f9a3cd223da231bf1ece86` (2026-08-31) closes additional dispatch/shutdown persistence holes;
+- however current upstream Go SDK still lacks process instance identity, so a control-plane-only upgrade is **not sufficient** for this Go planner.
+
+Decision / minimal owner-layer fix:
+1. do **not** patch SWE-AF for F06 and do not reduce stale timeouts as a substitute for process identity;
+2. AgentField Go SDK must gain process-scoped `instance_id` parity with Python: fresh ID once per Agent process, stable for that process, propagated on registration and heartbeat; tests must prove unique-across-process/stable-within-process/wire propagation;
+3. validate the exact AgentField SDK/control-plane candidate with canonical AgentField tests, then rebuild the existing DEV workforce/control-plane stack from exact SHAs and rerun the same F06 restart probe;
+4. F06 closes only when the old execution terminalizes/reconciles within the documented restart window and process/workspace readback proves no overlapping old/new mutator.
+
+This is a supporting-platform code + deployment release boundary, not the SWE container debugging loop. Persistent AgentField SDK/control-plane mutation requires explicit platform-scope authorization before APPLY.
 
 ### Test coverage / risk-based gap audit
 
