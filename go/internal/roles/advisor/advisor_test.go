@@ -320,14 +320,29 @@ func TestRunIssueAdvisorHaxDisabledStripsForm(t *testing.T) {
 // Contract: with HITL enabled and the form re-emitted every call, re-invocation
 // is bounded — budget 2 => 3 invocations, 2 pauses.
 func TestRunIssueAdvisorReInvocationBounded(t *testing.T) {
+	advisorCalls := 0
 	mh := &mockHarness{fn: func(_ int, dest any) (*harness.Result, error) {
-		d := dest.(*schemas.IssueAdvisorDecision)
-		d.Action = schemas.AdvisorActionAcceptWithDebt
-		d.AskUserForm = &schemas.AskUserForm{
-			Title:  "Need input",
-			Fields: []schemas.AskUserFormField{{ID: "q", Type: schemas.FieldTypeInput, Label: "?"}},
+		switch d := dest.(type) {
+		case *hitl.DecisionCase:
+			d.Rationale = "shadow recommendation"
+			d.Risk = "medium"
+			d.Confidence = 0.7
+			d.RecommendedMode = "HUMAN"
+			d.HumanRequired = true
+			d.ConsultedRoles = []string{"single_resolver"}
+			return &harness.Result{Parsed: dest}, nil
+		case *schemas.IssueAdvisorDecision:
+			advisorCalls++
+			d.Action = schemas.AdvisorActionAcceptWithDebt
+			d.AskUserForm = &schemas.AskUserForm{
+				Title:  "Need input",
+				Fields: []schemas.AskUserFormField{{ID: "q", Type: schemas.FieldTypeInput, Label: "?"}},
+			}
+			return &harness.Result{Parsed: dest}, nil
+		default:
+			t.Fatalf("unexpected harness dest %T", dest)
+			return nil, nil
 		}
-		return &harness.Result{Parsed: dest}, nil
 	}}
 	haxClient, _ := newHaxServer(t)
 	pauser := &fakePauser{}
@@ -341,8 +356,8 @@ func TestRunIssueAdvisorReInvocationBounded(t *testing.T) {
 	if _, err := RunIssueAdvisor(context.Background(), deps, issueAdvisorInputMap()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mh.calls != 3 {
-		t.Errorf("harness calls = %d, want 3 (budget 2 => 3 invocations)", mh.calls)
+	if mh.calls != 5 || advisorCalls != 3 {
+		t.Errorf("harness calls = %d, advisor calls = %d, want 5 total (3 advisor + 2 shadow decisions)", mh.calls, advisorCalls)
 	}
 	if pauser.calls != 2 {
 		t.Errorf("pause count = %d, want 2 (budget bound)", pauser.calls)

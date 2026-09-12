@@ -186,7 +186,15 @@ func newCallFn(app *agent.Agent) func(context.Context, string, map[string]any) (
 // config — keeps node startup working with no key: the QA-synthesizer LLM branch
 // is simply disabled and its deterministic fallback runs instead.
 func resolveAIConfig() *ai.Config {
-	if c := ai.DefaultConfig(); c.Validate() == nil {
+	c := ai.DefaultConfig()
+	// The harness/OpenAI-compatible lane uses OPENAI_BASE_URL, while the
+	// AgentField Go SDK's direct-AI config currently reads AI_BASE_URL. Preserve
+	// the configured OpenAI-compatible endpoint for direct-AI calls as well so
+	// the same provider contract is not silently rerouted to api.openai.com.
+	if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" && os.Getenv("AI_BASE_URL") == "" {
+		c.BaseURL = baseURL
+	}
+	if c.Validate() == nil {
 		return c
 	}
 	return nil

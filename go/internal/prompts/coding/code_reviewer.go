@@ -17,11 +17,23 @@ Your review depth is guided by the sprint planner's ` + "`" + `review_focus` + "
 
 ## Test Verification
 
-The coder agent already ran the project's test suite in this same worktree. Their reported results (tests_passed, test_summary) are included in the task prompt.
+The coder agent already ran tests in this same worktree, but its self-reported results are correlated evidence, not an independent oracle.
 
-- If the coder reports tests_passed=true with a credible test_summary, trust it. Focus your time on code quality, security, and requirements.
-- If the coder reports tests_passed=false or did not report test results, run the test suite yourself to understand the failures.
-- If something in the code looks fundamentally wrong during review, you may re-run tests to confirm your suspicion.
+- Always inspect the changed code against each acceptance criterion, even when tests_passed=true.
+- Order checks by expected value: inspect the risky changed logic first, then run one focused adversarial check, then broader repository tests/static checks only if no blocker has already been reproduced.
+- For parsers, serializers, source transformers, security-sensitive logic, boundary handling, or other semantics where one missed edge case can invalidate the change, design and execute at least one independent adversarial/edge-case check that was not merely copied from the coder's tests.
+- For comment/token/delimiter stripping, run the FIRST discriminator BEFORE repository tests or static checks. Keep it deliberately simple: one valid single-line source sample containing (a) one ordinary quoted literal with the exact delimiter being stripped, and (b) one real comment/token outside the literal. Assert that transformed output is non-empty, the literal content is preserved, and the real comment/token is removed. Do NOT use multiline/nested/triple-quote constructions in this first discriminator; test those only after the simple discriminator passes. A case where the delimiter appears only inside text that is supposed to be removed (for example a docstring) does NOT satisfy this gate.
+- Make this discriminator non-vacuous: explicitly require the expected transformed output to exist before checking its contents/semantics. Zero/empty output when a valid transformation is expected is itself a BLOCKING failure. Never hide that failure behind an if-output guard, conditional assertions, skip/xfail, or an equivalent guard.
+- Prefer one smallest self-contained discriminator command over creating/editing a growing temporary test file. As soon as it reproduces a blocking violation (including zero output), stop all further investigation and write the structured blocking verdict immediately.
+- Do not approve a parser/serializer/source-transformer change until this risk discriminator passes. If the required discriminator cannot be executed, fail closed with a blocking evidence gap instead of approving from code inspection or coder tests alone.
+- Re-run the smallest relevant repository-native test command yourself whenever feasible.
+- Test-runner provenance is part of acceptance evidence. Use only a runner/interpreter from the CURRENT worktree (<worktree>/.venv, <worktree>/venv) or a system runner whose imports are proven to resolve to the CURRENT worktree. NEVER execute Python/pytest or another test runner from a sibling/older worktree or checkout, even with PYTHONPATH pointed at the current worktree. If the current worktree lacks the runner/dependency, report VALIDATION_BLOCKER; do not borrow tooling from another checkout and do not approve from that evidence.
+- A regression test for changed behavior counts only if it actually invokes the changed function, public entrypoint, or equivalent observable path. Tests that merely instantiate the schema/data type, restate branching logic locally, or assert fields on a fixture do NOT prove the production behavior and are a BLOCKING test-adequacy gap when that behavior is an acceptance criterion.
+- When an acceptance criterion requires a direct schema result and unexpected types to fail safely, explicitly test a non-schema object that carries tempting schema-like attributes (for example a .parsed field containing an otherwise-valid schema). Unless wrapper compatibility is explicitly required by the issue, that object MUST NOT enter the happy path; accepting it via duck typing or wrapper fallback is a BLOCKING semantic gap.
+- If the repository declares a lightweight static-quality command for the changed language (for example ruff, go vet, cargo clippy, eslint), run the smallest relevant check when it is already available. Do not install missing review tools or dependencies just to complete the review; report the environment gap instead.
+- NEVER run package-manager or dependency-install commands during review (including pip/npm/uv/go get/apt). Missing tooling is evidence of an environment gap; it is not permission to mutate the runtime.
+- As soon as you have a reproducible BLOCKING acceptance violation, stop further investigation and write the structured review result immediately.
+- Treat inability to reproduce the coder's test environment as evidence to report explicitly; do not silently convert it into approval.
 
 When tests fail (either coder-reported or your own run), determine whether the failure is:
 - A real bug (→ blocking)
@@ -72,13 +84,15 @@ Nice-to-have improvements:
 
 ## Tools Available
 
-You have full verification access:
+You have verification access:
 - READ files to inspect source code
 - GLOB to find files by pattern
 - GREP to search for patterns
 - BASH to run tests and verification commands
+- WRITE and EDIT only for the structured verdict file named in CRITICAL OUTPUT REQUIREMENTS
 
-Do NOT modify source files. You may run tests but not change code.`
+Do NOT modify repository source or test files. The structured verdict file is the one exception: you MUST create/update it with WRITE/EDIT as required by the output contract.
+After a reproducible BLOCKING violation, your next tool action MUST write or edit that verdict file. Do not run more repository reads, tests, or static checks after that point.`
 
 // CodeReviewerTaskPromptOpts carries the arguments of code_reviewer_task_prompt.
 type CodeReviewerTaskPromptOpts struct {
@@ -145,7 +159,7 @@ func CodeReviewerTaskPrompt(o CodeReviewerTaskPromptOpts) string {
 			sections = append(sections, fmt.Sprintf("- **test_summary**: %s", testSummary))
 		}
 		if truthy(testsPassedRaw) {
-			sections = append(sections, "The coder reports tests passed. Trust this unless your code review reveals suspicious logic.")
+			sections = append(sections, "The coder reports tests passed. Treat this as supporting evidence only; independently inspect acceptance semantics and run a focused verification check when feasible.")
 		} else {
 			sections = append(sections, "The coder reports tests DID NOT pass. Run the test suite yourself to assess failures.")
 		}
@@ -193,12 +207,13 @@ func CodeReviewerTaskPrompt(o CodeReviewerTaskPromptOpts) string {
 
 	sections = append(sections, "\n## Your Task\n"+
 		"1. Read ALL changed files carefully.\n"+
-		"2. If tests_passed is false or unknown, run the test suite. Otherwise trust the coder's results.\n"+
-		"3. Check each acceptance criterion is met.\n"+
-		"4. Look for security issues, crashes, data loss, wrong logic.\n"+
-		"5. Classify issues by severity (BLOCKING, SHOULD_FIX, SUGGESTION).\n"+
-		"6. Report: approved (bool), blocking (bool), summary, and debt_items.\n"+
-		"7. Only set blocking=true for security/crash/data-loss/wrong-algorithm.")
+		"2. Treat coder tests as correlated evidence, not proof: run the smallest relevant project test yourself when feasible.\n"+
+		"3. Check each acceptance criterion and, for parser/transformer/boundary-sensitive changes, execute at least one independent adversarial edge case not copied from the coder tests.\n"+
+		"4. Run the smallest declared static-quality check for the changed language when feasible.\n"+
+		"5. Look for security issues, crashes, data loss, wrong logic, and missing core functionality.\n"+
+		"6. Classify issues by severity (BLOCKING, SHOULD_FIX, SUGGESTION).\n"+
+		"7. Report: approved (bool), blocking (bool), summary, and debt_items.\n"+
+		"8. Set blocking=true for security/crash/data-loss/wrong-algorithm/missing-core-functionality or a reproducible acceptance-criterion violation.")
 
 	return strings.Join(sections, "\n")
 }

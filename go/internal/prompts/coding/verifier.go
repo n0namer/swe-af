@@ -40,8 +40,10 @@ For each acceptance criterion in the PRD:
 2. **Inspect the code** — read the files changed by that issue. Does the
    implementation actually satisfy the criterion?
 3. **Run one build check** — a single compile/lint to confirm the codebase is healthy.
-4. **Spot-check tests** — run tests for any failed or risky modules, not the full suite.
-5. **Record evidence** — for each criterion, cite the specific files, functions,
+4. **Spot-check tests** — run tests for any failed or risky modules, not the full suite. A regression test counts only when it actually invokes the changed function, public entrypoint, or equivalent observable path; schema-only/fixture-only tests or tests that restate production branching logic locally do not prove the acceptance criterion and must fail that criterion conservatively.
+5. **Risk discriminator** — for parsers, serializers, source transformers, security-sensitive logic, or boundary handling, execute at least one independent adversarial check rather than relying on agent-written tests. For comment/token/delimiter stripping, run the FIRST discriminator before repository tests/static checks and keep it deliberately simple: one valid single-line source sample with one ordinary quoted literal containing the exact stripped delimiter plus one real comment/token outside the literal. Require non-empty transformed output, preserved literal content, and removed real comment/token. Do not use multiline/nested/triple-quote constructions until that simple discriminator passes. Never hide zero/empty output behind an if-output guard, conditional assertions, skip/xfail, or equivalent guard. Stop once the discriminator reproduces the failure. If it cannot be executed or does not pass, fail the affected criterion conservatively.
+6. **Boundary-negative discriminator** — when a criterion promises no-op behavior, idempotency, normalization stability, preservation, or correct boundary handling, execute at least one independent negative/boundary variant that is NOT copied from repository tests or the coder's examples. Vary a representation boundary relevant to the criterion: for text/source transforms this includes trailing-newline presence/absence, leading/trailing whitespace, empty/minimal input, and delimiter/quote form; for serializers/parsers use equivalent representation-shape boundaries. Compare semantics or exact no-op behavior as the criterion requires. A formatting-only change counts as a failure when the criterion promises no mutation/change. If the independent variant fails or cannot be executed, fail that criterion conservatively.
+7. **Record evidence** — for each criterion, cite the specific files, functions,
    test outputs, or code patterns that prove it passes or fails.
 
 ## Judgment Standards
@@ -169,15 +171,6 @@ func VerifierTaskPrompt(o VerifierTaskPromptOpts) string {
 			"risky areas. Do NOT recompile everything or rerun the full test suite.")
 	}
 
-	// --- Reference Paths ---
-	sections = append(sections, "\n## Reference Paths")
-	sections = append(sections, fmt.Sprintf("- Artifacts: %s", o.ArtifactsDir))
-	if o.ArtifactsDir != "" {
-		sections = append(sections, fmt.Sprintf("- PRD: %s/plan/prd.md", o.ArtifactsDir))
-		sections = append(sections, fmt.Sprintf("- Architecture: %s/plan/architecture.md", o.ArtifactsDir))
-		sections = append(sections, fmt.Sprintf("- Issues: %s/plan/issues/", o.ArtifactsDir))
-	}
-
 	// --- Completed Issues ---
 	sections = append(sections, "\n## Completed Issues")
 	if len(o.CompletedIssues) > 0 {
@@ -219,7 +212,7 @@ func VerifierTaskPrompt(o VerifierTaskPromptOpts) string {
 
 	// --- Instructions ---
 	sections = append(sections, "\n## Your Task\n"+
-		"1. Read the PRD and architecture documents for full context.\n"+
+		"1. Treat the PRD and acceptance criteria embedded above as authoritative; do not read artifacts or files outside the current repository/worktree.\n"+
 		"2. For each acceptance criterion, identify the responsible issue(s).\n"+
 		"3. Inspect the code changes made by completed issues.\n"+
 		"4. Run any existing tests relevant to the criteria.\n"+

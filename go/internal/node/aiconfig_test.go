@@ -6,7 +6,7 @@ import "testing"
 // "no key configured". t.Setenv restores originals at test end.
 func clearAIKeys(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{"OPENAI_API_KEY", "OPENROUTER_API_KEY", "AI_BASE_URL", "AI_MODEL"} {
+	for _, k := range []string{"OPENAI_API_KEY", "OPENROUTER_API_KEY", "OPENAI_BASE_URL", "AI_BASE_URL", "AI_MODEL"} {
 		t.Setenv(k, "")
 	}
 }
@@ -30,6 +30,20 @@ func TestResolveAIConfigWithoutKey(t *testing.T) {
 	clearAIKeys(t)
 	if cfg := resolveAIConfig(); cfg != nil {
 		t.Fatalf("resolveAIConfig() = %+v with no key, want nil", cfg)
+	}
+}
+
+func TestResolveAIConfigPreservesOpenAICompatibleBase(t *testing.T) {
+	clearAIKeys(t)
+	t.Setenv("OPENAI_API_KEY", "sk-test-fake")
+	t.Setenv("OPENAI_BASE_URL", "https://gonka.example/v1")
+
+	cfg := resolveAIConfig()
+	if cfg == nil {
+		t.Fatal("resolveAIConfig() = nil with OpenAI-compatible key/base, want non-nil")
+	}
+	if cfg.BaseURL != "https://gonka.example/v1" {
+		t.Fatalf("BaseURL = %q, want configured OPENAI_BASE_URL", cfg.BaseURL)
 	}
 }
 

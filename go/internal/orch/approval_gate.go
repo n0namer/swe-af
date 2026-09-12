@@ -57,9 +57,10 @@ func SetPauserProvider(f func(req ApprovalRequest) hitl.Pauser) {
 // a non-terminal outcome carrying the (possibly revised) plan to execute.
 func PlanApprovalGate(ctx context.Context, req ApprovalRequest) (ApprovalOutcome, error) {
 	hax := haxClientProvider()
-	if hax == nil || pauserProvider == nil {
-		// HITL disabled (no HAX_API_KEY) or no pauser wired — skip approval and
-		// proceed with the plan unchanged.
+	governorFallback := hax == nil && hitl.OpenClawHITLEnabled()
+	if (hax == nil && !governorFallback) || pauserProvider == nil {
+		// HITL disabled (neither HAX nor OpenClaw governor) or no pauser wired —
+		// skip approval and proceed with the plan unchanged.
 		return ApprovalOutcome{Terminal: false, PlanResult: req.PlanResult}, nil
 	}
 	pauser := pauserProvider(req)
@@ -117,17 +118,38 @@ func PlanApprovalGate(ctx context.Context, req ApprovalRequest) (ApprovalOutcome
 		}
 
 		descr := "Review the proposed implementation plan before execution begins"
-		created, err := createHaxRequestWithTimeout(ctx, deps, hax, hitl.CreateRequestParams{
-			Type:             "plan-review-v2",
-			Title:            title,
-			Description:      &descr,
-			Payload:          haxPayload,
-			WebhookURL:       webhookURL,
-			ExpiresInSeconds: expiresHours * 3600,
-			UserID:           userID,
-		}, revisionIter)
-		if err != nil {
-			return ApprovalOutcome{}, err
+		var created *hitl.CreatedRequest
+		var err error
+		if hax != nil {
+			created, err = createHaxRequestWithTimeout(ctx, deps, hax, hitl.CreateRequestParams{
+				Type:             "plan-review-v2",
+				Title:            title,
+				Description:      &descr,
+				Payload:          haxPayload,
+				WebhookURL:       webhookURL,
+				ExpiresInSeconds: expiresHours * 3600,
+				UserID:           userID,
+			}, revisionIter)
+			if err != nil {
+				return ApprovalOutcome{}, err
+			}
+		} else {
+			created = hitl.NewOpenClawApprovalRequest("plan-review", req.ExecutionID)
+			projectID := filepath.Base(filepath.Clean(req.RepoPath))
+			if strings.TrimSpace(cfg.RepoURL) != "" {
+				projectID = deriveRepoName(cfg.RepoURL)
+			}
+			deps.Note(ctx, hitl.GovernorPendingNote("plan_review", req.ExecutionID, created.ID, map[string]any{
+				"title":           title,
+				"description":     descr,
+				"goal":            runeTruncate(req.Goal, 800),
+				"project_id":      projectID,
+				"repo_path":       req.RepoPath,
+				"plan_summary":    runeTruncate(planSummary, 2400),
+				"issue_count":     len(issuesForTemplate),
+				"revision_number": revisionIter,
+				"actions":         []string{"approved", "request_changes", "rejected"},
+			}), "governor", "pending", "plan_approval")
 		}
 
 		writeApprovalState(approvalStatePath, map[string]any{
@@ -140,7 +162,15 @@ func PlanApprovalGate(ctx context.Context, req ApprovalRequest) (ApprovalOutcome
 
 		decision, feedback, err := pauseForApproval(ctx, pauser, req.ExecutionID, created, expiresHours)
 		if err != nil {
+			if governorFallback {
+				deps.Note(ctx, hitl.GovernorResolvedNote("plan_review", req.ExecutionID, created.ID, "error"),
+					"governor", "resolved", "plan_approval")
+			}
 			return ApprovalOutcome{}, err
+		}
+		if governorFallback {
+			deps.Note(ctx, hitl.GovernorResolvedNote("plan_review", req.ExecutionID, created.ID, decision),
+				"governor", "resolved", "plan_approval")
 		}
 
 		writeApprovalState(approvalStatePath, map[string]any{

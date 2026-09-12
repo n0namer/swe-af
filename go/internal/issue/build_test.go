@@ -58,6 +58,48 @@ func initRepo(t *testing.T) string {
 	return repo
 }
 
+func TestEnsurePythonVirtualenvBootstrapsCleanPythonRepo(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 unavailable")
+	}
+	worktree := t.TempDir()
+	if err := os.WriteFile(filepath.Join(worktree, "pyproject.toml"), []byte("[project]\nname='demo'\nversion='0.0.1'\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	venvPath, created, err := ensurePythonVirtualenv(worktree)
+	if err != nil {
+		t.Fatalf("ensurePythonVirtualenv: %v", err)
+	}
+	if !created {
+		t.Fatal("expected virtualenv to be created")
+	}
+	if want := filepath.Join(worktree, ".venv"); venvPath != want {
+		t.Fatalf("venv path=%q want=%q", venvPath, want)
+	}
+	if _, err := os.Stat(filepath.Join(venvPath, "bin", "python")); err != nil {
+		t.Fatalf("bootstrapped python missing: %v", err)
+	}
+
+	venvPath2, created2, err := ensurePythonVirtualenv(worktree)
+	if err != nil {
+		t.Fatalf("second ensurePythonVirtualenv: %v", err)
+	}
+	if created2 || venvPath2 != venvPath {
+		t.Fatalf("second ensure created=%v path=%q, want false/%q", created2, venvPath2, venvPath)
+	}
+}
+
+func TestEnsurePythonVirtualenvSkipsNonPythonRepo(t *testing.T) {
+	path, created, err := ensurePythonVirtualenv(t.TempDir())
+	if err != nil {
+		t.Fatalf("ensurePythonVirtualenv: %v", err)
+	}
+	if path != "" || created {
+		t.Fatalf("non-Python repo got path=%q created=%v", path, created)
+	}
+}
+
 var planningTargets = map[string]bool{
 	"run_product_manager": true, "run_architect": true, "run_tech_lead": true,
 	"run_sprint_planner": true, "run_issue_writer": true, "run_environment_scout": true,
@@ -248,6 +290,45 @@ func TestUncommittedCoderWorkGetsCheckpointCommit(t *testing.T) {
 	msg := gitT(t, repo, "log", "-1", "--format=%s", branch)
 	if !strings.Contains(msg, "checkpoint") {
 		t.Errorf("checkpoint commit message = %q", msg)
+	}
+}
+
+func TestScopedIssueRejectsUnexpectedDeliveryFiles(t *testing.T) {
+	repo := initRepo(t)
+	rec := &recorder{}
+	inner := scriptedCallFn(t, rec, scriptOpts{coderCommits: false, coderWrites: true})
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		if strings.HasSuffix(target, "run_coder") {
+			worktree, _ := kwargs["worktree_path"].(string)
+			if err := os.WriteFile(filepath.Join(worktree, "debug_test.py"), []byte("print('debug')\n"), 0o644); err != nil {
+				return nil, err
+			}
+		}
+		return inner(ctx, target, kwargs)
+	}
+	result := runImplement(t, repo, callFn, map[string]any{
+		"issue": map[string]any{
+			"title":               "Scoped feature",
+			"description":         "Modify only feature.py.",
+			"acceptance_criteria": []any{"feature.py is updated"},
+			"files_to_modify":     []any{"feature.py"},
+		},
+		"config": map[string]any{"verify": true},
+	})
+
+	if result["success"] != false {
+		t.Fatalf("success = %v, want false", result["success"])
+	}
+	if got, _ := result["error_message"].(string); !strings.Contains(got, "GIT_DELIVERY") || !strings.Contains(got, "debug_test.py") {
+		t.Fatalf("error_message = %q, want GIT_DELIVERY/debug_test.py", got)
+	}
+	branch, _ := result["branch"].(string)
+	tracked := gitT(t, repo, "ls-tree", "-r", "--name-only", branch)
+	if strings.Contains(tracked, "debug_test.py") {
+		t.Fatalf("unexpected debug file was committed:\n%s", tracked)
+	}
+	if !strings.Contains(tracked, "feature.py") {
+		t.Fatalf("allowed feature.py missing from branch:\n%s", tracked)
 	}
 }
 
@@ -547,6 +628,29 @@ func TestBlockingReviewFailsButSalvagesCommits(t *testing.T) {
 	}
 }
 
+func TestBlockingReviewDoesNotCheckpointUncommittedPartialWork(t *testing.T) {
+	repo := initRepo(t)
+	rec := &recorder{}
+	result := runImplement(t, repo,
+		scriptedCallFn(t, rec, scriptOpts{
+			coderWrites: true,
+			reviewerReplies: []map[string]any{
+				{"approved": false, "blocking": true, "summary": "missing required test"},
+			},
+		}),
+		map[string]any{"config": map[string]any{"verify": false}})
+
+	if result["success"] != false || result["outcome"] != "failed_unrecoverable" {
+		t.Fatalf("result = %v / %v", result["success"], result["outcome"])
+	}
+	if commits, ok := result["commits"].([]string); ok && len(commits) != 0 {
+		t.Fatalf("failed issue checkpointed partial work: %v", commits)
+	}
+	if branch, _ := result["branch"].(string); branch != "" {
+		t.Fatalf("failed uncommitted partial work should not become a delivery branch: %q", branch)
+	}
+}
+
 func TestNoCommitsDeletesBranch(t *testing.T) {
 	repo := initRepo(t)
 	rec := &recorder{}
@@ -621,5 +725,44 @@ func TestSetupValidationErrors(t *testing.T) {
 		"issue": issueMap,
 	}); err == nil || !strings.Contains(err.Error(), "repo_path is required") {
 		t.Errorf("missing repo_path: err = %v", err)
+	}
+}
+
+func TestExpectedBaseSHAFailsClosedAfterBranchAdvance(t *testing.T) {
+	repo := initRepo(t)
+	expected := gitT(t, repo, "rev-parse", "HEAD")
+	gitT(t, repo, "commit", "--allow-empty", "-m", "advance base")
+	advanced := gitT(t, repo, "rev-parse", "HEAD")
+	if advanced == expected {
+		t.Fatal("test setup did not advance base")
+	}
+
+	called := false
+	deps := &Deps{Call: func(context.Context, string, map[string]any) (map[string]any, error) {
+		called = true
+		return nil, fmt.Errorf("must not be called")
+	}, NodeID: "test-node"}
+	issueMap := map[string]any{"title": "stale", "description": "must fail before execution"}
+
+	_, err := ImplementIssue(context.Background(), deps, map[string]any{
+		"issue": issueMap, "repo_path": repo, "base_branch": "main", "expected_base_sha": expected,
+	})
+	if err == nil || !strings.Contains(err.Error(), "stale base main") || !strings.Contains(err.Error(), advanced) {
+		t.Fatalf("stale base error = %v", err)
+	}
+	if called {
+		t.Fatal("LLM/reasoner call occurred after stale-base detection")
+	}
+	if got := gitT(t, repo, "rev-parse", "HEAD"); got != advanced {
+		t.Fatalf("caller HEAD changed: got %s want %s", got, advanced)
+	}
+	if got := gitT(t, repo, "status", "--porcelain"); got != "" {
+		t.Fatalf("caller repo damaged: %q", got)
+	}
+	if got := gitT(t, repo, "branch", "--list", "issue/*"); got != "" {
+		t.Fatalf("stale request created issue branch: %q", got)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, ".worktrees")); !os.IsNotExist(statErr) {
+		t.Fatalf("stale request created worktree metadata: %v", statErr)
 	}
 }

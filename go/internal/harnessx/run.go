@@ -2,16 +2,22 @@ package harnessx
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
 
-	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
-	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
 )
+
+// OpenCodeNoInstallPermissionOverlay is the runtime-owned OpenCode config overlay.
+// Target repositories must not need to define SWE's internal FCM provider in
+// their own opencode.json just to execute through the broker. The same overlay
+// keeps autonomous read/test/build commands available while fail-closing
+// dependency installation and cross-worktree virtualenv execution. Role code
+// may prepend the current worktree's virtualenv to PATH; absolute sibling-
+// worktree runners remain denied.
+const OpenCodeNoInstallPermissionOverlay = `{"provider":{"fcm":{"name":"FCM OpenAI-compatible","env":["LLM_BROKER_API_KEY"],"npm":"@ai-sdk/openai-compatible","options":{"apiKey":"{env:LLM_BROKER_API_KEY}","baseURL":"{env:LLM_BROKER_BASE_URL}"},"models":{"fcm":{"id":"fcm","name":"FCM"},"fcm:keyless-dev":{"id":"fcm:keyless-dev","name":"FCM Keyless Dev"}}}},"permission":{"task":"deny","external_directory":"deny","bash":{"*":"allow","pip install *":"deny","pip3 install *":"deny","python -m pip install *":"deny","python3 -m pip install *":"deny","uv pip install *":"deny","uv add *":"deny","npm install *":"deny","npm i *":"deny","pnpm install *":"deny","pnpm add *":"deny","yarn install *":"deny","yarn add *":"deny","go get *":"deny","apt install *":"deny","apt-get install *":"deny","apk add *":"deny","*/.worktrees/*/.venv/bin/*":"deny","*/.worktrees/*/venv/bin/*":"deny"}}}`
 
 // runIDFromContext extracts the build's run ID from the reasoner execution
 // context. In production this reads agent.ExecutionContextFrom(ctx).RunID, which
@@ -39,62 +45,19 @@ type HarnessCaller interface {
 //  1. Reflect T into the JSON schema the harness consumes (cached per type).
 //  2. Inject the build's run-scoped credentials into opts.Env, scoped creds
 //     overriding the base env — mirroring the Python precedence where a freshly
-//     minted scout token beats a stale value inherited from os.environ. The run
-//     ID comes from agent.ExecutionContextFrom(ctx).RunID.
-//  3. Call app.Harness with a fresh *T dest.
-//  4. Classify fatal (non-retryable) API errors FIRST, before the Parsed==nil
-//     fallback, so the real billing/auth message surfaces past every retry layer
-//     as a *fatal.FatalHarnessError (callers must propagate it, not swallow it).
-//  5. On Result.Parsed == nil (the harness could not parse valid JSON into T),
-//     return a default-seeded T plus the Result — NOT an error — so the caller
-//     inspects Result.IsError and applies its role-specific deterministic
-//     fallback. The seed comes from unmarshaling "{}" into T, which triggers
-//     T's UnmarshalJSON default-seeding (schemas §2.2) when present, and yields
-//     the Go zero value otherwise.
+//     minted scout token beats a stale value inherited from os.environ.
+//  3. Delegate the full structured-output policy to executeStructured. Keeping
+//     this base call seam thin is intentional: weak-model recovery, validation,
+//     watchdog salvage, and incremental schema policy live in the adjacent
+//     harnessx structured-contract module rather than in role code.
 //
 // Returns (*T, *harness.Result, error). The Result is returned even alongside a
 // non-nil error so callers can inspect diagnostics.
 func Run[T any](ctx context.Context, app HarnessCaller, prompt string, opts harness.Options) (*T, *harness.Result, error) {
 	schema := schemaFor[T]()
-
 	runID := runIDFromContext(ctx)
 	opts.Env = hitl.InjectCredentialsIntoEnv(opts.Env, runID)
-
-	var dest T
-	result, err := app.Harness(ctx, prompt, schema, &dest, opts)
-	if err != nil {
-		return nil, result, err
-	}
-
-	// Fatal-error classification comes before the Parsed==nil fallback so the
-	// real non-retryable message is not masked by a generic fallback struct.
-	if fErr := fatal.CheckFatalHarnessError(result); fErr != nil {
-		return nil, result, fErr
-	}
-
-	// Schema parse failure: hand the caller a default-seeded value plus the
-	// Result so it can apply its own deterministic fallback. Not an error.
-	if result == nil || result.Parsed == nil {
-		seeded := seedDefaults[T]()
-		schemas.EmptyForNilSlices(&seeded)
-		return &seeded, result, nil
-	}
-
-	// Normalise nil slices to empty slices on the parsed result so every role
-	// result serialises its list fields as [] (pydantic parity) — matching the
-	// checkpoint/DAGState normalisation. Maps and nil pointers are left null.
-	schemas.EmptyForNilSlices(&dest)
-	return &dest, result, nil
-}
-
-// seedDefaults returns a T seeded with its pydantic-parity defaults. Unmarshaling
-// an empty JSON object invokes T's UnmarshalJSON (which seeds non-zero defaults,
-// schemas §2.2) when T implements it; for a plain struct it leaves the Go zero
-// value. Any unmarshal error is ignored — the zero value is an acceptable floor.
-func seedDefaults[T any]() T {
-	var v T
-	_ = json.Unmarshal([]byte("{}"), &v)
-	return v
+	return executeStructured[T](ctx, app, prompt, schema, opts)
 }
 
 // RoleOptions is the role→harness parameter mapping (design §4.1). Each role
@@ -132,6 +95,11 @@ type RoleOptions struct {
 	// Env is the base environment for the subprocess. Run overlays the build's
 	// scoped credentials on top of this before invoking the harness.
 	Env map[string]string
+
+	// SchemaMode is an explicit per-role override for structured-output mode.
+	// Empty keeps SWE's centralized policy; narrow roles may request SDK single
+	// shot when incremental whole-file edits are empirically less reliable.
+	SchemaMode string
 }
 
 // ToOptions converts a RoleOptions into a harness.Options. Run injects scoped
@@ -155,5 +123,6 @@ func (r RoleOptions) ToOptions() harness.Options {
 		Cwd:            r.Cwd,
 		ProjectDir:     r.Cwd,
 		Env:            r.Env,
+		SchemaMode:     r.SchemaMode,
 	}
 }

@@ -4,12 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
+	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
 )
 
 // --- test fixtures ----------------------------------------------------------
@@ -200,6 +205,196 @@ func TestRunParsedNilReturnsSeededDefaults(t *testing.T) {
 	}
 }
 
+func TestRunRecoversSchemaValidJSONWithBraceInsideString(t *testing.T) {
+	const weakModelText = `I finished the task. {"complete":false,"estimated_scope":"medium ${foo {"} trailing prose`
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Result:       weakModelText,
+				Parsed:       nil,
+				IsError:      true,
+				ErrorMessage: "schema validation failed after retries",
+				FailureType:  harness.FailureSchema,
+			}, nil
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out == nil || out.Complete || out.Scope != "medium ${foo {" {
+		t.Fatalf("expected recovered structured result, got %+v", out)
+	}
+	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
+		t.Fatalf("expected recovery to normalize harness result, got %+v", res)
+	}
+}
+
+func TestRunRecoveryRejectsSchemaInvalidJSON(t *testing.T) {
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Result:       `prefix {"complete":false,"estimated_scope":42} suffix`,
+				Parsed:       nil,
+				IsError:      true,
+				ErrorMessage: "schema validation failed after retries",
+				FailureType:  harness.FailureSchema,
+			}, nil
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out == nil || !out.Complete || out.Scope != "medium" {
+		t.Fatalf("schema-invalid text must fall back to seeded defaults, got %+v", out)
+	}
+	if res == nil || res.Parsed != nil || !res.IsError || res.FailureType != harness.FailureSchema {
+		t.Fatalf("schema-invalid text must remain a harness failure, got %+v", res)
+	}
+}
+
+func TestRunRecoveryDoesNotMaskProviderFailure(t *testing.T) {
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Result:       `{"complete":false,"estimated_scope":"medium"}`,
+				Parsed:       nil,
+				IsError:      true,
+				ErrorMessage: "Stream error occurred",
+				FailureType:  harness.FailureAPIError,
+			}, nil
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out == nil || !out.Complete || out.Scope != "medium" {
+		t.Fatalf("provider failure must fall back to seeded defaults, got %+v", out)
+	}
+	if res == nil || res.Parsed != nil || !res.IsError || res.FailureType != harness.FailureAPIError {
+		t.Fatalf("provider failure must remain visible, got %+v", res)
+	}
+}
+
+func TestRunRecoversObservedWeakCoderJSONShape(t *testing.T) {
+	// Reproduces the 2026-09-03 L2 failure exactly: the useful first OpenCode
+	// attempt emitted near-schema JSON in a text event, then two schema retries
+	// produced unrelated final text. Runner.Result therefore contains retry
+	// garbage while Runner.Messages still preserves the earlier useful JSON.
+	const observed = `{"files_changed":["calculator.py","cli.py","test_calculator.py"],"summary":"Added power and modulo operations.","complete":true,"tests_passed":true,"test_summary":"All tests passed.","codebase_learnings":["Test framework is unittest."],"agent_retro":"The implementation was straightforward."}`
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Result: "OpenCode is an open-source AI coding agent.",
+				Messages: []map[string]any{
+					{"type": "text", "part": map[string]any{"text": observed}},
+					{"type": "text", "part": map[string]any{"text": "OpenCode is an open-source AI coding agent."}},
+				},
+				Parsed:       nil,
+				IsError:      true,
+				ErrorMessage: "schema validation failed after retries",
+				FailureType:  harness.FailureSchema,
+			}, nil
+		},
+	}
+
+	out, res, err := Run[schemas.CoderResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out == nil || !out.Complete || out.Summary == "" || len(out.FilesChanged) != 3 {
+		t.Fatalf("expected observed coder JSON to recover, got %+v", out)
+	}
+	if got, ok := out.AgentRetro["summary"].(string); !ok || got != "The implementation was straightforward." {
+		t.Fatalf("expected string agent_retro to normalize under summary, got %#v", out.AgentRetro)
+	}
+	if out.IterationID != "" || out.RepoName != "" {
+		t.Fatalf("omitted defaulted fields should materialize as empty defaults, got iteration=%q repo=%q", out.IterationID, out.RepoName)
+	}
+	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
+		t.Fatalf("expected recovered result to be marked successful, got %+v", res)
+	}
+}
+
+func TestRunRecoversValidStructuredTextAfterNoProgressWatchdog(t *testing.T) {
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Messages: []map[string]any{{
+					"type": "text",
+					"part": map[string]any{"text": `{"complete":false,"estimated_scope":"medium"}`},
+				}},
+				Parsed:  nil,
+				IsError: true,
+			}, errors.New("CLI command made no progress for 300s: opencode run --format json")
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err != nil {
+		t.Fatalf("watchdog should not discard schema-valid assistant output: %v", err)
+	}
+	if out == nil || out.Complete || out.Scope != "medium" {
+		t.Fatalf("expected recovered watchdog result, got %+v", out)
+	}
+	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
+		t.Fatalf("expected recovered watchdog result normalized, got %+v", res)
+	}
+}
+
+func TestRunRecoversValidOutputFileDeletedBeforeWatchdogReturns(t *testing.T) {
+	projectDir := t.TempDir()
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, opts harness.Options) (*harness.Result, error) {
+			outDir, err := os.MkdirTemp(opts.ProjectDir, ".agentfield-out-")
+			if err != nil {
+				return nil, err
+			}
+			outputPath := filepath.Join(outDir, ".agentfield_output.json")
+			if err := os.WriteFile(outputPath, []byte(`{"complete":false,"estimated_scope":"large"}`), 0o600); err != nil {
+				return nil, err
+			}
+			// Simulate the SDK lifecycle: the file is valid while the provider is
+			// still running, then its temp directory is removed before Harness
+			// returns the watchdog error to the SWE wrapper.
+			time.Sleep(100 * time.Millisecond)
+			_ = os.RemoveAll(outDir)
+			return nil, errors.New("CLI command made no progress for 300s: opencode run --format json")
+		},
+	}
+
+	out, res, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{ProjectDir: projectDir})
+	if err != nil {
+		t.Fatalf("watchdog should salvage exact-schema-valid output file: %v", err)
+	}
+	if out == nil || out.Complete || out.Scope != "large" {
+		t.Fatalf("expected output-file recovery, got %+v", out)
+	}
+	if res == nil || res.Parsed == nil || res.IsError || res.FailureType != harness.FailureNone {
+		t.Fatalf("expected recovered watchdog file result normalized, got %+v", res)
+	}
+}
+
+func TestRunDoesNotRecoverGenericTransportErrorFromText(t *testing.T) {
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+			return &harness.Result{
+				Messages: []map[string]any{{"type": "text", "part": map[string]any{"text": `{"complete":false,"estimated_scope":"medium"}`}}},
+			}, errors.New("network blip")
+		},
+	}
+
+	_, _, err := Run[seededResult](context.Background(), mh, "prompt", harness.Options{})
+	if err == nil || !strings.Contains(err.Error(), "network blip") {
+		t.Fatalf("generic transport errors must remain fail-closed, got %v", err)
+	}
+}
+
 // --- Run: success path ------------------------------------------------------
 
 func TestRunSuccessReturnsParsed(t *testing.T) {
@@ -244,11 +439,65 @@ func TestRoleOptionsOpenCodeUsesOnlySWEOwnedBinary(t *testing.T) {
 	if o.BinPath != "/opt/swe/opencode" {
 		t.Fatalf("expected SWE-owned binary, got %q", o.BinPath)
 	}
+	if o.SchemaMode != "" {
+		t.Fatalf("role options must not own structured-output recovery policy, got schema_mode=%q", o.SchemaMode)
+	}
 
 	t.Setenv("SWE_OPENCODE_BIN", "")
 	o = (RoleOptions{Provider: "opencode"}).ToOptions()
 	if o.BinPath != "" {
 		t.Fatalf("SEC-AF binary must not leak into SWE options, got %q", o.BinPath)
+	}
+}
+
+func TestOpenCodeNoInstallPermissionOverlayIncludesRuntimeFCMProvider(t *testing.T) {
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(OpenCodeNoInstallPermissionOverlay), &cfg); err != nil {
+		t.Fatalf("overlay must be valid JSON: %v", err)
+	}
+	providers, ok := cfg["provider"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime overlay must own provider config, got: %v", cfg)
+	}
+	fcm, ok := providers["fcm"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime overlay must define provider fcm, got: %v", providers)
+	}
+	options, ok := fcm["options"].(map[string]any)
+	if !ok || options["baseURL"] != "{env:LLM_BROKER_BASE_URL}" || options["apiKey"] != "{env:LLM_BROKER_API_KEY}" {
+		t.Fatalf("fcm provider must use runtime broker env, got: %v", fcm)
+	}
+	permissions, ok := cfg["permission"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime overlay must preserve permissions, got: %v", cfg)
+	}
+	bash, ok := permissions["bash"].(map[string]any)
+	if !ok || bash["pip install *"] != "deny" || bash["go get *"] != "deny" {
+		t.Fatalf("runtime overlay must preserve no-install guards, got: %v", permissions)
+	}
+}
+
+func TestRunCentralizesOpenCodeSingleSchemaMode(t *testing.T) {
+	seenMode := ""
+	mh := &mockHarness{
+		fn: func(_ context.Context, _ string, _ map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
+			seenMode = opts.SchemaMode
+			parsed := dest.(*seededResult)
+			parsed.Complete = false
+			parsed.Scope = "large"
+			return &harness.Result{Parsed: parsed}, nil
+		},
+	}
+
+	out, _, err := Run[seededResult](context.Background(), mh, "prompt", (RoleOptions{Provider: "opencode"}).ToOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if seenMode != "single" {
+		t.Fatalf("central structured controller must avoid forced incremental tool loops, got %q", seenMode)
+	}
+	if out == nil || out.Scope != "large" {
+		t.Fatalf("unexpected parsed result: %+v", out)
 	}
 }
 

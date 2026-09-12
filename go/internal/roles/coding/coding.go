@@ -27,6 +27,10 @@ package coding
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Agent-Field/agentfield/sdk/go/ai"
@@ -88,9 +92,9 @@ func Handlers() map[string]Handler {
 // codingTools is the coder/qa allowed-tool list (Python passes this verbatim).
 var codingTools = []string{"Read", "Write", "Edit", "Bash", "Glob", "Grep"}
 
-// reviewerTools is the code-reviewer allowed-tool list. Note the ordering
-// differs from codingTools (Bash last) — kept verbatim from the Python call.
-var reviewerTools = []string{"Read", "Write", "Glob", "Grep", "Bash"}
+// reviewerTools is the code-reviewer allowed-tool list. Edit is required by
+// the incremental structured-output contract used to build the verdict file.
+var reviewerTools = []string{"Read", "Write", "Edit", "Glob", "Grep", "Bash"}
 
 // ---------------------------------------------------------------------------
 // run_coder
@@ -149,6 +153,21 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		return nil, err
 	}
 
+	coderEnv := map[string]string{}
+	if provider == "opencode" {
+		// Keep autonomous task/subagent delegation available to the coder, but
+		// fail closed instead of prompting on external-directory access. Hidden
+		// permission asks cannot be answered in the non-interactive pipeline and
+		// otherwise leave a healthy provider run stuck indefinitely.
+		coderEnv["OPENCODE_CONFIG_CONTENT"] = harnessx.OpenCodeNoInstallPermissionOverlay
+		for _, venvName := range []string{".venv", "venv"} {
+			venvBin := filepath.Join(in.WorktreePath, venvName, "bin")
+			if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
+				coderEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+				break
+			}
+		}
+	}
 	opts := harnessx.RoleOptions{
 		Provider:       provider,
 		Model:          in.Model,
@@ -157,46 +176,118 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		PermissionMode: in.PermissionMode,
 		SystemPrompt:   tools.MaybeApplyCoderGuardrail(prompts.CoderSystemPrompt),
 		Cwd:            in.WorktreePath,
+		Env:            coderEnv,
 	}.ToOptions()
 
-	harnessError := ""
 	parsed, result, hErr := harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
-	switch {
-	case hErr != nil:
-		if isFatal(hErr) {
-			return nil, hErr // Non-retryable — propagate immediately.
+	if hErr != nil && isRecoverableCoderHarnessError(hErr) {
+		// A no-progress watchdog is a liveness guard, not a semantic verdict. The
+		// first OpenCode process may already have edited/tested the worktree before
+		// its provider stream stalls. Retry once in the SAME worktree, but switch
+		// to a finish-only recovery prompt: re-running the original exploration
+		// prompt made the second process repeat work and stall again after a valid
+		// partial source edit. Keep this narrow: fatal/schema/provider failures
+		// remain fail-closed.
+		deps.Note.Note(ctx, fmt.Sprintf("Coder transport stalled; retrying once in finish-only mode: %s", issueName), "coder", "retry")
+		retryPrompt := coderFinishOnlyPrompt(taskPrompt)
+		parsed, result, hErr = harnessx.Run[schemas.CoderResult](ctx, deps.Harness, retryPrompt, opts)
+	}
+	if hErr != nil {
+		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, hErr.Error()), "coder", "error")
+		return nil, fmt.Errorf("coder agent failed for %s: %w", issueName, hErr)
+	}
+	if result == nil || result.Parsed == nil {
+		detail := "no structured output returned"
+		if result != nil && result.ErrorMessage != "" {
+			detail = result.ErrorMessage
 		}
-		harnessError = hErr.Error()
-		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, harnessError), "coder", "error")
-	case result != nil && result.Parsed != nil:
-		deps.Note.Note(ctx, fmt.Sprintf("Coder complete: %s, files=%d, complete=%s",
-			issueName, len(parsed.FilesChanged), pyBool(parsed.Complete)), "coder", "complete")
-		parsed.IterationID = in.IterationID
-		return parsed, nil
-	default:
-		// Harness returned but produced no parseable CoderResult. Surface the
-		// underlying error so the empty result carries *why*.
 		if result != nil {
-			harnessError = result.ErrorMessage
+			if providerErr := providerErrorFromMessages(result.Messages); providerErr != "" && !strings.Contains(detail, providerErr) {
+				detail = fmt.Sprintf("provider error: %s; harness: %s", providerErr, detail)
+			}
 		}
-		if harnessError == "" {
-			harnessError = "no structured output returned"
-		}
-		deps.Note.Note(ctx, fmt.Sprintf("Coder produced no result: %s: %s", issueName, harnessError), "coder", "error")
+		deps.Note.Note(ctx, fmt.Sprintf("Coder produced no result: %s: %s", issueName, detail), "coder", "error")
+		return nil, fmt.Errorf("coder produced no structured result for %s: %s", issueName, detail)
 	}
+	deps.Note.Note(ctx, fmt.Sprintf("Coder complete: %s, files=%d, complete=%s",
+		issueName, len(parsed.FilesChanged), pyBool(parsed.Complete)), "coder", "complete")
+	parsed.IterationID = in.IterationID
+	return parsed, nil
+}
 
-	summary := fmt.Sprintf("Coder agent failed for %s", issueName)
-	if harnessError != "" {
-		summary += ": " + harnessError
+// providerErrorFromMessages preserves an in-band provider failure that the
+// harness may otherwise mask with a later schema/output-file diagnosis. OpenCode
+// emits errors as JSON events, including nested error.data.message payloads.
+func isRecoverableCoderHarnessError(err error) bool {
+	if err == nil {
+		return false
 	}
-	return &schemas.CoderResult{
-		FilesChanged:      []string{},
-		Summary:           summary,
-		Complete:          false,
-		IterationID:       in.IterationID,
-		CodebaseLearnings: []string{},
-		AgentRetro:        map[string]any{},
-	}, nil
+	msg := err.Error()
+	return strings.Contains(msg, "CLI command made no progress") ||
+		strings.Contains(msg, "Stream error occurred")
+}
+
+func reviewerVerdictOnlyPrompt(original string) string {
+	return original + `
+
+## RECOVERY MODE — VERDICT ONLY
+
+A previous reviewer process stalled. Do not restart broad exploration and do not delegate to subagents.
+
+1. Inspect the current git diff and the issue acceptance criteria first.
+2. Run at most the smallest focused discriminator/test needed to decide correctness; do not run broad suites unless they are the only available evidence.
+3. Do not modify source or test files.
+4. Immediately write the required structured review verdict and finish. If required evidence cannot be obtained, fail closed with a blocking evidence gap instead of continuing to investigate.
+
+The objective of this recovery pass is a bounded, auditable verdict — not more exploration.`
+}
+
+func coderFinishOnlyPrompt(original string) string {
+	return original + `
+
+## RECOVERY MODE — FINISH EXISTING WORK ONLY
+
+A previous coder process stalled after it may already have changed this worktree. Do not restart exploration and do not delegate to subagents.
+
+1. Inspect git status and the existing diff first.
+2. Preserve correct existing edits; make only the smallest changes still required by the acceptance criteria.
+3. Create any required tests that are still missing.
+4. Run the focused validation requested by the issue. If its runner is unavailable, record that fact and run the strongest available syntax/build check instead.
+5. Review git status, stage only intentional source/test files, and commit them on the current branch.
+6. Immediately write the required structured output file and finish.
+
+Do not spend time re-investigating already-obvious code. The objective of this recovery pass is completion: tests, validation, clean bounded commit, structured result.`
+}
+
+func providerErrorFromMessages(messages []map[string]any) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if eventType, _ := msg["type"].(string); eventType != "error" {
+			continue
+		}
+		for _, key := range []string{"message", "text"} {
+			if value, _ := msg[key].(string); strings.TrimSpace(value) != "" {
+				return strings.Trim(strings.TrimSpace(value), "\"")
+			}
+		}
+		if errObj, ok := msg["error"].(map[string]any); ok {
+			if data, ok := errObj["data"].(map[string]any); ok {
+				if value, _ := data["message"].(string); strings.TrimSpace(value) != "" {
+					return strings.Trim(strings.TrimSpace(value), "\"")
+				}
+			}
+			if value, _ := errObj["message"].(string); strings.TrimSpace(value) != "" {
+				return strings.Trim(strings.TrimSpace(value), "\"")
+			}
+			if value, _ := errObj["name"].(string); strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+		if value, _ := msg["error"].(string); strings.TrimSpace(value) != "" {
+			return strings.Trim(strings.TrimSpace(value), "\"")
+		}
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------------
@@ -346,6 +437,22 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 		return nil, err
 	}
 
+	reviewerEnv := map[string]string{}
+	if provider == "opencode" {
+		// OpenCode does not currently enforce harness.Options.Tools. Keep the
+		// reviewer bounded to its own worktree and prevent hidden subagent
+		// expansion that can stall on external-directory permission prompts.
+		reviewerEnv["OPENCODE_CONFIG_CONTENT"] = harnessx.OpenCodeNoInstallPermissionOverlay
+		// Prefer a repository-owned virtualenv when present so reviewer-native
+		// test commands resolve the project's interpreter and dependencies.
+		for _, venvName := range []string{".venv", "venv"} {
+			venvBin := filepath.Join(in.WorktreePath, venvName, "bin")
+			if info, statErr := os.Stat(venvBin); statErr == nil && info.IsDir() {
+				reviewerEnv["PATH"] = venvBin + string(os.PathListSeparator) + os.Getenv("PATH")
+				break
+			}
+		}
+	}
 	opts := harnessx.RoleOptions{
 		Provider:       provider,
 		Model:          in.Model,
@@ -354,29 +461,118 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 		PermissionMode: in.PermissionMode,
 		SystemPrompt:   prompts.CodeReviewerSystemPrompt,
 		Cwd:            in.WorktreePath,
+		Env:            reviewerEnv,
+		SchemaMode:     "single",
 	}.ToOptions()
 
-	parsed, result, hErr := harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, taskPrompt, opts)
-	switch {
-	case hErr != nil:
-		if isFatal(hErr) {
-			return nil, hErr
-		}
-		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer agent failed: %s: %s", issueName, hErr.Error()), "code_reviewer", "error")
-	case result != nil && result.Parsed != nil:
-		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer complete: %s, approved=%s, blocking=%s",
-			issueName, pyBool(parsed.Approved), pyBool(parsed.Blocking)), "code_reviewer", "complete")
-		parsed.IterationID = in.IterationID
-		return parsed, nil
+	untrackedBefore, untrackedErr := reviewerUntrackedPaths(in.WorktreePath)
+	if untrackedErr != nil {
+		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer scratch tracking unavailable: %s: %s", issueName, untrackedErr.Error()), "code_reviewer", "scratch_tracking", "warning")
 	}
 
-	return &schemas.CodeReviewResult{
-		Approved:    true, // don't block on reviewer failure
-		Summary:     fmt.Sprintf("Code reviewer agent failed for %s — not blocking", issueName),
-		Blocking:    false,
-		DebtItems:   []map[string]any{},
-		IterationID: in.IterationID,
-	}, nil
+	parsed, result, hErr := harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, taskPrompt, opts)
+	if hErr != nil && isRecoverableCoderHarnessError(hErr) {
+		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer transport stalled; retrying once in verdict-only mode: %s", issueName), "code_reviewer", "retry")
+		retryPrompt := reviewerVerdictOnlyPrompt(taskPrompt)
+		parsed, result, hErr = harnessx.Run[schemas.CodeReviewResult](ctx, deps.Harness, retryPrompt, opts)
+	}
+	if untrackedErr == nil {
+		archived, archiveRoot, archiveErr := archiveNewReviewerScratch(in.WorktreePath, in.IterationID, untrackedBefore)
+		if archiveErr != nil {
+			deps.Note.Note(ctx, fmt.Sprintf("Code reviewer scratch archival failed: %s: %s", issueName, archiveErr.Error()), "code_reviewer", "scratch_tracking", "error")
+			return nil, fmt.Errorf("code reviewer scratch archival failed for %s: %w", issueName, archiveErr)
+		}
+		if len(archived) > 0 {
+			deps.Note.Note(ctx, fmt.Sprintf("Code reviewer archived scratch files: %s: %s -> %s", issueName, strings.Join(archived, ", "), archiveRoot), "code_reviewer", "scratch_tracking", "archived")
+		}
+	}
+	if hErr != nil {
+		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer agent failed: %s: %s", issueName, hErr.Error()), "code_reviewer", "error")
+		return nil, fmt.Errorf("code reviewer agent failed for %s: %w", issueName, hErr)
+	}
+	if result == nil || result.Parsed == nil {
+		detail := "no structured output returned"
+		if result != nil && result.ErrorMessage != "" {
+			detail = result.ErrorMessage
+		}
+		deps.Note.Note(ctx, fmt.Sprintf("Code reviewer produced no result: %s: %s", issueName, detail), "code_reviewer", "error")
+		return nil, fmt.Errorf("code reviewer produced no structured result for %s: %s", issueName, detail)
+	}
+	deps.Note.Note(ctx, fmt.Sprintf("Code reviewer complete: %s, approved=%s, blocking=%s",
+		issueName, pyBool(parsed.Approved), pyBool(parsed.Blocking)), "code_reviewer", "complete")
+	parsed.IterationID = in.IterationID
+	return parsed, nil
+}
+
+func reviewerUntrackedPaths(worktreePath string) (map[string]struct{}, error) {
+	cmd := exec.Command("git", "-C", worktreePath, "ls-files", "--others", "--exclude-standard", "-z")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	paths := map[string]struct{}{}
+	for _, rel := range strings.Split(string(out), "\x00") {
+		if rel != "" {
+			paths[rel] = struct{}{}
+		}
+	}
+	return paths, nil
+}
+
+func archiveNewReviewerScratch(worktreePath, iterationID string, before map[string]struct{}) ([]string, string, error) {
+	after, err := reviewerUntrackedPaths(worktreePath)
+	if err != nil {
+		return nil, "", err
+	}
+	var created []string
+	for rel := range after {
+		if _, existed := before[rel]; !existed {
+			created = append(created, rel)
+		}
+	}
+	if len(created) == 0 {
+		return nil, "", nil
+	}
+	sort.Strings(created)
+
+	archiveBase := filepath.Join(filepath.Dir(worktreePath), ".reviewer-scratch", reviewerScratchSegment(filepath.Base(worktreePath)), reviewerScratchSegment(iterationID))
+	if err := os.MkdirAll(archiveBase, 0o755); err != nil {
+		return nil, "", err
+	}
+	archiveRoot, err := os.MkdirTemp(archiveBase, "run-")
+	if err != nil {
+		return nil, "", err
+	}
+	for _, rel := range created {
+		clean := filepath.Clean(rel)
+		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
+			return nil, archiveRoot, fmt.Errorf("unsafe reviewer scratch path %q", rel)
+		}
+		src := filepath.Join(worktreePath, clean)
+		dst := filepath.Join(archiveRoot, clean)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return nil, archiveRoot, err
+		}
+		if err := os.Rename(src, dst); err != nil {
+			return nil, archiveRoot, fmt.Errorf("archive reviewer scratch %q: %w", rel, err)
+		}
+	}
+	return created, archiveRoot, nil
+}
+
+func reviewerScratchSegment(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "unknown"
+	}
+	return b.String()
 }
 
 // ---------------------------------------------------------------------------

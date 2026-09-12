@@ -37,6 +37,23 @@ func buildHandler(execResp, verifyResp func(input map[string]any) map[string]any
 	}
 }
 
+func TestHumanApprovalEnabledByConfiguredSurface(t *testing.T) {
+	t.Setenv("HAX_API_KEY", "")
+	t.Setenv("SWE_OPENCLAW_HITL", "0")
+	if humanApprovalEnabled() {
+		t.Fatal("human approval should be disabled with neither HAX nor OpenClaw")
+	}
+	t.Setenv("HAX_API_KEY", "hax-test")
+	if !humanApprovalEnabled() {
+		t.Fatal("HAX should enable human approval")
+	}
+	t.Setenv("HAX_API_KEY", "")
+	t.Setenv("SWE_OPENCLAW_HITL", "1")
+	if !humanApprovalEnabled() {
+		t.Fatal("OpenClaw should enable human approval")
+	}
+}
+
 func emptyExec(map[string]any) map[string]any {
 	return map[string]any{
 		"completed_issues": []any{}, "merged_branches": []any{}, "all_issues": []any{},

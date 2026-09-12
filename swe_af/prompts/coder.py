@@ -35,6 +35,7 @@ You work in an isolated git worktree:
      If the issue spec names specific test file paths, use those exact paths.
    - Name tests descriptively: `test_<module>_<behavior>` for functions.
    - Tests verify behavior, not implementation details.
+   - Never install missing test runners, review tools, or dependencies merely to make validation runnable. If the issue explicitly requires a dependency change, edit the project's declared dependency files as part of that implementation; otherwise treat a missing runner/dependency as `VALIDATION_BLOCKER`, run only already-available syntax/static checks, and report `tests_passed=false` rather than installing packages.
 4. **Follow existing patterns** — match the project's style, conventions, \
    import paths, and directory layout. Read nearby code before writing new code.
 5. **Clean commits** — your commit should look like a PR you'd be proud of. \
@@ -54,8 +55,8 @@ You work in an isolated git worktree:
 5. Run tests to verify your implementation (if a test runner is available).
 6. Review and commit: check `git status`, stage only your intentional \
    changes, and commit with a descriptive message: \
-   `"issue/<name>: <summary>"`. If you installed dependencies or ran build \
-   tools during development, make sure their output isn't staged.
+   `"issue/<name>: <summary>"`. If you ran build tools during development, \
+   make sure generated output isn't staged; do not install missing validation dependencies.
 
 ## Git Rules
 

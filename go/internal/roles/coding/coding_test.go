@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -51,14 +54,18 @@ func (n *noteRecorder) hasTag(tag string) bool {
 // router.harness. It scripts the (*harness.Result, error) reply and records the
 // options it was called with (so guardrail/cwd/tools can be asserted).
 type mockHarness struct {
-	fn      func(dest any) (*harness.Result, error)
-	gotOpts harness.Options
-	called  bool
+	fn         func(dest any) (*harness.Result, error)
+	fnWithOpts func(prompt string, dest any, opts harness.Options) (*harness.Result, error)
+	gotOpts    harness.Options
+	called     bool
 }
 
-func (m *mockHarness) Harness(_ context.Context, _ string, _ map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
+func (m *mockHarness) Harness(_ context.Context, prompt string, _ map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
 	m.called = true
 	m.gotOpts = opts
+	if m.fnWithOpts != nil {
+		return m.fnWithOpts(prompt, dest, opts)
+	}
 	return m.fn(dest)
 }
 
@@ -229,6 +236,29 @@ func TestRunCoderAppliesGuardrailAndCwd(t *testing.T) {
 	}
 }
 
+func TestRunCoderPrefersRepoVirtualenvForOpenCode(t *testing.T) {
+	worktree := t.TempDir()
+	venvBin := filepath.Join(worktree, "venv", "bin")
+	if err := os.MkdirAll(venvBin, 0o755); err != nil {
+		t.Fatalf("create coder virtualenv dir: %v", err)
+	}
+	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	if _, err := RunCoder(context.Background(), newDeps(mh, nil, &noteRecorder{}), map[string]any{
+		"issue": map[string]any{"name": "venv"}, "worktree_path": worktree,
+		"ai_provider": "open_code", "model": "fcm",
+	}); err != nil {
+		t.Fatalf("RunCoder: %v", err)
+	}
+	if got := mh.gotOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
+		t.Fatalf("coder virtualenv PATH not preferred: %q", got)
+	}
+	if got := mh.gotOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != harnessx.OpenCodeNoInstallPermissionOverlay {
+		t.Fatalf("coder OpenCode permission overlay = %q", got)
+	}
+}
+
 // Contract: coder does NOT append the guardrail when web search is disabled.
 func TestRunCoderNoGuardrailWhenDisabled(t *testing.T) {
 	t.Setenv("OPENCODE_ENABLE_EXA", "")
@@ -249,9 +279,9 @@ func TestRunCoderNoGuardrailWhenDisabled(t *testing.T) {
 	}
 }
 
-// Contract: on Parsed==nil (schema parse failure) run_coder returns its
-// deterministic fallback (complete=false, key set intact) — NOT an error.
-func TestRunCoderParsedNilFallback(t *testing.T) {
+// Contract: schema/no-result failures are fail-closed. Returning a synthetic
+// complete=false payload lets the outer orchestrator report false success.
+func TestRunCoderParsedNilFailsClosed(t *testing.T) {
 	nr := &noteRecorder{}
 	mh := &mockHarness{fn: func(_ any) (*harness.Result, error) {
 		return &harness.Result{IsError: true, ErrorMessage: "boom-parse", Parsed: nil}, nil
@@ -260,23 +290,48 @@ func TestRunCoderParsedNilFallback(t *testing.T) {
 		"issue":        map[string]any{"name": "issue-x"},
 		"iteration_id": "it-1",
 	})
-	if err != nil {
-		t.Fatalf("fallback must not be an error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "boom-parse") {
+		t.Fatalf("expected fail-closed schema error, got out=%v err=%v", out, err)
 	}
-	m := asMap(t, out)
-	assertKeys(t, m, coderResultKeys)
-	if m["complete"] != false {
-		t.Fatalf("fallback must have complete=false, got %v", m["complete"])
-	}
-	if !strings.Contains(m["summary"].(string), "boom-parse") {
-		t.Fatalf("fallback summary should carry the harness error, got %q", m["summary"])
-	}
-	// Empty collections must serialize as [] / {}, not null (model_dump parity).
-	if _, ok := m["files_changed"].([]any); !ok {
-		t.Fatalf("files_changed should be an empty array, got %#v", m["files_changed"])
+	if out != nil {
+		t.Fatalf("expected nil result on schema failure, got %v", out)
 	}
 	if !nr.hasTag("error") {
 		t.Fatalf("expected an error note on the no-result path")
+	}
+}
+
+// Contract: when the provider emitted an in-band OpenCode error before the
+// structured output disappeared, preserve that causal message alongside the
+// downstream schema diagnosis instead of reporting only "output file missing".
+func TestRunCoderPreservesNestedProviderErrorOnSchemaFailure(t *testing.T) {
+	nr := &noteRecorder{}
+	mh := &mockHarness{fn: func(_ any) (*harness.Result, error) {
+		return &harness.Result{
+			IsError:      true,
+			ErrorMessage: "Schema validation failed after 2 retry attempt(s). Last error: The output file was NOT created.",
+			Parsed:       nil,
+			Messages: []map[string]any{{
+				"type": "error",
+				"error": map[string]any{
+					"name": "UnknownError",
+					"data": map[string]any{"message": "\"Stream error occurred\""},
+				},
+			}},
+		}, nil
+	}}
+	out, err := RunCoder(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"issue":        map[string]any{"name": "issue-stream"},
+		"iteration_id": "it-stream",
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider error: Stream error occurred") {
+		t.Fatalf("expected provider stream error to be preserved, got out=%v err=%v", out, err)
+	}
+	if !strings.Contains(err.Error(), "Schema validation failed after 2 retry attempt") {
+		t.Fatalf("expected downstream schema diagnosis to remain visible, got err=%v", err)
+	}
+	if out != nil {
+		t.Fatalf("expected nil result on provider/schema failure, got %v", out)
 	}
 }
 
@@ -302,9 +357,9 @@ func TestRunCoderFatalPropagates(t *testing.T) {
 	}
 }
 
-// Contract: a non-fatal transport error falls back deterministically (Python's
-// `except Exception` branch) rather than propagating.
-func TestRunCoderTransportErrorFallsBack(t *testing.T) {
+// Contract: transport errors are fail-closed so an unavailable coder cannot be
+// converted into a successful zero-diff workflow.
+func TestRunCoderTransportErrorFailsClosed(t *testing.T) {
 	nr := &noteRecorder{}
 	mh := &mockHarness{fn: func(_ any) (*harness.Result, error) {
 		return nil, errors.New("network blip")
@@ -312,12 +367,52 @@ func TestRunCoderTransportErrorFallsBack(t *testing.T) {
 	out, err := RunCoder(context.Background(), newDeps(mh, nil, nr), map[string]any{
 		"issue": map[string]any{"name": "i"},
 	})
+	if err == nil || !strings.Contains(err.Error(), "network blip") {
+		t.Fatalf("expected transport error to propagate, got out=%v err=%v", out, err)
+	}
+	if out != nil {
+		t.Fatalf("expected nil result on transport failure, got %v", out)
+	}
+}
+
+func TestRunCoderRetriesNoProgressOnceInPlace(t *testing.T) {
+	nr := &noteRecorder{}
+	calls := 0
+	var prompts []string
+	mh := &mockHarness{fnWithOpts: func(prompt string, dest any, _ harness.Options) (*harness.Result, error) {
+		calls++
+		prompts = append(prompts, prompt)
+		if calls == 1 {
+			return nil, errors.New("CLI command made no progress for 300s: opencode run --format json")
+		}
+		cr := dest.(*schemas.CoderResult)
+		cr.Complete = true
+		cr.FilesChanged = []string{"calculator.py"}
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	out, err := RunCoder(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"issue":         map[string]any{"name": "issue-stall"},
+		"worktree_path": "/wt",
+		"iteration_id":  "it-stall",
+	})
 	if err != nil {
-		t.Fatalf("non-fatal error should fall back, got %v", err)
+		t.Fatalf("expected in-place retry to recover, got %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected exactly one retry, calls=%d", calls)
+	}
+	if len(prompts) != 2 || strings.Contains(prompts[0], "RECOVERY MODE") || !strings.Contains(prompts[1], "RECOVERY MODE — FINISH EXISTING WORK ONLY") {
+		t.Fatalf("expected only retry prompt to enter finish-only recovery mode, prompts=%q", prompts)
+	}
+	if !strings.Contains(prompts[1], "Inspect git status and the existing diff first") || !strings.Contains(prompts[1], "Immediately write the required structured output file and finish") {
+		t.Fatalf("finish-only retry prompt missing completion contract: %q", prompts[1])
 	}
 	m := asMap(t, out)
-	if m["complete"] != false || !strings.Contains(m["summary"].(string), "network blip") {
-		t.Fatalf("expected fallback carrying the transport error, got %v", m)
+	if m["complete"] != true || m["iteration_id"] != "it-stall" {
+		t.Fatalf("unexpected recovered coder result: %v", m)
+	}
+	if !nr.hasTag("retry") {
+		t.Fatal("expected retry note for recoverable coder stall")
 	}
 }
 
@@ -372,10 +467,15 @@ func TestRunQASuccessAndFallback(t *testing.T) {
 // run_code_reviewer
 // ---------------------------------------------------------------------------
 
-// Contract: reviewer passes qa_ran through to its prompt AND uses the reviewer
-// tool set; on failure it falls back to approved=true (non-blocking).
-func TestRunCodeReviewerQARanAndFallback(t *testing.T) {
+// Contract: reviewer passes qa_ran through to its prompt and uses the reviewer
+// tool set; schema/no-result failure is fail-closed and must never auto-approve.
+func TestRunCodeReviewerQARanAndFailure(t *testing.T) {
 	nr := &noteRecorder{}
+	worktree := t.TempDir()
+	venvBin := filepath.Join(worktree, ".venv", "bin")
+	if err := os.MkdirAll(venvBin, 0o755); err != nil {
+		t.Fatalf("create reviewer virtualenv dir: %v", err)
+	}
 	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
 		rr := dest.(*schemas.CodeReviewResult)
 		rr.Approved = true
@@ -383,37 +483,146 @@ func TestRunCodeReviewerQARanAndFallback(t *testing.T) {
 		return &harness.Result{Parsed: dest}, nil
 	}}
 	out, err := RunCodeReviewer(context.Background(), newDeps(mh, nil, nr), map[string]any{
-		"worktree_path": "/wt",
+		"worktree_path": worktree,
 		"coder_result":  map[string]any{},
 		"issue":         map[string]any{"name": "i"},
 		"qa_ran":        true,
 		"iteration_id":  "r1",
+		"ai_provider":   "open_code",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	m := asMap(t, out)
 	assertKeys(t, m, codeReviewResultKeys)
-	// reviewer tools ordering (Bash last) is the reviewer-specific set.
-	if strings.Join(mh.gotOpts.Tools, ",") != "Read,Write,Glob,Grep,Bash" {
+	if strings.Join(mh.gotOpts.Tools, ",") != "Read,Write,Edit,Glob,Grep,Bash" {
 		t.Fatalf("reviewer tool set mismatch: %v", mh.gotOpts.Tools)
 	}
+	if got := mh.gotOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != harnessx.OpenCodeNoInstallPermissionOverlay {
+		t.Fatalf("reviewer OpenCode permission overlay mismatch: %q", got)
+	}
+	if got := mh.gotOpts.Env["PATH"]; !strings.HasPrefix(got, venvBin+string(os.PathListSeparator)) {
+		t.Fatalf("reviewer virtualenv PATH not preferred: %q", got)
+	}
+	if got := mh.gotOpts.SchemaMode; got != "single" {
+		t.Fatalf("reviewer schema mode = %q, want single", got)
+	}
 
-	// fallback: not-blocking approve
 	mhf := &mockHarness{fn: func(_ any) (*harness.Result, error) {
-		return &harness.Result{IsError: true, Parsed: nil}, nil
+		return &harness.Result{IsError: true, ErrorMessage: "review-parse", Parsed: nil}, nil
 	}}
 	out2, err := RunCodeReviewer(context.Background(), newDeps(mhf, nil, nr), map[string]any{
 		"worktree_path": "/wt",
 		"coder_result":  map[string]any{},
 		"issue":         map[string]any{"name": "i"},
 	})
-	if err != nil {
-		t.Fatalf("fallback must not error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "review-parse") {
+		t.Fatalf("expected fail-closed reviewer error, got out=%v err=%v", out2, err)
 	}
-	m2 := asMap(t, out2)
-	if m2["approved"] != true || m2["blocking"] != false {
-		t.Fatalf("reviewer fallback must be approved=true, blocking=false, got %v", m2)
+	if out2 != nil {
+		t.Fatalf("expected nil reviewer result on schema failure, got %v", out2)
+	}
+}
+
+func TestRunCodeReviewerRetriesNoProgressOnceInVerdictOnlyMode(t *testing.T) {
+	nr := &noteRecorder{}
+	worktree := t.TempDir()
+	if err := exec.Command("git", "init", "-q", worktree).Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	calls := 0
+	var prompts []string
+	mh := &mockHarness{fnWithOpts: func(prompt string, dest any, _ harness.Options) (*harness.Result, error) {
+		calls++
+		prompts = append(prompts, prompt)
+		if calls == 1 {
+			return nil, errors.New("CLI command made no progress for 90s: opencode run --format json")
+		}
+		rr := dest.(*schemas.CodeReviewResult)
+		rr.Approved = true
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	out, err := RunCodeReviewer(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"worktree_path": worktree,
+		"coder_result":  map[string]any{},
+		"issue":         map[string]any{"name": "review-stall"},
+		"iteration_id":  "review-retry",
+	})
+	if err != nil {
+		t.Fatalf("expected reviewer recovery, got %v", err)
+	}
+	if calls != 2 || len(prompts) != 2 {
+		t.Fatalf("expected one reviewer retry, calls=%d prompts=%d", calls, len(prompts))
+	}
+	if strings.Contains(prompts[0], "RECOVERY MODE") || !strings.Contains(prompts[1], "RECOVERY MODE — VERDICT ONLY") {
+		t.Fatalf("expected only retry to use verdict-only prompt: %q", prompts)
+	}
+	m := asMap(t, out)
+	if m["approved"] != true || m["iteration_id"] != "review-retry" {
+		t.Fatalf("unexpected recovered reviewer result: %v", m)
+	}
+	if !nr.hasTag("retry") {
+		t.Fatal("expected reviewer retry note")
+	}
+}
+
+func TestRunCodeReviewerArchivesOnlyNewUntrackedScratch(t *testing.T) {
+	nr := &noteRecorder{}
+	worktree := t.TempDir()
+	if err := exec.Command("git", "init", "-q", worktree).Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	preexisting := filepath.Join(worktree, "preexisting.txt")
+	if err := os.WriteFile(preexisting, []byte("caller-owned\n"), 0o644); err != nil {
+		t.Fatalf("write preexisting file: %v", err)
+	}
+	archiveParent := filepath.Join(filepath.Dir(worktree), ".reviewer-scratch")
+	t.Cleanup(func() { _ = os.RemoveAll(archiveParent) })
+
+	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
+		if err := os.WriteFile(filepath.Join(worktree, "adversarial_check.py"), []byte("print('probe')\n"), 0o644); err != nil {
+			t.Fatalf("write reviewer scratch: %v", err)
+		}
+		rr := dest.(*schemas.CodeReviewResult)
+		rr.Approved = true
+		rr.Blocking = false
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	if _, err := RunCodeReviewer(context.Background(), newDeps(mh, nil, nr), map[string]any{
+		"worktree_path": worktree,
+		"coder_result":  map[string]any{},
+		"issue":         map[string]any{"name": "i"},
+		"iteration_id":  "scratch-1",
+		"ai_provider":   "open_code",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(worktree, "adversarial_check.py")); !os.IsNotExist(err) {
+		t.Fatalf("reviewer scratch still in product worktree: err=%v", err)
+	}
+	if got, err := os.ReadFile(preexisting); err != nil || string(got) != "caller-owned\n" {
+		t.Fatalf("pre-existing untracked file was not preserved: got=%q err=%v", got, err)
+	}
+	matches, err := filepath.Glob(filepath.Join(
+		archiveParent,
+		reviewerScratchSegment(filepath.Base(worktree)),
+		reviewerScratchSegment("scratch-1"),
+		"run-*",
+		"adversarial_check.py",
+	))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("archived reviewer scratch matches=%v err=%v", matches, err)
+	}
+	if got, err := os.ReadFile(matches[0]); err != nil || string(got) != "print('probe')\n" {
+		t.Fatalf("archived reviewer scratch content got=%q err=%v", got, err)
+	}
+	status, err := exec.Command("git", "-C", worktree, "status", "--short").Output()
+	if err != nil {
+		t.Fatalf("git status: %v", err)
+	}
+	if got := strings.TrimSpace(string(status)); got != "?? preexisting.txt" {
+		t.Fatalf("unexpected final worktree status: %q", got)
 	}
 }
 

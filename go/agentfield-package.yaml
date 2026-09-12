@@ -24,9 +24,8 @@ agent_node:
 
 user_environment:
   require_one_of:
-    # SWE-AF runs on either Claude (Anthropic) or open models via OpenRouter.
-    # Provide one. With only an OpenRouter key it auto-selects the open_code
-    # runtime.
+    # SWE-AF accepts Anthropic, OpenRouter, or an OpenAI-compatible provider.
+    # The permanent DEV lane uses Gonka through OPENAI_API_KEY + OPENAI_BASE_URL.
     - id: llm_provider
       description: an LLM provider key
       options:
@@ -36,6 +35,10 @@ user_environment:
           scope: global
         - name: OPENROUTER_API_KEY
           description: OpenRouter API key (DeepSeek/Qwen/Llama/… — 200+ models)
+          type: secret
+          scope: global
+        - name: OPENAI_API_KEY
+          description: OpenAI-compatible API key (including Gonka)
           type: secret
           scope: global
   optional:
@@ -48,8 +51,32 @@ user_environment:
       scope: global
     - name: SWE_DEFAULT_RUNTIME
       description: Coding runtime for every role (claude_code | open_code | codex)
+      default: open_code
+    - name: SWE_OPENCODE_BIN
+      description: >-
+        Path to the SWE-owned OpenCode wrapper/binary used when the coding runtime
+        is open_code. Set this explicitly when the wrapper is not discoverable by
+        the node runner.
     - name: SWE_DEFAULT_MODEL
-      description: Override the model id for every role (e.g. openrouter/deepseek/deepseek-v4-flash-0731)
+      description: Virtual FCM model id used by every SWE role; FCM owns upstream model routing
+      default: fcm/fcm
+    - name: AGENTFIELD_HARNESS_IDLE_SECONDS
+      description: >-
+        Idle-output watchdog for harness CLI subprocesses. SWE defaults this to 0
+        because the installed OpenCode wrapper buffers stdout/stderr until the
+        command exits; the SDK total timeout remains the bounded liveness guard.
+      default: "0"
+    - name: AGENT_CALLBACK_URL
+      description: >-
+        Public base URL the control plane uses to call this node. Required for
+        containerized or remote deployments where localhost is not reachable
+        from the control plane.
+    - name: SWE_OPENCLAW_HITL
+      description: >-
+        Use OpenClaw/Telegram as the human-in-the-loop surface when HAX is not
+        configured. Opt-in: set to 1 only where OpenClaw can reach this node's
+        AgentField logs and /webhooks/approval callback.
+      default: "0"
     - name: SWE_PRO_ENGINE
       description: >-
         High-performance coding engine (beta). On by default for nodes

@@ -252,14 +252,28 @@ func TestProductManagerAskUserStrippedWhenHaxDisabled(t *testing.T) {
 // First call emits a form; after the user answers, the second call returns a
 // clean PRD → exactly 2 harness calls.
 func TestProductManagerReinvokesOnAskUserForm(t *testing.T) {
-	h := &fakeHarness{fn: func(call int, _ string, dest any, _ harness.Options) (*harness.Result, error) {
-		p := dest.(*schemas.PRD)
-		if call == 1 {
-			p.AskUserForm = &schemas.AskUserForm{Title: "clarify", SubmitLabel: "Submit"}
-		} else {
-			p.ValidatedDescription = "resolved"
+	pmCalls := 0
+	h := &fakeHarness{fn: func(_ int, _ string, dest any, _ harness.Options) (*harness.Result, error) {
+		switch d := dest.(type) {
+		case *hitl.DecisionCase:
+			d.Rationale = "shadow recommendation"
+			d.Risk = "low"
+			d.Confidence = 0.9
+			d.RecommendedMode = "AUTO"
+			d.ConsultedRoles = []string{"single_resolver"}
+			return &harness.Result{Parsed: dest}, nil
+		case *schemas.PRD:
+			pmCalls++
+			if pmCalls == 1 {
+				d.AskUserForm = &schemas.AskUserForm{Title: "clarify", SubmitLabel: "Submit"}
+			} else {
+				d.ValidatedDescription = "resolved"
+			}
+			return &harness.Result{Parsed: dest}, nil
+		default:
+			t.Fatalf("unexpected harness dest %T", dest)
+			return nil, nil
 		}
-		return &harness.Result{Parsed: dest}, nil
 	}}
 	hax, closeSrv := haxTestServer(t)
 	defer closeSrv()
@@ -274,15 +288,15 @@ func TestProductManagerReinvokesOnAskUserForm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if h.calls != 2 {
-		t.Fatalf("expected 2 harness calls (initial + re-invoke), got %d", h.calls)
+	if h.calls != 3 || pmCalls != 2 {
+		t.Fatalf("expected 3 harness calls (PM + shadow decision + PM re-invoke), got total=%d pm=%d", h.calls, pmCalls)
 	}
 	m := out.(map[string]any)
 	if m["validated_description"] != "resolved" || m["ask_user_form"] != nil {
 		t.Fatalf("expected resolved PRD with cleared form, got %v", m)
 	}
 	// The re-invoked prompt must surface the prior response so the LLM does not re-ask.
-	if !strings.Contains(h.prompts[1], "Prior Clarification From User") {
+	if !strings.Contains(h.prompts[2], "Prior Clarification From User") {
 		t.Fatalf("expected prior-response block in re-invoked prompt")
 	}
 }

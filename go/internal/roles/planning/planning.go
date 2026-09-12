@@ -24,8 +24,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
+	"github.com/Agent-Field/agentfield/sdk/go/ai"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/config"
 	"github.com/Agent-Field/SWE-AF/go/internal/dagutil"
@@ -48,8 +50,13 @@ type Handler func(ctx context.Context, deps *Deps, input map[string]any) (any, e
 // ask_user_form is stripped and the current decision proceeds) — matching
 // Python's build_hax_client_from_env() returning None when HAX_API_KEY is unset.
 // The node wiring builds it once via hitl.BuildHaxClientFromEnv().
+type AICaller interface {
+	AI(ctx context.Context, prompt string, opts ...ai.Option) (*ai.Response, error)
+}
+
 type Deps struct {
 	Harness          harnessx.HarnessCaller
+	AI               AICaller
 	App              hitl.App
 	Pauser           hitl.Pauser
 	Hax              *hitl.HaxClient
@@ -71,6 +78,38 @@ func Handlers() map[string]Handler {
 		"run_architect":         RunArchitect,
 		"run_tech_lead":         RunTechLead,
 		"run_sprint_planner":    RunSprintPlanner,
+	}
+}
+
+func newShadowDecisionResolver(
+	deps *Deps,
+	provider string,
+	model string,
+	cwd string,
+	permissionMode string,
+) hitl.ShadowDecisionResolver {
+	return func(ctx context.Context, in hitl.DecisionRunInput) (*hitl.DecisionCase, error) {
+		prompt, err := hitl.BuildShadowDecisionPrompt(in)
+		if err != nil {
+			return nil, err
+		}
+		opts := harnessx.RoleOptions{
+			Provider:       provider,
+			Model:          model,
+			MaxTurns:       6,
+			Tools:          []string{"Read", "Glob", "Grep"},
+			PermissionMode: permissionMode,
+			SystemPrompt:   hitl.ShadowDecisionSystemPrompt,
+			Cwd:            cwd,
+		}.ToOptions()
+		parsed, result, err := harnessx.Run[hitl.DecisionCase](ctx, deps.Harness, prompt, opts)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil || result.Parsed == nil {
+			return nil, errors.New("shadow HITL decision resolver returned no parsed result")
+		}
+		return parsed, nil
 	}
 }
 
@@ -132,24 +171,43 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 			WorkspaceManifest:  wsManifest,
 			PriorUserResponses: prior,
 		})
-		opts := harnessx.RoleOptions{
-			Provider:       provider,
-			Model:          model,
-			MaxTurns:       maxTurns,
-			Tools:          []string{"Read", "Write", "Glob", "Grep", "Bash"},
-			PermissionMode: permissionMode,
-			SystemPrompt:   systemPrompt,
-			Cwd:            repoPath,
-		}.ToOptions()
-		parsed, res, err := harnessx.Run[schemas.PRD](ctx, deps.Harness, taskPrompt, opts)
-		if err != nil {
-			return nil, err
-		}
-		if res == nil || res.Parsed == nil {
-			if res == nil {
-				return nil, errors.New("PM harness diagnostic: nil result")
+		var parsed *schemas.PRD
+		if deps.AI != nil {
+			var direct schemas.PRD
+			directModel := strings.TrimPrefix(model, "openai/")
+			resp, aiErr := deps.AI.AI(ctx, taskPrompt,
+				ai.WithSystem(systemPrompt),
+				ai.WithModel(directModel),
+				ai.WithSchema(schemas.PRD{}),
+			)
+			if aiErr != nil {
+				return nil, aiErr
 			}
-			return nil, fmt.Errorf("PM harness diagnostic: is_error=%v failure=%v err=%q result=%q turns=%d duration_ms=%d messages=%d", res.IsError, res.FailureType, res.ErrorMessage, res.Result, res.NumTurns, res.DurationMS, len(res.Messages))
+			if err := resp.Into(&direct); err != nil {
+				return nil, fmt.Errorf("PM direct AI schema decode failed: %w", err)
+			}
+			parsed = &direct
+		} else {
+			opts := harnessx.RoleOptions{
+				Provider:       provider,
+				Model:          model,
+				MaxTurns:       maxTurns,
+				Tools:          []string{"Read", "Write", "Glob", "Grep", "Bash"},
+				PermissionMode: permissionMode,
+				SystemPrompt:   systemPrompt,
+				Cwd:            repoPath,
+			}.ToOptions()
+			p, res, hErr := harnessx.Run[schemas.PRD](ctx, deps.Harness, taskPrompt, opts)
+			if hErr != nil {
+				return nil, hErr
+			}
+			if res == nil || res.Parsed == nil {
+				if res == nil {
+					return nil, errors.New("PM harness diagnostic: nil result")
+				}
+				return nil, fmt.Errorf("PM harness diagnostic: is_error=%v failure=%v err=%q result=%q turns=%d duration_ms=%d messages=%d", res.IsError, res.FailureType, res.ErrorMessage, res.Result, res.NumTurns, res.DurationMS, len(res.Messages))
+			}
+			parsed = p
 		}
 		prdMap, err := toMap(parsed)
 		if err != nil {
@@ -176,7 +234,12 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 			WebhookURL:  hitl.ApprovalWebhookURL(deps.AgentFieldServer),
 			NodeID:      deps.NodeID,
 			ExecutionID: ec.ExecutionID,
-			NoteLabel:   "product_manager",
+			Metadata: map[string]any{
+				"project_id": filepath.Base(filepath.Clean(repoPath)),
+				"repo_path":  repoPath,
+			},
+			NoteLabel:              "product_manager",
+			ShadowDecisionResolver: newShadowDecisionResolver(deps, provider, model, repoPath, permissionMode),
 		})
 	if err != nil {
 		return nil, err
@@ -262,7 +325,12 @@ func RunEnvironmentScout(ctx context.Context, deps *Deps, input map[string]any) 
 			WebhookURL:  hitl.ApprovalWebhookURL(deps.AgentFieldServer),
 			NodeID:      deps.NodeID,
 			ExecutionID: ec.ExecutionID,
-			NoteLabel:   "environment_scout",
+			Metadata: map[string]any{
+				"project_id": filepath.Base(filepath.Clean(repoPath)),
+				"repo_path":  repoPath,
+			},
+			NoteLabel:              "environment_scout",
+			ShadowDecisionResolver: newShadowDecisionResolver(deps, provider, model, repoPath, permissionMode),
 		})
 	if err != nil {
 		return nil, err

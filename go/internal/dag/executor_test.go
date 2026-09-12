@@ -365,6 +365,51 @@ func TestCheckpointWrittenAndRoundTrips(t *testing.T) {
 	}
 }
 
+func TestResumeAfterCancellationDoesNotRepeatCompletedIssue(t *testing.T) {
+	dir := t.TempDir()
+	plan := makePlan([]map[string]any{issue("a"), issue("b")}, [][]string{{"a"}, {"b"}})
+	plan["artifacts_dir"] = dir
+
+	ctx, cancel := context.WithCancel(context.Background())
+	firstCalls := []string{}
+	firstExecute := func(_ context.Context, iss map[string]any, _ *schemas.DAGState) (map[string]any, error) {
+		name := asStr(iss["name"])
+		firstCalls = append(firstCalls, name)
+		if name == "a" {
+			cancel()
+		}
+		return map[string]any{"outcome": "completed", "result_summary": "done"}, nil
+	}
+
+	_, err := RunDAG(ctx, plan, "/repo", nil, "swe-planner", testCfg(t, nil), WithExecuteFn(firstExecute))
+	if err != context.Canceled {
+		t.Fatalf("first run error = %v, want context.Canceled", err)
+	}
+	if len(firstCalls) != 1 || firstCalls[0] != "a" {
+		t.Fatalf("first run calls = %v, want [a]", firstCalls)
+	}
+	loaded := loadCheckpoint(dir)
+	if loaded == nil || !names(loaded.CompletedIssues)["a"] {
+		t.Fatalf("checkpoint after interruption lost completed issue a: %+v", loaded)
+	}
+
+	resumeCalls := []string{}
+	resumeExecute := func(_ context.Context, iss map[string]any, _ *schemas.DAGState) (map[string]any, error) {
+		resumeCalls = append(resumeCalls, asStr(iss["name"]))
+		return map[string]any{"outcome": "completed", "result_summary": "done"}, nil
+	}
+	resumed, err := RunDAG(context.Background(), plan, "/repo", nil, "swe-planner", testCfg(t, nil), WithResume(true), WithExecuteFn(resumeExecute))
+	if err != nil {
+		t.Fatalf("resume RunDAG: %v", err)
+	}
+	if len(resumeCalls) != 1 || resumeCalls[0] != "b" {
+		t.Fatalf("resume calls = %v, want [b] only", resumeCalls)
+	}
+	if !names(resumed.CompletedIssues)["a"] || !names(resumed.CompletedIssues)["b"] {
+		t.Fatalf("resumed completed issues = %v, want a+b", resumed.CompletedIssues)
+	}
+}
+
 func TestLoadPythonGoldenCheckpoint(t *testing.T) {
 	dir := t.TempDir()
 	execDir := filepath.Join(dir, "execution")
@@ -557,6 +602,15 @@ func TestReplanContinueSkipsDownstream(t *testing.T) {
 
 func TestLevelFailureThresholdAborts(t *testing.T) {
 	m := newMock()
+	var coderMu sync.Mutex
+	coderIssues := map[string]int{}
+	m.on("run_coder", func(kwargs map[string]any) (map[string]any, error) {
+		name := asStr(asMap(kwargs["issue"])["name"])
+		coderMu.Lock()
+		coderIssues[name]++
+		coderMu.Unlock()
+		return m.defaultFor("run_coder", kwargs)
+	})
 	m.on("run_code_reviewer", func(kwargs map[string]any) (map[string]any, error) {
 		return map[string]any{"approved": false, "blocking": true, "summary": "bad"}, nil
 	})
@@ -575,9 +629,15 @@ func TestLevelFailureThresholdAborts(t *testing.T) {
 	if !contains(state.SkippedIssues, "c") {
 		t.Fatalf("expected 'c' skipped by abort threshold, got skipped=%v", state.SkippedIssues)
 	}
-	// 'c' must never have been executed.
-	if m.count("run_coder") != 2 {
-		t.Fatalf("expected exactly 2 coder calls (level 0 only), got %d", m.count("run_coder"))
+	// 'a' and 'b' may each take bounded self-repair iterations, but level-1 'c'
+	// must never execute once the level-0 failure threshold aborts the DAG.
+	coderMu.Lock()
+	defer coderMu.Unlock()
+	if coderIssues["c"] != 0 {
+		t.Fatalf("downstream issue c executed %d time(s): %v", coderIssues["c"], coderIssues)
+	}
+	if coderIssues["a"] == 0 || coderIssues["b"] == 0 {
+		t.Fatalf("expected both level-0 issues to execute, got %v", coderIssues)
 	}
 }
 

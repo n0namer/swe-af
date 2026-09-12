@@ -4,20 +4,27 @@
 
 .PHONY: build vet test check lint run-planner run-fast docker-build docker-up docker-down
 
+# Prefer Go from PATH for normal developer environments. Permanent DEV keeps
+# the toolchain at /usr/local/go/bin even when the process PATH is sanitized.
+GO ?= $(shell command -v go 2>/dev/null)
+ifeq ($(strip $(GO)),)
+GO := /usr/local/go/bin/go
+endif
+
 # Compile every package in the module.
 build:
-	go build ./...
+	$(GO) build ./...
 
 # Static analysis (go vet) across the module.
 vet:
-	go vet ./...
+	$(GO) vet ./...
 
 # Unit tests across the module.
 test:
-	go test ./...
+	$(GO) test ./...
 
-# The full local gate CI runs: vet + tests.
-check: vet test
+# The full local gate mirrors design §10: build + vet + tests.
+check: build vet test
 
 # Optional lint pass; no-op with a hint when golangci-lint is not installed.
 lint:

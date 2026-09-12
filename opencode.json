@@ -3,6 +3,44 @@
   "model": "{env:HARNESS_MODEL}",
   "small_model": "{env:HARNESS_MODEL}",
   "provider": {
+    "gonka": {
+      "name": "Gonka OpenAI-compatible",
+      "env": [
+        "OPENAI_API_KEY"
+      ],
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:OPENAI_API_KEY}",
+        "baseURL": "{env:AI_BASE_URL}"
+      },
+      "models": {
+        "deepseek-ai/DeepSeek-V4-Flash-0731": {
+          "id": "deepseek-ai/DeepSeek-V4-Flash-0731",
+          "name": "DeepSeek V4 Flash 0731"
+        }
+      }
+    },
+    "fcm": {
+      "name": "FCM OpenAI-compatible",
+      "env": [
+        "LLM_BROKER_API_KEY"
+      ],
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:LLM_BROKER_API_KEY}",
+        "baseURL": "{env:LLM_BROKER_BASE_URL}"
+      },
+      "models": {
+        "fcm": {
+          "id": "fcm",
+          "name": "FCM"
+        },
+        "fcm:keyless-dev": {
+          "id": "fcm:keyless-dev",
+          "name": "FCM Keyless Dev"
+        }
+      }
+    },
     "openrouter": {
       "options": {
         "apiKey": "{env:OPENROUTER_API_KEY}"

@@ -247,6 +247,7 @@ You work in an isolated git worktree:
    - Put tests in the project's test directory (` + "`" + `tests/` + "`" + `, ` + "`" + `test/` + "`" + `, ` + "`" + `__tests__/` + "`" + `).      If the issue spec names specific test file paths, use those exact paths.
    - Name tests descriptively: ` + "`" + `test_<module>_<behavior>` + "`" + ` for functions.
    - Tests verify behavior, not implementation details.
+   - Never install missing test runners, review tools, or dependencies merely to make validation runnable. If the issue explicitly requires a dependency change, edit the project's declared dependency files as part of that implementation; otherwise treat a missing runner/dependency as ` + "`" + `VALIDATION_BLOCKER` + "`" + `, run only already-available syntax/static checks, and report ` + "`" + `tests_passed=false` + "`" + ` rather than installing packages.
 4. **Follow existing patterns** — match the project's style, conventions,    import paths, and directory layout. Read nearby code before writing new code.
 5. **Clean commits** — your commit should look like a PR you'd be proud of.    Before staging, review ` + "`" + `git status` + "`" + ` and only commit source code, tests,    and configuration files you intentionally created or modified. Generated    artifacts, dependency directories, build outputs, caches, and tooling    leftovers have no place in a commit. Think: "would a reviewer question    why this file is here?"
 
@@ -257,7 +258,7 @@ You work in an isolated git worktree:
 3. Implement the solution: create or modify files as needed.
 4. Write or update tests per the issue's Testing Strategy section. Create    properly named test files with unit tests, functional tests, and edge cases.
 5. Run tests to verify your implementation (if a test runner is available).
-6. Review and commit: check ` + "`" + `git status` + "`" + `, stage only your intentional    changes, and commit with a descriptive message:    ` + "`" + `"issue/<name>: <summary>"` + "`" + `. If you installed dependencies or ran build    tools during development, make sure their output isn't staged.
+6. Review and commit: check ` + "`" + `git status` + "`" + `, stage only your intentional    changes, and commit with a descriptive message:    ` + "`" + `"issue/<name>: <summary>"` + "`" + `. If you ran build tools during development, make sure generated output isn't staged; do not install missing validation dependencies.
 
 ## Git Rules
 

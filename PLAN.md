@@ -1,179 +1,325 @@
 # SWE-AF Project Plan (Source of Truth)
 
 Status: active
-Last reconciled: 2026-08-31
+Last reconciled: 2026-09-12
+Canonical GitHub owner: `n0namer/swe-af`
+Canonical branch for project SoT: `dev`
 Canonical project SoT: this file (`PLAN.md`)
-Canonical operator lifecycle: `n0namer/universal-solver/docs/runbooks/agentfield-dev-debug-test-handoff.md`
-BMAD method source: `n0namer/BMAD-MNNZ/.agents/skills/bmad-help/SKILL.md`
-Engineering contract: root `AGENTS.md` (FVE-adapted for SWE-AF; canonical engineering prerequisite as of commit `8f464a5d15afe628ff162bf6a3956c411873105f`)
+Product-code inner loop: CURRENT `/src/swe-af` runtime/exact-source workspace; GitHub is publication/canonicalization only.
+Historical evidence: retained in Git history; old checkpoints do not override the CURRENT section below.
 
-## North Star
+## Global North Star
 
-Deliver SWE-AF as a reliable AgentField software-engineering capability that can take a bounded real-repository task, produce the correct change, pass canonical tests/acceptance checks, recover from expected failures, and produce a durable exact-SHA Git result with complete provenance.
+Bring SWE / SWE-AF into a genuinely working end-to-end state and prove it on real software-engineering tasks with independent executable acceptance evidence, at economically acceptable cost.
 
-For well-scoped work, `swe-planner.implement_issue` is the preferred acceptance entrypoint. `swe-planner.build` is reserved for feature-level decomposition/execution after lower gates pass.
+Operationally, SWE must:
+1. receive a real engineering task;
+2. localize the relevant source;
+3. edit the actual repository/workspace;
+4. run the appropriate canonical validation;
+5. produce the required diff/commit/artifact;
+6. pass an independent executable oracle/verifier;
+7. preserve already-completed work across partial failure/timeout;
+8. recover/continue instead of blindly restarting;
+9. measure correctness, cost and latency together;
+10. reproduce the result across a small controlled task ladder and then on a clean materialized runtime.
 
-## Operating Invariants (Anti-Drift)
+AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion are supporting mechanisms, not North Stars.
 
-- Universal Solver runbook owns the permanent AgentField DEV development lifecycle; SWE-AF docs own SWE-AF product architecture.
-- Lane A = fast live-container debug: observe current source → bounded live patch → targeted test → same-target reload only if needed → functional canary → iterate.
-- Lane B = capture/durability/promotion: only accepted runtime deltas become durable `fork/dev` state and later exact-SHA materialization.
-- Do NOT use GitHub-edit → redeploy as a normal inner debug loop.
-- Runtime may temporarily be ahead of Git during debugging; release/handoff may not.
-- Effective live-source identity = Git HEAD + working-tree delta + loaded process/container generation.
-- SourceLoop/runtime-capture is a stale-safe proposal/delivery layer, not an automatic filesystem-to-main synchronizer.
-- Generated files, caches, logs, test artifacts and temporary instrumentation are not candidate source.
-- `fork/main` should remain a clean upstream mirror; downstream project deltas belong on `fork/dev` or their canonical operational owner.
+## Authority and Anti-Drift
 
-## Current Factual State
+- Latest explicit project objective + this CURRENT SoT define the project route; CURRENT runtime/readback defines actual state.
+- Do not use GitHub-edit -> redeploy as the product-code debugging loop.
+- Runtime code edits happen in the authorized container/exact-source workspace first; test there; publish only the exact accepted delta.
+- Do not infer acceptance from model prose, reviewer PASS, `success=true`, a commit existing, HTTP/container health, or tests that do not exercise the required behavior.
+- On timeout/ambiguous result, inspect effect/post-state before any retry.
+- One 30-minute batch = one coherent DoD gate. After every material result, re-observe and replan from fresh CURRENT.
+- Before each batch write:
+  - GLOBAL NORTH STAR
+  - CURRENT BLOCKER
+  - THIS BATCH
+  - NORTH-STAR DELTA
+  - STOP CONDITION
+- STOP_SIDEQUEST if work does not materially shorten the path to independently accepted SWE tasks.
 
-Reconciled from live readback on 2026-08-31.
+## CURRENT — 2026-09-12
 
-- Permanent AgentField DEV Coolify application: `edshqtkwskg3lrczekhcmd71`; repo `n0namer/universal-solver`; deployed orchestrator SHA `75652b4b1f0bf18dbcdd6af9abfef40bfa068cd7`.
-- Current workforce container: `workforce-edshqtkwskg3lrczekhcmd71-184945561237`; created 2026-08-30T18:50:28Z; running and healthy; Docker restart_count = 0. Coolify app history records a crash-type restart on 2026-08-30.
-- `/src` is a writable persistent runtime-source volume in workforce.
-- Accepted SWE-AF runtime seed in that generation: `da9228f6dcaeffa2aca3cf781f04d2ea720b5294`.
-- SourceLoop SWE canary has already passed at least once: runtime → capture → Git; accepted SWE dev SHA is recorded in Universal Solver fleet lock.
-- `runtime-capture` is currently running and has recent successful capture activity for Deep Research.
-- `meta_deep_research` is currently `active/ready`.
-- Historical standalone SWE service `universal-solver-swe-af` (`wetscrp2tj90tklmlvkcadfw`) existed during Wave 0, but canonical server-ops records it as removed during cleanup on 2026-08-21. It is superseded topology; CURRENT target is permanent DEV `edshqtkwskg3lrczekhcmd71`.
-- Historical isolated B `2zciq6hujpev6dbudcdlijqq` remains healthy but is forensic comparison only, not the current mutation target.
-- `swe-planner` / `swe-pro` are not live in CURRENT permanent DEV. Historical persisted logs prove they previously started, registered and served requests, but that evidence predates the current container generation.
-- Canonical Universal Solver handoff contains stronger CURRENT root-cause evidence for the present generation: workforce bootstrap resolved `OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY` empty, intentionally skipped `swe-planner`, and nevertheless became healthy. The prior `PROCESS_EXIT` hypothesis is superseded; primary classification is `PROVIDER / BOOTSTRAP_GATE`.
-- Coolify environment inventory proves the provider key names exist, not that secret values are non-empty. Secret values remain unexposed.
-- SWE's own `go/agentfield-package.yaml` requires one of `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`, so the current Universal Solver start gate matches the published SWE package contract.
-- SWE Go runtime also contains `codex`/`OPENAI_API_KEY` support and `opencode.json` contains explicit OpenAI-compatible provider support. Universal Solver already maps Gonka into `OPENAI_API_KEY` + `OPENAI_BASE_URL`. Therefore a small provider-contract/bootstrap adaptation is plausible, but exact Gonka compatibility for the SWE harness is not runtime-proven yet.
-- Workforce health is insufficient evidence of SWE readiness: its healthcheck validates only `/afhome/us-e2e-provenance.txt`, not required SWE node liveness/readiness.
-- Current AgentField registry still exposes `build`, `plan`, `implement_issue`, `resolve` and internal schemas for `swe-planner`, but these are not a live callable capability while the node is offline.
-- `swe-af:main` and `swe-af:dev` were observed diverged before this SoT commit: dev was 5 commits ahead and 1 commit behind main. The main-only downstream commit is `docs: add canonical error ledger`, conflicting with the clean-mirror invariant.
+### Source/runtime identity
 
-## Current Stage
+- CURRENT live product source: `/src/swe-af`.
+- Git baseline HEAD: `58c4e0d19081bc52363c120b7963a34cebb1e894`.
+- Working tree is intentionally ahead of baseline: fresh readback shows 58 modified/staged paths + 2 untracked paths.
+- Treat product identity as `58c4e0d... + exact working-tree delta + loaded process generation` until accepted deltas are canonicalized.
+- Full CURRENT Go suite PASS:
+  - `/usr/local/go/bin/go test ./...`
+  - Go runtime: `go1.25.14`.
+- Do not mass-commit or reset the dirty runtime tree.
 
-BROWNFIELD RECOVERY / PROVIDER ENABLEMENT / SEMANTIC ACCEPTANCE.
+### SWE execution lane
 
-Infrastructure bootstrap, exact-SHA reconciliation, discovery, and one real SWE SourceLoop capture are already proven. The first failed prerequisite in CURRENT permanent DEV is provider/bootstrap enablement: SWE is intentionally not started because its declared Anthropic/OpenRouter provider gate is unsatisfied. The evidence ladder is therefore provider contract -> SWE active/ready -> non-mutating smoke -> bounded `implement_issue`.
+- Root cause of the fresh pre-broker failure is proven: clean target base `2c374989...` lacked provider `fcm` in its project `opencode.json`, so OpenCode accepted `-m fcm/fcm` but failed before a broker request.
+- Executable A/B evidence:
+  - clean base direct OpenCode canary -> `Unexpected server error`, FCM `requestsRouted` unchanged `697 -> 697`;
+  - CURRENT `/src/swe-af` direct canary -> `DIRECT_CANARY_OK`, FCM `697 -> 699`;
+  - clean base + runtime-owned FCM overlay -> `OVERLAY_CANARY_OK`, FCM `699 -> 701`.
+- Runtime-owned OpenCode overlay in `/src/swe-af/go/internal/harnessx/run.go` now defines provider `fcm` while preserving no-install permissions. Deterministic RED->GREEN contract test added in `harnessx`; targeted packages and full CURRENT `go test ./...` PASS.
+- Exact tested planner binary: `/tmp/swe-planner-fcm-overlay-20260912`, SHA256 `0224447d5585c1c97c9ce154308c2cdd18834aeed4a73acc9ba6d5ef7d748ab4`; current planner PID `424603`, same callback/health on port `8005`, control-plane active.
+- Post-fix real task `exec_20260912_094308_za4vz5sv` reached FCM repeatedly, edited the target repo, and completed with a bounded two-file commit. The stable execution route is therefore recovered.
 
-## Bounded Development Batches
+### FCM
 
-Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
+- FCM is not globally down.
+- Fresh `/health`: version `0.5.81`, 34 active models, 8 effective providers, no in-flight request at readback.
+- Small current direct telemetry for `routerai/z-ai/glm-5.3-flash`: 6/6 successful calls.
+- Therefore the L3-26 failure is narrower than “FCM is broken”: current evidence points to the OpenCode/FCM tool trajectory, structured-output/provider boundary, or another execution-route integration seam.
+- FCM decides model/provider routing; it does not own authoritative engineering obligation state.
 
-### Batch 1 — Provider/bootstrap gate and SWE liveness
+### Acceptance evidence
 
-Status: IN PROGRESS
+- L3-24 (`qa-synthesizer-fcm-smart-l3-24`): historical strong positive evidence. Full issue reached coder -> reviewer block -> repair -> second review -> verifier; bounded two-file delivery; independently inspected; canonical pytest was unavailable, so acceptance had an explicit validation limitation.
+- L3-25 (`dag-unknown-dependency-fcm-smart-l3-25`):
+  - exact commit `00517ce677e96b17bcd462bd46b9e5f9fa620674`;
+  - base `2c374989b39d0b53b34ef33fd2ba6289e74194ae`;
+  - changed only `swe_af/execution/dag_utils.py` and `tests/test_dag_utils.py`;
+  - independent exact-SHA verification on 2026-09-12: `git diff --check` PASS; deterministic acceptance/adversarial oracle 6/6 PASS; all 4 committed regression test functions 4/4 PASS; `compileall` PASS;
+  - canonical pytest remains unavailable and no dependency was installed.
+  - Verdict: this bounded task is independently executable-accepted with an explicit canonical-pytest environment limitation. It is not broad L3 PASS.
+- L3-26: failed cheap baseline; zero accepted deliverable.
+- Fresh PR-1 / accepted task 1/3 (`checkpoint-completed-issue-before-cancel`):
+  - execution `exec_20260912_094308_za4vz5sv`, clean target base `2c374989b39d0b53b34ef33fd2ba6289e74194ae`, route `fcm/fcm`;
+  - runtime duration `2,092,499 ms` (~34.9 min); coder artifact reports `fallback_count=1`, `peak_models_routed=3`; numeric token/RUB cost is not recorded -> `EVIDENCE_MISSING`, not zero;
+  - model-produced commit `8d28dcd49176d640853f333023ac842935b3a528` changed `go/internal/dag/executor.go` + `executor_test.go`, but reviewer explicitly noted the resume test did not actually exercise resume; reviewer PASS was therefore insufficient;
+  - operator BMAD test-design / TDD review replaced the weak test with a deterministic downstream-interruption -> real `WithResume(true)` oracle. RED reproduced lost completed-state; minimal GREEN added immediate checkpoint after completed/failed/skipped results;
+  - BMAD test-design exposed a false-positive reviewer gate: the model-authored resume test did not execute the real resume path. A deterministic RED reproduced the gap; the bounded repair aligned the task branch with the already-proven CURRENT recovery semantics and corrected the stale baseline threshold assertion to test the real invariant (downstream issue `c` never executes despite bounded repair attempts);
+  - final exact task branch head `0cfe48c` is clean and changes only `go/internal/dag/executor.go` + `executor_test.go` relative to base;
+  - exact-commit targeted tests `TestResumeAfterCancellationDoesNotRepeatCompletedIssue|TestLevelFailureThresholdAborts` PASS;
+  - exact-commit full `/usr/local/go/bin/go test ./... -count=1` PASS;
+  - independent temporary oracle (not committed into the candidate) exercised interruption -> checkpoint -> real resume and observed effect counts `a=1`, `b=1`; PASS, then the oracle file was removed before commit;
+  - `git diff --check` PASS; duplicate effects observed: 0;
+  - verdict: independently accepted fresh task **1/3** with exact tested identity = delivered identity `0cfe48c`; it also satisfies the milestone's recovery/no-duplicate and multi-file task requirements.
+- Because L3-26 failed after L3-24/L3-25, those historical positives alone do not satisfy the fresh production streak; PR-1 starts the new controlled streak at 1/3.
+
+### Supporting systems / non-P0 debt
+
+- Coding Station functional API remains unhealthy from the operator surface (`stationHealth` / `stationReady` Gateway Timeout) despite one healthy API + one healthy runtime container. This is not the current critical path because the workforce Go validator works.
+- AgentField operator gateway is intermittently `Bad Gateway`; direct authenticated control-plane readback from the workforce works.
+- Control-plane has shown stale executions labelled `active`; execution-state reconciliation is a production reliability debt, but do not stop the accepted-task ladder unless it blocks safe recovery.
+- SourceLoop/durable Git identity does not yet represent the entire tested live product delta. Canonicalization is required after correctness baseline, not before.
+- Python canonical pytest is not provisioned in the current workforce. Do not install it merely to manufacture a green historical task; prefer tasks with already-provisioned canonical validators for the next acceptance streak.
+- Process/zombie/resource hygiene is an operational risk; escalate to the critical path only if fresh task evidence shows spawn/resource pressure.
+
+## Production-Ready Milestone
+
+Production acceptance is defined at the **full `orch.Build` lifecycle**, not at the `implement_issue` sub-harness. `implement_issue` remains a useful micro-diagnostic primitive but its PASS does not advance the autonomous-production milestone.
+
+First autonomous production-readiness gate requires a fresh controlled streak of **3 consecutive independently accepted full-Build engineering tasks** on a frozen/currently proven stack, with **zero operator edits to task product code between Build START and terminal state**:
+
+- planning / plan review exercised by the Build lifecycle;
+- issue execution through the normal DAG path;
+- coder/reviewer repair loop available and exercised where needed;
+- issue advisor + bounded retry available;
+- replanning available for unrecoverable issue failure;
+- integration validation enabled;
+- verifier -> generated fix issue -> re-execute -> reverify available;
+- CI/finalization path enabled where a safe local/ephemeral CI surface exists; external PR/CI side effects require explicit scope and are not manufactured merely to claim coverage;
+- at least one real multi-file task;
+- at least one interruption/partial-result recovery task;
+- zero duplicated non-idempotent effects;
+- exact tested identity = delivered identity for every task;
+- canonical deterministic validation before semantic reviewer acceptance where technically available;
+- independent executable oracle/verifier;
+- task/provider/model/trajectory recorded;
+- total model cost and wall time recorded for every task.
+
+If a repairable internal task defect occurs (compile/test failure, reviewer finding, unmet verifier criterion), the Build must repair or exhaust its own bounded recovery policy. Operator repair of task code invalidates that run as autonomous acceptance and instead becomes framework-debug evidence.
+
+After 3/3 full-Build tasks, materialize the accepted source into canonical Git/SourceLoop, create/rebuild a clean runtime from that exact SHA, and replay the controlled ladder. Only the clean-runtime replay can close the first production-ready milestone.
+
+## Critical Path / Pareto Order
+
+### Gate PR-1 — recover one stable execution route
+
+Status: DONE
+
+Evidence:
+- pre-fix execution `exec_20260912_093427_ti492y5g` failed before any FCM request;
+- A/B canaries proved the clean target repo lacked runtime-owned `fcm` provider config;
+- runtime overlay now owns the FCM provider contract; deterministic RED->GREEN test and full CURRENT Go suite PASS;
+- rebuilt planner `/tmp/swe-planner-fcm-overlay-20260912` (SHA256 `0224447d...`) is active on PID `424603`;
+- post-fix real task `exec_20260912_094308_za4vz5sv` reached FCM, edited source and completed.
+
+### Gate MICRO-1 — issue-level diagnostic evidence
+
+Status: DONE / DOES NOT COUNT TOWARD FULL-BUILD STREAK
+
+Task: `checkpoint-completed-issue-before-cancel` via `implement_issue`.
+
+Evidence:
+- exact target base `2c374989b39d0b53b34ef33fd2ba6289e74194ae`;
+- final local task branch head `0cfe48c`;
+- two-file bounded diff;
+- exact-commit targeted recovery tests PASS;
+- full exact-commit `go test ./... -count=1` PASS;
+- independent real interruption -> checkpoint -> resume oracle observed effects `a=1`, `b=1`; PASS;
+- duplicate effects = 0;
+- wall time ~34.9 min; numeric token/RUB cost remains `EVIDENCE_MISSING`.
+
+This is strong component evidence for the issue-level coding/recovery seam, but because the run used `implement_issue` and required operator repair after a false-positive model test, it is **not** an autonomous full-Build acceptance task.
+
+### Gate MICRO-2 — issue-level self-repair gap
+
+Status: DONE / BLOCKING EVIDENCE
+
+Task: `openclaw-hitl-enables-build-approval-pr3` via `implement_issue`, execution `exec_20260912_141025_thblod44`.
+
+Fresh terminal evidence:
+- control plane status `succeeded`, but result `success=false`;
+- duration `2,679,677 ms` (~44.7 min);
+- commits `0d12147de8fa4109f9046150f51e0f7066fedf8d`, `f53048294d6cb1c3dd91092ed66d9bbf20cd1b4d`;
+- verifier correctly reported `existing internal/orch tests pass = false` because `build_test.go` used `os` without importing it;
+- reviewer still marked the semantic code path approved and explicitly noted the compile blocker;
+- delivery also committed generated `.agentfield-out-598283605/.agentfield_output.json`, causing `GIT_DELIVERY` unexpected-file / dirty-worktree failure;
+- `implement_issue` did **not** run a verifier-fix-reverify cycle for the repairable missing import; it terminated with `success=false`.
+
+Decision: do not manually repair this task and do not count it toward production readiness. This is direct evidence that the issue-level harness is intentionally insufficient as the top-level autonomous acceptance boundary.
+
+### Gate FB-0 — first autonomous full-Build canary
+
+Status: ACTIVE / P0
+
+Goal: exercise the actual `swe-planner.build` / `orch.Build` lifecycle on a frozen materialization of CURRENT tested SWE-AF source, with zero operator edits to task code during the run.
+
+Canary engineering objective: add a deterministic pre-review validation contract so trivial compile/test failures are fed back into the coding repair loop before semantic reviewer spend. This directly addresses the observed missing-import waste without replacing the existing reviewer/verifier loops.
+
+Configuration policy:
+- use the proven planner/runtime route and `fcm/fcm`;
+- `enable_replanning=true`;
+- `enable_issue_advisor=true`;
+- `enable_integration_testing=true`;
+- bounded retries/replans/verify-fix cycles remain enabled;
+- deterministic Git enabled;
+- `enable_learning=false` for a reproducible baseline;
+- external GitHub PR/CI side effects disabled for this first local canary only; CI semantics remain a later safe-surface gate, not silently claimed as covered.
 
 DoD:
-1. Reconcile CURRENT topology/provider contract. **PASS**: legacy standalone SWE is removed; permanent DEV `edsh...` is current; isolated B is comparison-only.
-2. Prove why CURRENT permanent DEV has no live `swe-planner`. **PASS**: canonical bootstrap evidence shows Anthropic/OpenRouter resolved empty and SWE was intentionally skipped.
-3. Determine whether already-configured Gonka/OpenAI-compatible credentials can satisfy SWE without adding a new external secret. **PARTIAL**: repository code has `codex`/OpenAI auth; CURRENT Universal Solver compose already maps Gonka to workforce `OPENAI_API_KEY` + `OPENAI_BASE_URL`. Comparison with the proven Deep Research fix shows the required pattern is first-class OpenAI-compatible config plus preservation of the configured API base through dynamic/runtime overrides. Exact Gonka endpoint/model/tool-call compatibility inside the installed SWE harness still requires one live runtime canary.
-4. Choose the smallest safe enablement path. **DECIDED / TWO-OWNER DELTA**: (a) SWE product contract must admit the existing OpenAI-compatible lane instead of declaring only Anthropic/OpenRouter; (b) Universal Solver runtime wiring must preserve that lane end-to-end, including the AgentField Go SDK's `AI_BASE_URL`/model contract for direct-AI calls, while harness/codex continues to receive `OPENAI_API_KEY` + `OPENAI_BASE_URL`. The bootstrap admission condition must accept this lane. Do not add/rewire Anthropic/OpenRouter secrets unless this canary disproves the existing lane.
-5. Apply SWE product code/config changes only in CURRENT `/src/swe-af`; run targeted tests and `go/ make check` before restart. Do not program through GitHub/redeploy.
-6. Start/reload only SWE or the smallest owning target; verify `active/ready` independently of workforce provenance health.
-7. Run one non-mutating reasoner/schema smoke with execution evidence and confirm live `implement_issue` callability.
-8. Write accepted evidence here; only after acceptance materialize the exact live delta durably to `fork/dev`/SourceLoop.
+- Build performs planning -> DAG execution -> coding/review/repair -> integration -> verifier/fix lifecycle as applicable;
+- operator performs zero task-code edits between Build START and terminal state;
+- any repairable compile/test/reviewer/verifier failure is repaired by Build itself or the run fails with evidence;
+- exact final source identity and artifacts are recoverable;
+- canonical Go validation + independent oracle run after terminal state;
+- no generated harness artifact is accepted as product source;
+- cost/latency/repair/replan counts recorded.
 
-Stop conditions: no real coding canary while SWE is offline; no provider-secret mutation without explicit authorization; no whole-fleet or operator redeploy merely to work around the inner-loop tooling gap.
+### Gate FB-1 / FB-2 — full-Build streak 2/3 and 3/3
 
-### Batch 2 — First bounded `implement_issue` canary
+Status: PENDING FB-0
 
-Status: PENDING
+Repeat on different real engineering tasks with the same frozen/proven control stack. At least one full-Build run must exercise interruption/recovery with zero duplicate effects. No cost optimization before 3/3 full-Build correctness.
 
-Prerequisite: Batch 1 DoD PASS.
+### Gate PR-5 — state truth + durable source
 
-DoD:
-1. Use an existing safe/sacrificial local repo/workspace; do not create persistent infrastructure unless required.
-2. Run ONE well-scoped issue with machine-checkable acceptance criteria.
-3. Capture: execution_id, run/reasoner status, diff, test results, tool calls, wall time, retries, unintended files changed.
-4. Require targeted and canonical repo tests to pass.
-5. Verify the resulting branch/diff is bounded to the issue scope.
-6. Update `PLAN.md` with result and next gate.
-
-### Batch 3 — Failure/recovery gate
-
-Status: PENDING
-
-Prerequisite: Batch 2 DoD PASS.
+Status: PENDING 3/3
 
 DoD:
-- nonexistent/invalid task fails closed or abstains without repo damage;
-- bounded run interruption + resume is idempotent;
-- stale SHA/branch advance is detected and fails closed;
-- unrelated worktree files are preserved.
+- reconcile stale `active` execution state against real liveness/artifacts/effects;
+- capture only accepted source deltas; exclude generated/noise files;
+- materialize exact accepted Git SHA;
+- canonical tests PASS on durable SHA;
+- clean runtime built/materialized from that SHA;
+- controlled 3-task ladder replays successfully;
+- container-only required product deltas = 0.
 
-### Batch 4 — Durability / SourceLoop gate
+### Gate PR-6 — cost optimization
 
-Status: PENDING
+Status: PENDING reproducible correctness
 
-Prerequisite: accepted runtime fix or accepted canary delta.
+Metric: `total inference cost / independently accepted task`.
 
-DoD:
-- only source delta is captured; noise excluded;
-- stale capture fails closed;
-- accepted delta reaches `fork/dev`;
-- exact `WORKING_DEV_SHA` is recorded;
-- repo tests pass on that durable SHA.
+Then, and only then:
+- compare cheap vs stronger model on paired frozen tasks;
+- optimize route/continuation count/latency;
+- investigate L3-26 cheap structured-output/provider path if it still dominates cost;
+- generalize AgentField contract completion only if fresh acceptance evidence proves unresolved-obligation recovery is the dominant blocker.
 
-### Batch 5 — Materialization and regression
+## Contract Completion Decision
 
-Status: PENDING
+Contract completion is a hypothesis for reliability, not an architectural mandate.
 
-DoD:
-- exact accepted SHA → materialized runtime;
-- functional canary repeats;
-- container-only required deltas = 0;
-- provenance chain complete.
+Reuse before build:
+- SWE already has finish-only/same-worktree continuation semantics.
+- AgentField upstream already has incremental field recovery (`DiagnoseFieldFailures` -> `BuildIncrementalFollowup` with session continuation).
+- Do not create a parallel workflow/obligation engine.
 
-## Acceptance Metrics
+If this becomes the proven blocker, first deterministic RED tests must cover:
+1. observed SATISFIED overrides model MISSING;
+2. observed MISSING overrides model SATISFIED;
+3. UNKNOWN forbids mutation;
+4. mutation observed after timeout is not repeated.
 
-For each canary record at least:
-- task_success;
-- tests_passed;
-- unintended_files_changed;
-- human_interventions;
-- LLM calls;
+No implementation closes without a deterministic test for every guarantee.
+
+## Engineering Method for 30-Minute Batches
+
+BMAD:
+- Local project entry: `bmad-help`.
+- Current risk/evidence planning: `bmad-testarch-test-design`.
+- Implementation only after a source defect is proven: use the locally available BMAD implementation skill; public BMAD v6.12 calls the official implementation workflow **Build** (`bmad-build`) and explicitly chooses ceremony after investigation. Do not add ceremony before evidence.
+- Review once after GRESN; triage findings with verdict + evidence; do not repeat settled reviews.
+
+External skill practices used as method, not installed dependencies:
+- systematic-debugging: reproduce -> observe -> isolate layer -> one falsifiable hypothesis -> one minimal experiment -> update diagnosis;
+- test-driven-development: deterministic RED before behavior-changing implementation where practical;
+- verification-before-completion: run fresh executable proof before PASS/DONE;
+- condition-based-waiting/effect readback for async/timeout work;
+- root-cause tracing across component boundaries before mutation.
+
+Do not install BMAD/skill frameworks merely to say they were used.
+
+## Batch Anti-Drift — CURRENT
+
+GLOBAL NORTH STAR:
+working SWE/SWE-AF with independently accepted real engineering tasks.
+
+CURRENT BLOCKER:
+production acceptance has not yet exercised the top-level autonomous `orch.Build` lifecycle. Component-level `implement_issue` evidence is useful but insufficient; MICRO-2 proved a repairable verifier failure can terminate there without self-repair.
+
+THIS BATCH:
+materialize a frozen local baseline from CURRENT tested `/src/swe-af`, then run exactly one `swe-planner.build` canary with the production recovery controls enabled (replanning, issue advisor/retries, integration testing, verifier-fix cycles, deterministic Git). Keep the proven `fcm/fcm` route. Disable only external GitHub PR/CI side effects for this first canary because they are outside the already-authorized local scope; do not claim CI coverage.
+
+NORTH-STAR DELTA:
+replace micro-harness confidence with direct evidence about whether the full SWE controller can autonomously plan, implement, validate, repair, verify and finalize one real SWE-AF change without operator task-code edits.
+
+STOP CONDITION:
+either the full Build reaches terminal success and then passes independent canonical validation/oracle, or one run identifies the first evidence-backed missing contract in the full lifecycle. At that point stop, write back, and repair only that proven framework gap before retrying the same canary.
+
+## Acceptance Metrics Per Task
+
+Record:
+- task ID/input and base SHA;
+- provider/model/route;
+- actual changed files/diff/commits;
+- canonical tests and exact commands;
+- independent oracle result;
+- final acceptance verdict;
+- model calls/tokens/cost where available;
 - tool calls;
 - wall time;
-- cost if available;
-- retries;
-- recovery_success;
-- provenance_complete.
+- continuations/repairs;
+- duplicated effects;
+- UNKNOWN states;
+- recovery success;
+- tested SHA and delivered SHA;
+- provenance completeness.
 
-## Failure Classification
+## Write-Back Rules
 
-Assign each primary failure to exactly one class:
-- `MODEL_REASONING`
-- `PROMPT_OR_PLANNING`
-- `ACI_HARNESS`
-- `REPO_ENVIRONMENT`
-- `GIT_DELIVERY`
-- `AGENTFIELD_RUNTIME`
-- `PROVIDER`
-- `SOURCELOOP_RECONCILIATION`
-- `OBSERVABILITY_GAP`
+- `dev/PLAN.md` owns current project plan/state/decisions.
+- Product code: container/exact-source first -> tests/oracle -> exact delta -> SourceLoop/Git publication.
+- PLAN-only Git commits must never be mistaken for loaded product identity.
+- Do not create a second plan file.
+- Do not overwrite unrelated dirty source.
+- Historical checkpoints remain recoverable from Git history; keep this SoT concise and CURRENT.
 
-## Anti-Drift Checklist per Batch
+## Current Next Move
 
-- Reread `PLAN.md` before mutation.
-- Observe CURRENT runtime before mutation.
-- Verify exact target/SHA/process generation.
-- Use the smallest discriminating test first.
-- Reload only the same target if needed.
-- Do not advance on health alone; require functional/semantic evidence.
-- After acceptance, materialize exact source to Git and record SHA.
-- When runtime and Git disagree, label `DESIGN_RUNTIME_DRIFT` or `PROVENANCE_GAP` as appropriate; do not silently reconcile.
-
-## Known Drift / Debt
-
-- [OPEN] `swe-af:main` contains a downstream `ERRORS.md` commit and therefore is not a clean upstream mirror. Resolve before the next upstream rebase/reconciliation cycle.
-- [OPEN] DEV VPS Terminal source/deployed target registry contains `agentfield-dev-workforce`, but the CURRENT callable ChatGPT DEV surface lacks typed File ACI/process-start operations and generic `execContainer`/`startSession` fail closed as `REVIEW_REQUIRED: opaque_or_unknown_mutation`. `getOperatorGuidance` explicitly returned `ALLOW` for the scoped reversible SWE start, but execution remained blocked by mediation. Generic approval is unavailable (`approval_capability_gap`). This is `OPERATOR_PLANE_CAPABILITY_DRIFT`, not a SWE defect; do not redeploy the operator merely to bypass it.
-- [OPEN] Current workforce healthcheck proves provenance HTTP only and can be green while `swe-planner`/`swe-pro` are offline.
-- [OPEN] Current SWE absence is explained by the provider/bootstrap gate, not by a proven current-generation process crash: Anthropic/OpenRouter resolved empty and bootstrap intentionally skipped SWE. Historical process-exit logs remain forensic only.
-- [OPEN] Provider-contract gap: SWE code contains `codex`/`OPENAI_API_KEY` and OpenAI-compatible OpenCode support, while `agentfield-package.yaml` and Universal Solver bootstrap admit only Anthropic/OpenRouter. Exact Gonka execution compatibility must be proven before adapting the contract.
-
-## BMAD Workflow Used for Current Batch
-
-- Entry: `bmad-help` from `BMAD-MNNZ`.
-- Initial classification: brownfield recovery / quick implementation; `bmad-correct-course` rejected because its PRD + Epics prerequisites do not exist here.
-- After CURRENT reconciliation exposed an implementation/debugging evidence gate, the canonical Universal Solver handoff explicitly routes this workstream to `bmad-testarch-test-design`.
-- Active BMAD mode: risk-based system-level test/debug architecture embedded in this existing SoT (no duplicate BMAD artifact). Gate order: A0 CURRENT state -> A1 targeted regression -> A2 reasoner/pipeline -> A3 same-target reload if needed -> A4 functional canary -> A5 semantic E2E -> A6 durable accepted SHA.
-- `bmad-quick-dev` remains the implementation method once a source/config defect is proven and live-edit capability is available.
-- Write-back target: this `PLAN.md`.
+Run **one** PR-3 bounded real Go task for fresh accepted task 2/3 on the already-proven planner/runtime/model route. Freeze `/tmp/swe-planner-fcm-overlay-20260912`, `fcm/fcm`, runtime guards and acceptance method; vary only task input. Prefer a defect already evidenced by the CURRENT live-vs-clean delta with an existing deterministic regression seam. Product code changes remain inside the isolated task worktree. Stop after either exact commit + canonical validation + independent executable oracle PASS, or the first new evidence-backed blocker.

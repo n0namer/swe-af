@@ -3,6 +3,7 @@ package coding
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
@@ -248,6 +249,29 @@ func TestVerifierTaskPrompt(t *testing.T) {
 		CompletedIssues: []map[string]any{}, FailedIssues: []map[string]any{}, SkippedIssues: []string{},
 	})
 	eq(t, "verifier B", gotB, golden(t, "task_verifier_b.txt"))
+}
+
+func TestHighRiskPromptsRequireExactDelimiterInLiteral(t *testing.T) {
+	for name, prompt := range map[string]string{
+		"reviewer": CodeReviewerSystemPrompt,
+		"verifier": VerifierSystemPrompt,
+	} {
+		for _, required := range []string{"single-line source sample", "ordinary quoted literal", "zero/empty output", "if-output guard"} {
+			if !strings.Contains(strings.ToLower(prompt), required) {
+				t.Fatalf("%s prompt missing high-risk discriminator %q", name, required)
+			}
+		}
+	}
+	for _, required := range []string{"structured verdict file", "write and edit", "next tool action must write or edit"} {
+		if !strings.Contains(strings.ToLower(CodeReviewerSystemPrompt), required) {
+			t.Fatalf("reviewer prompt missing verdict-termination contract %q", required)
+		}
+	}
+	for _, required := range []string{"boundary-negative discriminator", "not copied", "trailing-newline", "formatting-only change", "fail that criterion conservatively"} {
+		if !strings.Contains(strings.ToLower(VerifierSystemPrompt), required) {
+			t.Fatalf("verifier prompt missing boundary-negative contract %q", required)
+		}
+	}
 }
 
 func TestIssueWriterTaskPrompt(t *testing.T) {

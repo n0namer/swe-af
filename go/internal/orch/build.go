@@ -47,6 +47,10 @@ type buildInput struct {
 	EnableLearning    bool           `json:"enable_learning"`
 }
 
+func humanApprovalEnabled() bool {
+	return strings.TrimSpace(os.Getenv("HAX_API_KEY")) != "" || hitl.OpenClawHITLEnabled()
+}
+
 // Build is the end-to-end orchestrator: clone → plan (+ git init) → approval →
 // execute → verify/fix → finalize → PR (+ CI gate). Ports build() (app.py:490).
 func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
@@ -286,11 +290,10 @@ func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 			mapStr(gitInit, "error_message", "unknown")), "build", "git_init", "error")
 	}
 
-	// 1.5 APPROVAL CHECKPOINT (hax plan review; engaged only when HAX_API_KEY set
-	// and a gate is wired — see the ApprovalGate seam in common.go).
-	haxAPIKey := strings.TrimSpace(os.Getenv("HAX_API_KEY"))
+	// 1.5 APPROVAL CHECKPOINT. Engage when either the legacy HAX UI or the
+	// deployment-local OpenClaw governor is enabled and a gate is wired.
 	execID := executionIDFromCtx(ctx)
-	if haxAPIKey != "" && execID != "" && deps.ApprovalGate != nil {
+	if humanApprovalEnabled() && execID != "" && deps.ApprovalGate != nil {
 		outcome, aerr := deps.ApprovalGate(ctx, ApprovalRequest{
 			Deps:            deps,
 			Cfg:             cfg,

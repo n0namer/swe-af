@@ -280,6 +280,10 @@ mainLoop:
 				dagState.SkippedIssues = append(dagState.SkippedIssues, skipped.IssueName)
 			}
 		}
+		// Persist the completed/failed/skipped barrier before any downstream
+		// gates. Without this checkpoint, a crash after successful issue execution
+		// but before the next save can cause resume to repeat already-finished work.
+		saveCheckpoint(dagState, note)
 
 		if note != nil {
 			var completedNames, failedNames []string

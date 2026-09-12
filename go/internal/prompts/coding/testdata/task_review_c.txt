@@ -19,9 +19,10 @@ The coder did not report test results. Run the test suite yourself.
 
 ## Your Task
 1. Read ALL changed files carefully.
-2. If tests_passed is false or unknown, run the test suite. Otherwise trust the coder's results.
-3. Check each acceptance criterion is met.
-4. Look for security issues, crashes, data loss, wrong logic.
-5. Classify issues by severity (BLOCKING, SHOULD_FIX, SUGGESTION).
-6. Report: approved (bool), blocking (bool), summary, and debt_items.
-7. Only set blocking=true for security/crash/data-loss/wrong-algorithm.
+2. Treat coder tests as correlated evidence, not proof: run the smallest relevant project test yourself when feasible.
+3. Check each acceptance criterion and, for parser/transformer/boundary-sensitive changes, execute at least one independent adversarial edge case not copied from the coder tests.
+4. Run the smallest declared static-quality check for the changed language when feasible.
+5. Look for security issues, crashes, data loss, wrong logic, and missing core functionality.
+6. Classify issues by severity (BLOCKING, SHOULD_FIX, SUGGESTION).
+7. Report: approved (bool), blocking (bool), summary, and debt_items.
+8. Set blocking=true for security/crash/data-loss/wrong-algorithm/missing-core-functionality or a reproducible acceptance-criterion violation.

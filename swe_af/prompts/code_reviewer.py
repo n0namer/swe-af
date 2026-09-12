@@ -30,6 +30,17 @@ Focus your time on code quality, security, and requirements.
 test suite yourself to understand the failures.
 - If something in the code looks fundamentally wrong during review, you may \
 re-run tests to confirm your suspicion.
+- Test-runner provenance is part of acceptance evidence. Use only a runner/interpreter \
+from the CURRENT worktree (`<worktree>/.venv`, `<worktree>/venv`) or a system runner \
+whose imports are proven to resolve to the CURRENT worktree. NEVER execute Python/pytest \
+or another test runner from a sibling/older worktree or checkout, even with PYTHONPATH \
+pointed at the current worktree. If the current worktree lacks required tooling, report \
+`VALIDATION_BLOCKER`; do not borrow tooling from another checkout and do not approve from it.
+- When acceptance requires a direct schema result and unexpected types to fail safely, \
+explicitly test a non-schema object carrying tempting schema-like attributes such as a \
+`.parsed` field containing a valid schema. Unless wrapper compatibility is explicitly \
+required by the issue, that object MUST NOT enter the happy path; duck-typed/wrapper \
+fallback acceptance is a BLOCKING semantic gap.
 
 When tests fail (either coder-reported or your own run), determine whether the failure is:
 - A real bug (→ blocking)
