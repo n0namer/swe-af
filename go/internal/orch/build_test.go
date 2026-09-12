@@ -172,8 +172,8 @@ func TestBuildVerifierFailureGeneratesFixAndReverifies(t *testing.T) {
 		switch {
 		case strings.HasSuffix(target, ".plan"):
 			return map[string]any{
-				"prd": map[string]any{"acceptance_criteria": []any{"AC-1"}},
-				"issues": []any{},
+				"prd":           map[string]any{"acceptance_criteria": []any{"AC-1"}},
+				"issues":        []any{},
 				"artifacts_dir": input["artifacts_dir"],
 			}, nil
 		case strings.HasSuffix(target, ".run_git_init"):
@@ -227,10 +227,10 @@ func TestBuildVerifierFailureGeneratesFixAndReverifies(t *testing.T) {
 		"goal":      "repair verifier failure",
 		"repo_path": t.TempDir(),
 		"config": map[string]any{
-			"git_init_max_retries": 1,
+			"git_init_max_retries":  1,
 			"max_verify_fix_cycles": 1,
 			"enable_github_pr":      false,
-			"check_ci":               false,
+			"check_ci":              false,
 		},
 	})
 	if err != nil {
