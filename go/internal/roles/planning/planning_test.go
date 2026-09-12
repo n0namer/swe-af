@@ -164,6 +164,9 @@ func TestProductManagerHarnessOptions(t *testing.T) {
 	if h.lastOpts.Model != "sonnet" || h.lastOpts.MaxTurns != 2 {
 		t.Fatalf("unexpected model/max_turns: %q/%d", h.lastOpts.Model, h.lastOpts.MaxTurns)
 	}
+	if h.lastOpts.SchemaMode != "" {
+		t.Fatalf("non-OpenCode PM schema_mode = %q, want default policy", h.lastOpts.SchemaMode)
+	}
 }
 
 func TestProductManagerOpenCodeUsesHarnessWhenDirectAIIsAvailable(t *testing.T) {
