@@ -110,18 +110,30 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
 
 ## Production-Ready Milestone
 
-First production-readiness gate requires a fresh controlled streak of **3 consecutive independently accepted engineering tasks** on a frozen/currently proven stack:
+Production acceptance is defined at the **full `orch.Build` lifecycle**, not at the `implement_issue` sub-harness. `implement_issue` remains a useful micro-diagnostic primitive but its PASS does not advance the autonomous-production milestone.
 
+First autonomous production-readiness gate requires a fresh controlled streak of **3 consecutive independently accepted full-Build engineering tasks** on a frozen/currently proven stack, with **zero operator edits to task product code between Build START and terminal state**:
+
+- planning / plan review exercised by the Build lifecycle;
+- issue execution through the normal DAG path;
+- coder/reviewer repair loop available and exercised where needed;
+- issue advisor + bounded retry available;
+- replanning available for unrecoverable issue failure;
+- integration validation enabled;
+- verifier -> generated fix issue -> re-execute -> reverify available;
+- CI/finalization path enabled where a safe local/ephemeral CI surface exists; external PR/CI side effects require explicit scope and are not manufactured merely to claim coverage;
 - at least one real multi-file task;
 - at least one interruption/partial-result recovery task;
 - zero duplicated non-idempotent effects;
 - exact tested identity = delivered identity for every task;
-- canonical deterministic validation where available;
+- canonical deterministic validation before semantic reviewer acceptance where technically available;
 - independent executable oracle/verifier;
 - task/provider/model/trajectory recorded;
 - total model cost and wall time recorded for every task.
 
-After 3/3, materialize the accepted source into canonical Git/SourceLoop, create/rebuild a clean runtime from that exact SHA, and replay the controlled ladder. Only the clean-runtime replay can close the first production-ready milestone.
+If a repairable internal task defect occurs (compile/test failure, reviewer finding, unmet verifier criterion), the Build must repair or exhaust its own bounded recovery policy. Operator repair of task code invalidates that run as autonomous acceptance and instead becomes framework-debug evidence.
+
+After 3/3 full-Build tasks, materialize the accepted source into canonical Git/SourceLoop, create/rebuild a clean runtime from that exact SHA, and replay the controlled ladder. Only the clean-runtime replay can close the first production-ready milestone.
 
 ## Critical Path / Pareto Order
 
