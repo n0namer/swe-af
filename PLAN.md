@@ -442,16 +442,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-F08 ambiguous-effect safety is now component-level verified. The next highest-risk unclosed family is **F06 timing/stale async state after agent restart**: control-plane can report stale `running`, and an old child can remain active/orphaned while a new execution targets the same workspace.
+**F06 is reproduced and root-caused.** A Go AgentField planner restart can leave an accepted execution `running` because the Go SDK does not provide the per-process `instance_id` required by the control-plane restart-reap contract. The backstop stale reaper is too slow for autonomous no-overlap safety. FB-0 remains blocked until the supporting AgentField Go-agent restart contract is fixed and re-proven.
 
 THIS BATCH:
-F08 is complete. The next coherent 30-minute gate is a controlled **F06 restart/orphan convergence fault-injection** against a sacrificial workspace and exact tested planner. Do not start FB-0 attempt 5 until this external async boundary proves fail-closed/no-parallel-writer behavior or yields the first evidence-backed platform defect.
+F06 fault injection and owner diagnosis are complete. No further SWE-AF product-code mutation is justified in this gate. The next implementation batch, after explicit supporting-platform scope authorization, is: add AgentField Go SDK process-instance parity with Python, add deterministic registration/heartbeat/restart tests, validate exact AgentField source, rebuild the existing DEV stack from exact pins, and rerun the same F06 probe before any FB-0 work.
 
 NORTH-STAR DELTA:
-move from local UNKNOWN-effect safety to real control-plane/process state truth so a full Build cannot overlap an old mutating child after restart.
+converted a recurring stale-state/orphan symptom into an exact cross-component contract defect with reproducible execution evidence and a minimal authoritative owner-layer remedy; avoided an incorrect SWE retry/stale-timeout workaround.
 
 STOP CONDITION:
-either F06 proves state convergence/no overlapping mutator across one controlled restart, or the first stale/orphan divergence is captured with execution/process/workspace evidence and becomes the sole next owner-layer fix. Do not combine it with model/task changes.
+reached for this batch: the first F06 divergence is captured and root-caused. Do not start a second writer, FB-0, or a speculative control-plane-only upgrade. Persistent AgentField SDK/control-plane mutation is a supporting-platform release boundary and requires explicit authorization before APPLY.
 
 ## Acceptance Metrics Per Task
 
