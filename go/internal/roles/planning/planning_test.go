@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
+	"github.com/Agent-Field/agentfield/sdk/go/ai"
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
@@ -38,6 +39,15 @@ func (f *fakeHarness) Harness(_ context.Context, prompt string, _ map[string]any
 	f.lastOpts = opts
 	f.prompts = append(f.prompts, prompt)
 	return f.fn(f.calls, prompt, dest, opts)
+}
+
+type fakeAI struct {
+	calls int
+}
+
+func (f *fakeAI) AI(_ context.Context, _ string, _ ...ai.Option) (*ai.Response, error) {
+	f.calls++
+	return nil, errors.New("direct AI should not be called for harness runtimes")
 }
 
 // recNote records notes so tests can assert tags/messages.
@@ -153,6 +163,39 @@ func TestProductManagerHarnessOptions(t *testing.T) {
 	}
 	if h.lastOpts.Model != "sonnet" || h.lastOpts.MaxTurns != 2 {
 		t.Fatalf("unexpected model/max_turns: %q/%d", h.lastOpts.Model, h.lastOpts.MaxTurns)
+	}
+}
+
+func TestProductManagerOpenCodeUsesHarnessWhenDirectAIIsAvailable(t *testing.T) {
+	h := &fakeHarness{fn: func(_ int, _ string, dest any, _ harness.Options) (*harness.Result, error) {
+		p := dest.(*schemas.PRD)
+		p.ValidatedDescription = "planned through harness"
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	deps, _ := newDeps(h)
+	direct := &fakeAI{}
+	deps.AI = direct
+
+	out, err := RunProductManager(context.Background(), deps, map[string]any{
+		"goal":        "route through configured runtime",
+		"repo_path":   t.TempDir(),
+		"model":       "fcm/fcm",
+		"ai_provider": "open_code",
+	})
+	if err != nil {
+		t.Fatalf("RunProductManager: %v", err)
+	}
+	if direct.calls != 0 {
+		t.Fatalf("direct AI calls = %d, want 0 for open_code runtime", direct.calls)
+	}
+	if h.calls != 1 {
+		t.Fatalf("harness calls = %d, want 1", h.calls)
+	}
+	if h.lastOpts.Provider != "opencode" || h.lastOpts.Model != "fcm/fcm" {
+		t.Fatalf("harness route = provider %q model %q", h.lastOpts.Provider, h.lastOpts.Model)
+	}
+	if got := out.(map[string]any)["validated_description"]; got != "planned through harness" {
+		t.Fatalf("validated_description = %v", got)
 	}
 }
 

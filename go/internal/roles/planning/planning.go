@@ -172,7 +172,11 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 			PriorUserResponses: prior,
 		})
 		var parsed *schemas.PRD
-		if deps.AI != nil {
+		// Respect the configured runtime contract. The AgentField direct-AI path
+		// has its own model registry and cannot resolve OpenCode model IDs such as
+		// fcm/fcm. OpenCode must therefore execute through the harness, matching
+		// the Python reference implementation and the rest of the SWE runtime.
+		if deps.AI != nil && provider != "opencode" {
 			var direct schemas.PRD
 			directModel := strings.TrimPrefix(model, "openai/")
 			resp, aiErr := deps.AI.AI(ctx, taskPrompt,
