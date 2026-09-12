@@ -95,6 +95,22 @@ Batch DoD: **PASS** for runtime policy wiring and live enforcement. This closes 
 
 Next 30-minute Pareto batch: run a tiny deterministic policy micro-probe before another full issue. Measure separately: attempted forbidden action, executed forbidden action, allowed normal test action, tool-call count to stop, and final `VALIDATION_BLOCKER`/status. Use current full role prompt first; only if attempts remain high, compare a shortened hard-invariants-first prompt on the same FCM route. Do not change model, prompt, and enforcement simultaneously. This follows BMAD TEA test-design isolation and trajectory-eval practice: one factor per comparison, deterministic policy oracle first, model judge only where no programmatic check exists.
 
+### 2026-09-12 handoff recovery / L3-25 independent acceptance checkpoint
+
+Global project objective remains working SWE/SWE-AF on real engineering tasks with independent executable acceptance; AgentField/FCM/Coding Station remain supporting mechanisms only when they are on that critical path.
+
+CURRENT source/runtime readback: `/src/swe-af` is still detached at `58c4e0d19081bc52363c120b7963a34cebb1e894` with a large intentional dirty delta. The live `swe-planner` is currently `active/ready`, PID 366110, callback/listener on `:8005`, and `GET /health` returns `{"status":"ok"}`. Control-plane readback reports 29 SWE-planner executions in the last 24h: 20 succeeded, 8 failed, 1 still running.
+
+The cheapest L3-26 path is NOT the immediate North-Star blocker. Its recent `run_coder` executions fail before producing a structured coder artifact: repeated `Schema validation failed ... output file was NOT created`, and later attempts also include `provider error: Unexpected server error`. No code commit/file result exists for L3-26. Do not retry that path blindly; treat it as a later cost/reliability optimization after accepted-task correctness is established.
+
+The shorter North-Star path was preserved L3-25 work. Branch `issue/58417244-dag-unknown-dependency-fcm-smart-l3-25` still points to exact commit `00517ce677e96b17bcd462bd46b9e5f9fa620674` on base `2c374989b39d0b53b34ef33fd2ba6289e74194ae`, changing only `swe_af/execution/dag_utils.py` and `tests/test_dag_utils.py`; the branch/worktree diff is clean and `git diff --check` passes. Existing coder/reviewer evidence was not repeated.
+
+Independent operator verification was run against that exact SHA in a temporary detached validation worktree and then cleaned up. Canonical `python3 -m pytest --version` remains unavailable (`No module named pytest`), and no dependency was installed. Instead, a deterministic direct oracle exercised six acceptance/adversarial cases against the exact candidate `recompute_levels` implementation and passed 6/6; a minimal runner then executed all four committed regression test functions from `tests/test_dag_utils.py` and passed 4/4. `python3 -m compileall -q swe_af/execution/dag_utils.py tests/test_dag_utils.py` also passed. The tested branch/commit was preserved unchanged after cleanup.
+
+Result: L3-25 is now independently executable-accepted for its bounded pure-function task, with an explicit canonical-pytest environment limitation. This is one accepted controlled engineering task, not a broad SWE L3 PASS and not yet the three-consecutive-task milestone.
+
+Next bounded move: choose one additional real task whose canonical validator is already provisioned in the CURRENT runtime (prefer a small Go task if it has a real existing regression seam), and require exact diff + canonical test + independent oracle on the delivered SHA. Do not spend the next batch debugging the cheap L3-26 provider/schema path unless that becomes the blocker to accepted-task progression.
+
 ## Bounded Development Batches
 
 Default batch size: about 30 minutes. Each batch closes a coherent DoD gate and writes back this file. Prefer the smallest 20% of work that removes the next 80% blocker.
