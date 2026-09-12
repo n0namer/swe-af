@@ -113,9 +113,11 @@ After 3/3, materialize the accepted source into canonical Git/SourceLoop, create
 
 ### Gate PR-1 — recover one stable execution route
 
-Status: ACTIVE / P0
+Status: BLOCKED / P0 — fresh PR-1 experiment localized the failure before the FCM broker request.
 
 Why first: CURRENT product Go tests pass; another product-code patch is not justified until a fresh execution experiment proves a source defect.
+
+2026-09-12 PR-1 evidence: `exec_20260912_093427_ti492y5g` ran a different real Go recovery task on clean base `2c374989b39d0b53b34ef33fd2ba6289e74194ae`. Live process evidence proved OpenCode argv `-m fcm/fcm` in isolated worktree `.worktrees/1505a247-checkpoint-completed-issue-before-cancel`. The run terminated in ~30s with `failed_unrecoverable`, `commits=[]`, `files_changed=[]`, upstream-facing `Unexpected server error`, and missing structured output. The temporary worktree/branch was cleaned and no mutation effect remained. Critically, FCM `/health` showed `requestsRouted=697` both immediately before and after the failed run, and runtime telemetry gained no new call. Therefore this reproduction did not reach the FCM broker: the current critical boundary is OpenCode/provider-adapter/config/runtime handling **before broker request**, not SWE product logic and not FCM inference. Stop repeating full `implement_issue` until that pre-broker seam is diagnosed.
 
 DoD:
 1. Freeze CURRENT SWE source/contracts/runtime guards.
