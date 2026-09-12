@@ -280,4 +280,4 @@ Record:
 
 ## Current Next Move
 
-Run **one** PR-1 discriminating execution-route experiment on the frozen CURRENT source. No product-code mutation unless that experiment proves a source defect. If it produces a deliverable, immediately validate it canonically and independently and count it as fresh task 1/3; if it fails, stop at the first evidenced boundary and make only the smallest root-cause fix in the container.
+Run **one** PR-3 bounded real Go task for fresh accepted task 2/3 on the already-proven planner/runtime/model route. Freeze `/tmp/swe-planner-fcm-overlay-20260912`, `fcm/fcm`, runtime guards and acceptance method; vary only task input. Prefer a defect already evidenced by the CURRENT live-vs-clean delta with an existing deterministic regression seam. Product code changes remain inside the isolated task worktree. Stop after either exact commit + canonical validation + independent executable oracle PASS, or the first new evidence-backed blocker.
