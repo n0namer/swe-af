@@ -98,11 +98,15 @@ func hasCommitIdentity(repoPath string) bool {
 	return code == 0 && out != ""
 }
 
-// junkPathspecs lists bytecode/cache junk that must never be versioned on the
-// issue branch. The coder runs tests inside the worktree, so these appear as
-// a side effect and an indiscriminate `git add` (ours or the coder's) would
-// sweep them in. Ports git_ops._JUNK_PATHSPECS.
-var junkPathspecs = []string{"*__pycache__*", "*.pyc", "*.pyo"}
+// junkPathspecs lists generated/runtime junk that must never be versioned on
+// the issue branch. The coder and harness run inside the worktree, so these
+// appear as side effects and an indiscriminate `git add` (ours or the coder's)
+// would sweep them in. Ports git_ops._JUNK_PATHSPECS and extends it with the
+// AgentField structured-output files owned by the harness runtime.
+var junkPathspecs = []string{
+	"*__pycache__*", "*.pyc", "*.pyo",
+	".agentfield-out-*", ".agentfield_output.json", ".agentfield_schema.json",
+}
 
 // commitIndex commits whatever is staged. Returns the sha, or "" when the
 // index is clean. Ports git_ops._commit_index.
@@ -220,8 +224,11 @@ func worktreeStatusPaths(worktreePath string) []string {
 
 func isDeliveryJunk(path string) bool {
 	norm := filepath.ToSlash(path)
+	base := filepath.Base(norm)
 	return strings.Contains(norm, "__pycache__/") || strings.HasSuffix(norm, "/__pycache__") ||
-		strings.HasSuffix(norm, ".pyc") || strings.HasSuffix(norm, ".pyo")
+		strings.HasSuffix(norm, ".pyc") || strings.HasSuffix(norm, ".pyo") ||
+		strings.HasPrefix(norm, ".agentfield-out-") || strings.Contains(norm, "/.agentfield-out-") ||
+		base == ".agentfield_output.json" || base == ".agentfield_schema.json"
 }
 
 func unexpectedPaths(paths, allowed []string) []string {
