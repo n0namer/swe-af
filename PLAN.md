@@ -115,6 +115,72 @@ Remaining material gaps (do not confuse with missing line coverage):
 
 Decision: do not chase an arbitrary global coverage target. Use statement coverage to locate weak areas, but require behavior/oracle evidence on North-Star paths. Academic mutation-testing evidence supports focusing on the oracle gap and changed critical code rather than whole-repo mutation volume; future mutation checks should remain incremental and risk-targeted.
 
+### System-level fault-model test design (BMAD)
+
+Mode: **System-Level** (`bmad-help` -> `bmad-testarch-test-design`). This section is the canonical test-design output; no separate BMAD test-design documents are created because `PLAN.md` is the existing project SoT.
+
+Testability assessment:
+- strong: deterministic Go core, injectable `CallFn` seams, explicit checkpoints, isolated sacrificial repo, canonical Go validator, executable verifier/fix/replan state machines;
+- actionable gaps: no first-class ambiguous-effect state, no deterministic real control-plane restart/orphan harness, no real OpenCode complex-schema integration test, incomplete causal telemetry tying child execution/model/effect to parent;
+- reliability ASR: **UNKNOWN/ambiguous effect forbids autonomous mutation until reconciled**;
+- reliability ASR: **completed non-idempotent effect executes at most once across timeout/restart/resume**;
+- observability ASR: every async child must be correlatable to parent execution + workspace + tested/delivered identity.
+
+Risk register and fault families (P=probability 1-3, I=impact 1-3):
+
+| ID | Fault family | Cat | P | I | Score | Priority | Owner layer | Required evidence |
+|---|---|---:|---:|---:|---:|---|---|---|
+| F01 | config / routing / precedence | TECH | 2 | 3 | 6 | P0 | SWE/Platform | deterministic contract + live route canary |
+| F02 | version / provenance / tested!=delivered | TECH | 2 | 3 | 6 | P0 | SWE/SourceLoop | exact SHA/config manifest + differential canary |
+| F03 | omission (missing output/file/field/checkpoint/ack) | TECH | 2 | 3 | 6 | P0 | SWE/AgentField | unit + integration omission injection |
+| F04 | invalid value / schema / corrupted structured output | TECH | 3 | 2 | 6 | P0 | SWE/AgentField | schema RED/recovery + real OpenCode canary |
+| F05 | crash / dependency unavailable / 5xx / disconnect | OPS | 2 | 3 | 6 | P0 | AgentField/Platform | process/network fault injection |
+| F06 | timing / stale async state / delayed completion | OPS | 3 | 3 | 9 | P0 | AgentField/Platform | control-plane convergence test |
+| F07 | concurrency / ordering / parallel writers | TECH | 2 | 3 | 6 | P0 | SWE/AgentField | deterministic race/barrier + isolated-workspace test |
+| F08 | persistence / idempotency / ambiguous effect after timeout | DATA | 2 | 3 | 6 | P0 | SWE + execution substrate | timeout/effect fault injection + resume oracle |
+| F09 | recovery-policy failure (retry/advisor/replan/fix skipped or loops) | TECH | 2 | 3 | 6 | P0 | SWE | state-machine contract + mutation adequacy |
+| F10 | scope / delivery contamination / dirty worktree | DATA | 2 | 2 | 4 | P1 | SWE | fail-closed delivery tests |
+| F11 | oracle / validation false PASS | TECH | 3 | 3 | 9 | P0 | SWE QA | independent oracle + mutation test |
+| F12 | arbitrary model/tool behavior (ignores contract, wrong tool/action) | TECH | 3 | 2 | 6 | P0 | SWE/AgentField | adversarial structured-output/tool-call matrix |
+| F13 | resource / budget / rate-limit / runaway turns | PERF | 2 | 2 | 4 | P1 | FCM/SWE | bounded-budget + 429/timeout tests, cost telemetry |
+| F14 | observability / evidence loss / missing causal IDs or cost | OPS | 2 | 2 | 4 | P1 | AgentField/FCM/SWE | provenance completeness assertions |
+| F15 | permission / secret / external-mutation violation | SEC | 1 | 3 | 3 | P1 | SWE/AgentField | permission-deny + secret-redaction tests |
+| F16 | partial write / corrupt checkpoint / artifact-state mismatch | DATA | 2 | 3 | 6 | P0 | SWE | corruption injection + fail-closed resume |
+
+Coverage design (priority != execution timing):
+- **Unit/component:** F01, F02, F03, F04, F08, F09, F10, F11, F15, F16 where invariants are locally decidable.
+- **Real integration:** F03/F04 at OpenCode file protocol; F05/F06/F07/F08/F12/F14 at AgentField/control-plane/workspace boundaries.
+- **Fault injection / chaos:** restart, delayed/duplicated completion, timeout-after-effect, provider 429/5xx, corrupt checkpoint, parallel writer collision.
+- **Metamorphic/differential:** equivalent config forms -> same route; clean run vs resume -> same final state with no duplicate effect; pinned vs candidate SDK -> same harness semantics.
+- **Mutation adequacy:** only critical gates/recovery/oracles; a test is accepted only if a plausible mutation makes it RED.
+
+Current family status:
+- covered/strong: F01 routing, F02 exact identity discipline, F09 verifier-fix + advisor/replan/resume, F10 delivery contamination, F11 one proven mutation oracle;
+- partial: F03/F04 (unit + live canaries, but no deterministic real-OpenCode CI integration), F07 (concurrency limits but not workspace collision fault injection), F08 (resume no-repeat proven after completed checkpoint, **timeout-after-effect gap remains**), F12, F14, F15, F16;
+- active gaps: F05/F06 control-plane crash/restart/stale-state; F08 ambiguous mutation after timeout.
+
+NFR evidence plan:
+- reliability: P0 fault families 100% pass; duplicate non-idempotent effects = 0; UNKNOWN forbids further mutation; evidence = Go tests + fault-injection runlogs/checkpoints;
+- maintainability: canonical Go suite + targeted mutation checks; evidence = commands/coverage/mutation RED;
+- security: no secret disclosure and permission-denied external mutation; thresholds beyond existing permission contract remain UNKNOWN until explicitly specified;
+- performance/cost: no correctness gate based on guessed latency/cost; record wall time/model/cost where available and treat missing telemetry as evidence gap.
+
+Execution strategy:
+- PR/inner loop: deterministic unit/component/contract tests (<15 min), full Go suite, targeted mutation checks;
+- nightly/controlled: real OpenCode structured-output matrix and bounded provider failure tests;
+- weekly/pre-release: control-plane restart/orphan/stale-state chaos and full-Build recovery ladder.
+
+Quality gates:
+- P0 fault-family invariants: **100% PASS**;
+- P1: >=95% PASS, no unresolved high-risk regression on active production path;
+- no open score >=6 fault without an explicit fail-closed mitigation/evidence plan;
+- overall line coverage is secondary; risk/fault-family coverage and oracle adequacy are release evidence;
+- full NFR PASS/CONCERNS/FAIL remains deferred until executable evidence exists.
+
+Entry criteria for resilience testing: exact tested source/runtime identity, isolated sacrificial workspace, zero pre-existing mutating child on target, planner/control-plane reachable. Exit criteria: all P0 families have a discriminating contract at every applicable critical boundary, plus at least one real fault-injection proof for each external async boundary.
+
+Immediate mandatory gate: **F08 ambiguous-effect fail-closed**. A mutation-capable coder timeout must not be converted into ordinary retry/replan. It must stop autonomous mutation and preserve the workspace/checkpoint for effect reconciliation. After that, F06 restart/orphan state convergence is the next integration gate.
+
 ### Acceptance evidence
 
 - L3-24 (`qa-synthesizer-fcm-smart-l3-24`): historical strong positive evidence. Full issue reached coder -> reviewer block -> repair -> second review -> verifier; bounded two-file delivery; independently inspected; canonical pytest was unavailable, so acceptance had an explicit validation limitation.
