@@ -57,12 +57,14 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
 
 ### SWE execution lane
 
-- The recent exact temporary `swe-planner` remains live as PID `366110`, listener/health on port `8005`.
-- Recent control-plane readback for the planner reports 25 executions in 24h: 18 succeeded, 7 failed.
-- Latest L3-26 coder executions fail before producing a deliverable:
-  - `Schema validation failed ... output file was NOT created`;
-  - latest attempts also preserve upstream `Unexpected server error`.
-- L3-26 created no accepted commit/files. Do not blindly repeat the same trajectory without new route evidence.
+- Root cause of the fresh pre-broker failure is proven: clean target base `2c374989...` lacked provider `fcm` in its project `opencode.json`, so OpenCode accepted `-m fcm/fcm` but failed before a broker request.
+- Executable A/B evidence:
+  - clean base direct OpenCode canary -> `Unexpected server error`, FCM `requestsRouted` unchanged `697 -> 697`;
+  - CURRENT `/src/swe-af` direct canary -> `DIRECT_CANARY_OK`, FCM `697 -> 699`;
+  - clean base + runtime-owned FCM overlay -> `OVERLAY_CANARY_OK`, FCM `699 -> 701`.
+- Runtime-owned OpenCode overlay in `/src/swe-af/go/internal/harnessx/run.go` now defines provider `fcm` while preserving no-install permissions. Deterministic RED->GREEN contract test added in `harnessx`; targeted packages and full CURRENT `go test ./...` PASS.
+- Exact tested planner binary: `/tmp/swe-planner-fcm-overlay-20260912`, SHA256 `0224447d5585c1c97c9ce154308c2cdd18834aeed4a73acc9ba6d5ef7d748ab4`; current planner PID `424603`, same callback/health on port `8005`, control-plane active.
+- Post-fix real task `exec_20260912_094308_za4vz5sv` reached FCM repeatedly, edited the target repo, and completed with a bounded two-file commit. The stable execution route is therefore recovered.
 
 ### FCM
 
