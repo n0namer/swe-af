@@ -37,6 +37,34 @@ import (
 // propagated (never swallowed into a fallback).
 type CallFn func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error)
 
+// agentCallTimeoutError preserves timeout identity so mutation-capable callers
+// can distinguish "the remote call may still be running" from an ordinary
+// provider/application failure.
+type agentCallTimeoutError struct {
+	Label          string
+	TimeoutSeconds int
+}
+
+func (e *agentCallTimeoutError) Error() string {
+	return fmt.Sprintf("Agent call '%s' timed out after %ds", e.Label, e.TimeoutSeconds)
+}
+
+// AmbiguousEffectError is fail-closed evidence: a mutation-capable coder call
+// exceeded the local deadline, so the caller cannot prove whether a remote
+// effect already happened or may still happen. Automatic retry/replan must stop
+// until the workspace/execution state is reconciled.
+type AmbiguousEffectError struct {
+	IssueName string
+	Iteration int
+	Cause     error
+}
+
+func (e *AmbiguousEffectError) Error() string {
+	return fmt.Sprintf("AMBIGUOUS_EFFECT: coder for issue %q iteration %d timed out; effect may still be in-flight: %v", e.IssueName, e.Iteration, e.Cause)
+}
+
+func (e *AmbiguousEffectError) Unwrap() error { return e.Cause }
+
 // MemoryFn is the shared-memory seam (in-process cross-issue learning). action
 // is "get" or "set"; value is nil for "get". A nil MemoryFn disables learning
 // (mirrors the Python `memory_fn is None` guard).
@@ -187,8 +215,16 @@ func RunCodingLoop(
 			})
 		if cerr != nil {
 			var fhe *fatal.FatalHarnessError
+			var timeoutErr *agentCallTimeoutError
 			if errors.As(cerr, &fhe) || errors.Is(cerr, context.Canceled) {
 				return schemas.IssueResult{}, cerr // propagate (FatalHarnessError / cancellation)
+			}
+			if errors.As(cerr, &timeoutErr) {
+				return schemas.IssueResult{}, &AmbiguousEffectError{
+					IssueName: issueName,
+					Iteration: iteration,
+					Cause:     cerr,
+				}
 			}
 			note(
 				fmt.Sprintf("Coder agent failed: %s iter %d: %v", issueName, iteration, cerr),
@@ -752,7 +788,7 @@ func callWithTimeout(ctx context.Context, timeout int, label string, fn func(ctx
 			// Parent cancelled — propagate cancellation, not a timeout.
 			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("Agent call '%s' timed out after %ds", label, timeout)
+		return nil, &agentCallTimeoutError{Label: label, TimeoutSeconds: timeout}
 	case r := <-ch:
 		return r.m, r.err
 	}

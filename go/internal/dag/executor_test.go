@@ -263,7 +263,10 @@ func TestConcurrencyBounded(t *testing.T) {
 	cfg := testCfg(t, map[string]any{"max_concurrent_issues": 3})
 	dagState := initDAGState(makePlan(issues, [][]string{level}), "/repo", nil, "")
 
-	lr := executeLevel(context.Background(), issues, nil, dagState, cfg, 0, m.fn, "swe-planner", nil, nil)
+	lr, err := executeLevel(context.Background(), issues, nil, dagState, cfg, 0, m.fn, "swe-planner", nil, nil)
+	if err != nil {
+		t.Fatalf("executeLevel: %v", err)
+	}
 	if len(lr.Completed) != 6 {
 		t.Fatalf("expected 6 completed, got %d", len(lr.Completed))
 	}
@@ -332,6 +335,56 @@ func TestAdvisorTimeoutFailsNotHang(t *testing.T) {
 	}
 	if !names(state.FailedIssues)["a"] {
 		t.Fatalf("expected 'a' failed after advisor timeout, got failed=%v", state.FailedIssues)
+	}
+}
+
+func TestCoderTimeoutAbortsDAGWithInFlightCheckpoint(t *testing.T) {
+	dir := t.TempDir()
+	plan := makePlan([]map[string]any{issue("a")}, [][]string{{"a"}})
+	plan["artifacts_dir"] = dir
+	m := newMock()
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	m.on("run_coder", func(kwargs map[string]any) (map[string]any, error) {
+		<-release // deliberately ignore cancellation: remote mutation is still ambiguous
+		close(finished)
+		return map[string]any{"files_changed": []any{"late.go"}, "summary": "late effect", "complete": true}, nil
+	})
+	cfg := testCfg(t, map[string]any{
+		"agent_timeout_seconds":       1,
+		"max_coding_iterations":      3,
+		"enable_issue_advisor":       true,
+		"max_advisor_invocations":    2,
+		"enable_replanning":          true,
+		"max_replans":                2,
+		"level_failure_abort_threshold": 1.0,
+	})
+
+	state, err := RunDAG(context.Background(), plan, "/repo", m.fn, "swe-planner", cfg)
+	close(release)
+	<-finished
+
+	if err == nil {
+		t.Fatalf("RunDAG returned state=%v with nil error; want ambiguous-effect fail-closed error", state)
+	}
+	if !strings.Contains(err.Error(), "AMBIGUOUS_EFFECT") {
+		t.Fatalf("error = %q, want AMBIGUOUS_EFFECT marker", err)
+	}
+	if m.count("run_coder") != 1 {
+		t.Fatalf("coder calls = %d, want exactly 1", m.count("run_coder"))
+	}
+	if m.count("run_issue_advisor") != 0 {
+		t.Fatalf("advisor calls = %d, want 0 while effect is UNKNOWN", m.count("run_issue_advisor"))
+	}
+	if m.count("run_replanner") != 0 {
+		t.Fatalf("replanner calls = %d, want 0 while effect is UNKNOWN", m.count("run_replanner"))
+	}
+	cp := loadCheckpoint(dir)
+	if cp == nil {
+		t.Fatal("checkpoint missing after ambiguous timeout")
+	}
+	if len(cp.InFlightIssues) != 1 || cp.InFlightIssues[0] != "a" {
+		t.Fatalf("checkpoint in_flight_issues = %v, want [a] for reconciliation", cp.InFlightIssues)
 	}
 }
 

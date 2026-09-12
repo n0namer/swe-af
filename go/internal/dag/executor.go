@@ -265,9 +265,19 @@ mainLoop:
 		dagState.InFlightIssues = issueNames(activeIssues)
 		saveCheckpoint(dagState, note)
 
-		// Execute all issues in this level concurrently.
-		levelResult := executeLevel(ctx, activeIssues, o.executeFn, dagState, cfg,
+		// Execute all issues in this level concurrently. Ambiguous mutation
+		// timeouts fail closed: keep the pre-level in-flight checkpoint intact so
+		// an operator/recovery controller can reconcile effects before any retry.
+		levelResult, levelErr := executeLevel(ctx, activeIssues, o.executeFn, dagState, cfg,
 			dagState.CurrentLevel, callFn, nodeID, note, memoryFn)
+		if levelErr != nil {
+			if note != nil {
+				note(fmt.Sprintf("Level %d stopped with unresolved effect: %v", dagState.CurrentLevel, levelErr),
+					[]string{"execution", "abort", "ambiguous_effect"})
+			}
+			saveCheckpoint(dagState, note)
+			return nil, levelErr
+		}
 
 		dagState.InFlightIssues = nil // level barrier reached
 		saveCheckpoint(dagState, note)
