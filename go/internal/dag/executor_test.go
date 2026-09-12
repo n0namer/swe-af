@@ -351,12 +351,12 @@ func TestCoderTimeoutAbortsDAGWithInFlightCheckpoint(t *testing.T) {
 		return map[string]any{"files_changed": []any{"late.go"}, "summary": "late effect", "complete": true}, nil
 	})
 	cfg := testCfg(t, map[string]any{
-		"agent_timeout_seconds":       1,
-		"max_coding_iterations":      3,
-		"enable_issue_advisor":       true,
-		"max_advisor_invocations":    2,
-		"enable_replanning":          true,
-		"max_replans":                2,
+		"agent_timeout_seconds":         1,
+		"max_coding_iterations":         3,
+		"enable_issue_advisor":          true,
+		"max_advisor_invocations":       2,
+		"enable_replanning":             true,
+		"max_replans":                   2,
 		"level_failure_abort_threshold": 1.0,
 	})
 

@@ -227,6 +227,64 @@ func runImplement(t *testing.T, repo string, callFn CallFn, input map[string]any
 	return result
 }
 
+func TestAmbiguousCoderTimeoutPreservesWorktreeAndSkipsDelivery(t *testing.T) {
+	repo := initRepo(t)
+	rec := &recorder{}
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	worktreePath := ""
+
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		rec.add(target)
+		name := target[strings.LastIndex(target, ".")+1:]
+		if name == "run_coder" {
+			worktreePath, _ = kwargs["worktree_path"].(string)
+			<-release // ignore ctx: remote mutation may still finish after local timeout
+			close(finished)
+			return map[string]any{"files_changed": []any{"late.py"}, "summary": "late effect", "complete": true}, nil
+		}
+		if name == "run_verifier" {
+			return map[string]any{"passed": true}, nil
+		}
+		return map[string]any{}, nil
+	}
+
+	deps := &Deps{Call: callFn, NodeID: "test-node"}
+	raw, err := ImplementIssue(context.Background(), deps, map[string]any{
+		"issue": map[string]any{
+			"title":               "Ambiguous timeout",
+			"description":         "Do not retry or clean up while effect is unknown.",
+			"acceptance_criteria": []any{"preserve reconciliation state"},
+		},
+		"repo_path": repo,
+		"config": map[string]any{
+			"agent_timeout_seconds": 1,
+			"max_coding_iterations": 3,
+			"verify":                true,
+		},
+	})
+	close(release)
+	<-finished
+
+	if err == nil {
+		t.Fatalf("ImplementIssue returned result=%v with nil error; want AMBIGUOUS_EFFECT", raw)
+	}
+	if !strings.Contains(err.Error(), "AMBIGUOUS_EFFECT") {
+		t.Fatalf("error = %q, want AMBIGUOUS_EFFECT marker", err)
+	}
+	if worktreePath == "" {
+		t.Fatal("coder did not receive worktree path")
+	}
+	if _, statErr := os.Stat(worktreePath); statErr != nil {
+		t.Fatalf("worktree removed before effect reconciliation: %v", statErr)
+	}
+	for _, name := range rec.names() {
+		if name == "run_verifier" || name == "run_github_pr" {
+			t.Fatalf("unexpected downstream mutation/evidence call after ambiguous effect: %s", name)
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // C1 — happy path
 // ---------------------------------------------------------------------------
