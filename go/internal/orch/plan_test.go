@@ -419,6 +419,30 @@ func TestPlanWritesArtifactsAtExactPaths(t *testing.T) {
 
 // --- Contract: env-resolved provider/model defaults (OpenRouter-only) ------
 
+func TestPlanForwardsExplicitOpenCodeRouteToProductManager(t *testing.T) {
+	deps, m := planApp(sprintResult(issue("my-issue", nil, []any{"thing.py"})))
+	if _, err := runPlan(t, deps, t.TempDir(), map[string]any{
+		"ai_provider":          "open_code",
+		"pm_model":             "fcm/fcm",
+		"architect_model":      "fcm/fcm",
+		"tech_lead_model":      "fcm/fcm",
+		"sprint_planner_model": "fcm/fcm",
+		"issue_writer_model":   "fcm/fcm",
+	}); err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	pm := m.callsFor("run_product_manager")
+	if len(pm) != 1 {
+		t.Fatalf("expected 1 PM call, got %d", len(pm))
+	}
+	if got := mapStr(pm[0].input, "ai_provider", ""); got != "open_code" {
+		t.Fatalf("PM ai_provider = %q, want open_code", got)
+	}
+	if got := mapStr(pm[0].input, "model", ""); got != "fcm/fcm" {
+		t.Fatalf("PM model = %q, want fcm/fcm", got)
+	}
+}
+
 func TestPlanOpenRouterOnlyDefaults(t *testing.T) {
 	for _, k := range []string{"ANTHROPIC_API_KEY", "SWE_DEFAULT_RUNTIME",
 		"SWE_DEFAULT_MODEL", "AI_MODEL", "HARNESS_MODEL",

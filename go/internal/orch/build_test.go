@@ -164,6 +164,92 @@ func TestBuildVerifiedSuccess(t *testing.T) {
 	}
 }
 
+func TestBuildVerifierFailureGeneratesFixAndReverifies(t *testing.T) {
+	defer withExecCtx("run-fix", "exec-fix")()
+
+	var executeCalls, verifyCalls, generateFixCalls int
+	app := &mockApp{handler: func(_ context.Context, target string, input map[string]any) (map[string]any, error) {
+		switch {
+		case strings.HasSuffix(target, ".plan"):
+			return map[string]any{
+				"prd": map[string]any{"acceptance_criteria": []any{"AC-1"}},
+				"issues": []any{},
+				"artifacts_dir": input["artifacts_dir"],
+			}, nil
+		case strings.HasSuffix(target, ".run_git_init"):
+			return map[string]any{"success": false, "error_message": "no remote"}, nil
+		case strings.HasSuffix(target, ".execute"):
+			executeCalls++
+			name := "initial"
+			if executeCalls > 1 {
+				name = "fix-ac-1"
+			}
+			return map[string]any{
+				"completed_issues": []any{map[string]any{"name": name}},
+				"merged_branches":  []any{"issue/" + name},
+				"all_issues":       []any{map[string]any{"name": name}},
+				"failed_issues":    []any{},
+				"skipped_issues":   []any{},
+				"accumulated_debt": []any{},
+			}, nil
+		case strings.HasSuffix(target, ".run_verifier"):
+			verifyCalls++
+			if verifyCalls == 1 {
+				return map[string]any{
+					"passed": false,
+					"criteria_results": []any{map[string]any{
+						"criterion": "AC-1", "passed": false, "evidence": "missing",
+					}},
+					"summary": "needs fix",
+				}, nil
+			}
+			return map[string]any{"passed": true, "criteria_results": []any{}, "summary": "fixed"}, nil
+		case strings.HasSuffix(target, ".generate_fix_issues"):
+			generateFixCalls++
+			failed := asMapList(input["failed_criteria"])
+			if len(failed) != 1 || mapStr(failed[0], "criterion", "") != "AC-1" {
+				t.Fatalf("generate_fix_issues failed_criteria = %v", input["failed_criteria"])
+			}
+			return map[string]any{
+				"fix_issues": []any{map[string]any{
+					"name": "fix-ac-1", "title": "Fix AC-1", "description": "repair acceptance",
+				}},
+				"debt_items": []any{},
+			}, nil
+		case strings.HasSuffix(target, ".run_repo_finalize"):
+			return map[string]any{"success": true, "summary": ""}, nil
+		default:
+			return map[string]any{}, nil
+		}
+	}}
+
+	out, err := Build(context.Background(), &Deps{App: app, NodeID: "swe-planner"}, map[string]any{
+		"goal":      "repair verifier failure",
+		"repo_path": t.TempDir(),
+		"config": map[string]any{
+			"git_init_max_retries": 1,
+			"max_verify_fix_cycles": 1,
+			"enable_github_pr":      false,
+			"check_ci":               false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !asBool(out.(map[string]any)["success"]) {
+		t.Fatalf("Build success=false after verifier repair: %v", out)
+	}
+	if executeCalls != 2 {
+		t.Fatalf("execute calls = %d, want initial + fix", executeCalls)
+	}
+	if verifyCalls != 2 {
+		t.Fatalf("verifier calls = %d, want fail + reverify", verifyCalls)
+	}
+	if generateFixCalls != 1 {
+		t.Fatalf("generate_fix_issues calls = %d, want 1", generateFixCalls)
+	}
+}
+
 // TestBuildRequiresRepoPathOrURL maps to the ValueError branch.
 func TestBuildRequiresRepoPathOrURL(t *testing.T) {
 	defer withExecCtx("r", "e")()
