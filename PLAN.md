@@ -105,7 +105,7 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
 
 - Coding Station functional API remains unhealthy from the operator surface (`stationHealth` / `stationReady` Gateway Timeout) despite one healthy API + one healthy runtime container. This is not the current critical path because the workforce Go validator works.
 - AgentField operator gateway is intermittently `Bad Gateway`; direct authenticated control-plane readback from the workforce works.
-- Control-plane has shown stale executions labelled `active`; execution-state reconciliation is a production reliability debt, but do not stop the accepted-task ladder unless it blocks safe recovery.
+- Control-plane stale execution state is now **active P0 reliability evidence for full Build**, not deferred debt. FB-0 attempt 1 showed `run_git_init` with a finished OpenCode process and an output artifact while both child and parent remained `running`; the failed parent later spawned orphan continuation processes. Any retry must therefore use effect/process readback, not control-plane status alone, and must prove no orphan process shares the target workspace.
 - SourceLoop/durable Git identity does not yet represent the entire tested live product delta. Canonicalization is required after correctness baseline, not before.
 - Python canonical pytest is not provisioned in the current workforce. Do not install it merely to manufacture a green historical task; prefer tasks with already-provisioned canonical validators for the next acceptance streak.
 - Process/zombie/resource hygiene is an operational risk; escalate to the critical path only if fresh task evidence shows spawn/resource pressure.
