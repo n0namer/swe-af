@@ -42,13 +42,13 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
   - STOP CONDITION
 - STOP_SIDEQUEST if work does not materially shorten the path to independently accepted SWE tasks.
 
-## CURRENT — 2026-09-12
+## CURRENT — 2026-09-13
 
 ### Source/runtime identity
 
 - CURRENT live product source: `/src/swe-af`.
 - Git baseline HEAD: `58c4e0d19081bc52363c120b7963a34cebb1e894`.
-- Working tree is intentionally ahead of baseline: fresh readback shows 58 modified/staged paths + 2 untracked paths.
+- Working tree is intentionally ahead of baseline: fresh readback shows 60 tracked modified/staged paths + 2 untracked paths.
 - Treat product identity as `58c4e0d... + exact working-tree delta + loaded process generation` until accepted deltas are canonicalized.
 - Full CURRENT Go suite PASS:
   - `/usr/local/go/bin/go test ./...`
