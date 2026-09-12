@@ -63,8 +63,10 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
   - CURRENT `/src/swe-af` direct canary -> `DIRECT_CANARY_OK`, FCM `697 -> 699`;
   - clean base + runtime-owned FCM overlay -> `OVERLAY_CANARY_OK`, FCM `699 -> 701`.
 - Runtime-owned OpenCode overlay in `/src/swe-af/go/internal/harnessx/run.go` now defines provider `fcm` while preserving no-install permissions. Deterministic RED->GREEN contract test added in `harnessx`; targeted packages and full CURRENT `go test ./...` PASS.
-- Exact tested planner binary: `/tmp/swe-planner-fcm-overlay-20260912`, SHA256 `0224447d5585c1c97c9ce154308c2cdd18834aeed4a73acc9ba6d5ef7d748ab4`; current planner PID `424603`, same callback/health on port `8005`, control-plane active.
-- Post-fix real task `exec_20260912_094308_za4vz5sv` reached FCM repeatedly, edited the target repo, and completed with a bounded two-file commit. The stable execution route is therefore recovered.
+- Current exact tested planner binary: `/tmp/swe-planner-fullbuild-route-20260912`, SHA256 `5d4404bbecea63a21ff440c9c814ec3907980f543e8cddac15ada3635645608f`; current planner PID `484116`, callback/health on port `8005`, control-plane active at registered callback `http://172.16.22.7:8005`.
+- The binary includes the proven runtime-owned FCM overlay plus a full-Build planning parity fix: when runtime/provider resolves to OpenCode, Product Manager now uses the harness/OpenCode path instead of AgentField direct AI. Deterministic RED `TestProductManagerOpenCodeUsesHarnessWhenDirectAIIsAvailable` reproduced the old direct-AI misroute for `fcm/fcm`; targeted planning tests and full `go test ./... -count=1` PASS after the fix.
+- Python reference `run_product_manager` always uses the configured harness provider/model; the Go direct-AI shortcut was therefore a port/runtime-contract regression, not an FCM outage.
+- Post-fix issue-level task `exec_20260912_094308_za4vz5sv` reached FCM repeatedly, edited the target repo, and completed with a bounded two-file commit. The issue execution route is recovered; full-Build acceptance remains separate and is currently 0/3.
 
 ### FCM
 
@@ -73,6 +75,21 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
 - Small current direct telemetry for `routerai/z-ai/glm-5.3-flash`: 6/6 successful calls.
 - Therefore the L3-26 failure is narrower than “FCM is broken”: current evidence points to the OpenCode/FCM tool trajectory, structured-output/provider boundary, or another execution-route integration seam.
 - FCM decides model/provider routing; it does not own authoritative engineering obligation state.
+
+### AgentField compatibility / structured-output contract audit
+
+- SWE-AF is pinned to AgentField Go SDK `v0.0.0-20260723130821-20955b2637b4` (commit `20955b2637b4`, 2026-07-23). Current upstream is `v0.1.139-rc.1`, commit `4aa3fe688dfa1f2437ac49f6cbe72aed43ddca07` (2026-09-10).
+- Exact pinned SDK `go test ./... -count=1` PASS across `agent`, `ai`, `client`, `did`, `harness`, `inputs`, `types`. Fresh upstream `sdk/go` `go test ./... -count=1` also PASS.
+- Relevant upstream drift does **not** contain an obvious fix for the observed PM schema failure: `schema.go`, `opencode_test.go`, and `parity_test.go` are byte-identical between pin and current main. `runner.go` changed provider resolution/output-dir isolation/metrics; `opencode.go` changed token accounting. The core file-write schema retry algorithm remains materially the same.
+- AgentField unit coverage includes `missing output file -> retry -> success`, but the retry provider is a mock that writes the file. There is no real OpenCode integration test that drives a non-trivial schema through the actual CLI/model/file protocol; OpenCode tests use fake scripts/mocked CLI seams. Therefore green AgentField tests do not cover our production failure mode.
+- AgentField-only live A/B on the exact pinned SDK + OpenCode `1.17.15` + `fcm/fcm`:
+  - simple schema `{status:string}` in single mode: PASS, parsed result `status=ok`, 3 turns;
+  - exact SWE `schemas.PRD` in single mode: FAIL trajectory; model writes the JSON Schema object itself (`$schema/$defs/properties/...`) instead of a PRD instance; AgentField correctly diagnoses expected-vs-actual top-level keys and starts schema recovery, but the model repeats the schema object;
+  - exact `schemas.PRD` in incremental mode: PASS, `parsed=true`; model builds a real PRD instance field-by-field and completes after 22 reported turns.
+- Exact reflected PRD schema is only `1403` compact bytes (~350 estimated tokens), so AgentField `SchemaMode=auto` would **not** switch to incremental (`auto` threshold = 4000 estimated tokens). Explicit per-role policy is required for this schema/model pair.
+- CURRENT FCM runtime telemetry has one model with signal: `routerai/z-ai/glm-5.3-flash`, 6/6 successful backend calls. This is the strongest current model evidence but is not yet per-execution correlated.
+- Separate parity debt: commit `c8ff657` (2026-08-24) reduced Go planning/issue-writer defaults from architecture/Python `150` turns to `2`. However AgentField OpenCode provider ignores `Options.MaxTurns` entirely in both pinned and current upstream, so this does **not** explain the current OpenCode PM failure. It remains a cross-provider parity/config debt, not this batch's fix.
+- Decision: **do not upgrade AgentField as a speculative fix**. Current evidence localizes FB-0 PM failure to SWE's structured-output policy (`single`) interacting with the currently routed model on the PRD contract. Minimal next fix is PM-specific incremental schema mode, followed by the exact same full-Build canary.
 
 ### Acceptance evidence
 
@@ -103,7 +120,7 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
 
 - Coding Station functional API remains unhealthy from the operator surface (`stationHealth` / `stationReady` Gateway Timeout) despite one healthy API + one healthy runtime container. This is not the current critical path because the workforce Go validator works.
 - AgentField operator gateway is intermittently `Bad Gateway`; direct authenticated control-plane readback from the workforce works.
-- Control-plane has shown stale executions labelled `active`; execution-state reconciliation is a production reliability debt, but do not stop the accepted-task ladder unless it blocks safe recovery.
+- Control-plane stale execution state is now **active P0 reliability evidence for full Build**, not deferred debt. FB-0 attempt 1 showed `run_git_init` with a finished OpenCode process and an output artifact while both child and parent remained `running`; the failed parent later spawned orphan continuation processes. Any retry must therefore use effect/process readback, not control-plane status alone, and must prove no orphan process shares the target workspace.
 - SourceLoop/durable Git identity does not yet represent the entire tested live product delta. Canonicalization is required after correctness baseline, not before.
 - Python canonical pytest is not provisioned in the current workforce. Do not install it merely to manufacture a green historical task; prefer tasks with already-provisioned canonical validators for the next acceptance streak.
 - Process/zombie/resource hygiene is an operational risk; escalate to the critical path only if fresh task evidence shows spawn/resource pressure.
@@ -186,6 +203,13 @@ Decision: do not manually repair this task and do not count it toward production
 ### Gate FB-0 — first autonomous full-Build canary
 
 Status: ACTIVE / P0
+
+Fresh attempts:
+- Attempt 1: `exec_20260912_163419_wcpjjtdr` on frozen local baseline `e03ee19d1940a29318ebd9f820c92be7fe4931f6`. `build -> plan -> run_product_manager` failed immediately because the Go PM took AgentField direct AI and rejected `fcm/fcm` as unsupported. Root cause was a Go-port parity/runtime-contract defect: `deps.AI` was always non-nil, so `runtime=open_code` was ignored for PM. RED->GREEN fix now routes OpenCode PM through the harness; targeted planning tests and full Go suite PASS.
+- Attempt 1 also proved structured-output self-repair exists in git-init: the model wrote a JSON Schema instead of an instance, the harness detected it and launched an incremental continuation with the exact validation contract. That continuation repeated the same schema mistake, so recovery capability exists but is not yet sufficient on this trajectory.
+- Attempt 2: `exec_20260912_164532_i9s249f1` proved the PM routing fix functionally — a live Product Manager OpenCode process started with `-m fcm/fcm`. The attempt is **invalid acceptance evidence** because an orphan git-init OpenCode process from attempt 1 was concurrently mutating the same sacrificial repo. It was stopped and the repo was restored to exact baseline before the next attempt.
+- Attempt 3: `exec_20260912_164957_ikbjlc8x` did not reach the agent; it failed after 15s with `agent_unreachable` because the manually restarted planner had registered callback `http://localhost:8005`. The node contract explicitly requires `AGENT_CALLBACK_URL` in containers. Planner was restarted with `AGENT_CALLBACK_URL=http://172.16.22.7:8005`; control-plane now reports that callback active. This attempt contains no task-code effect and is infrastructure evidence only.
+- Current clean precondition: sacrificial repo `/tmp/swe-af-fullbuild-current-20260912` is clean on baseline branch `fullbuild-current-baseline-20260912`, exact SHA `e03ee19d1940a29318ebd9f820c92be7fe4931f6`; no live OpenCode process targets that workspace; planner `/tmp/swe-planner-fullbuild-route-20260912` is healthy and registered at the routable callback.
 
 Goal: exercise the actual `swe-planner.build` / `orch.Build` lifecycle on a frozen materialization of CURRENT tested SWE-AF source, with zero operator edits to task code during the run.
 
@@ -281,16 +305,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-production acceptance has not yet exercised the top-level autonomous `orch.Build` lifecycle. Component-level `implement_issue` evidence is useful but insufficient; MICRO-2 proved a repairable verifier failure can terminate there without self-repair.
+FB-0 now reaches the correct OpenCode/FCM Product Manager path but exact PRD structured output fails under SWE's forced OpenCode `SchemaMode=single`. Compatibility audit proves pinned and current AgentField SDK suites are green, simple live structured output passes, exact PRD single-mode fails by copying the schema itself, and exact PRD incremental-mode passes on the same OpenCode/FCM/model stack.
 
 THIS BATCH:
-materialize a frozen local baseline from CURRENT tested `/src/swe-af`, then run exactly one `swe-planner.build` canary with the production recovery controls enabled (replanning, issue advisor/retries, integration testing, verifier-fix cycles, deterministic Git). Keep the proven `fcm/fcm` route. Disable only external GitHub PR/CI side effects for this first canary because they are outside the already-authorized local scope; do not claim CI coverage.
+make one bounded SWE policy correction only: Product Manager explicitly requests `SchemaMode=incremental`. Do not upgrade AgentField, change model/router, alter FCM, or globally switch all roles. Prove RED on PM harness options, apply the one-role change in `/src/swe-af`, run targeted planning + full Go validation, review the delta, rebuild the planner, then repeat the exact FB-0 full-Build canary from a clean frozen CURRENT baseline.
 
 NORTH-STAR DELTA:
-replace micro-harness confidence with direct evidence about whether the full SWE controller can autonomously plan, implement, validate, repair, verify and finalize one real SWE-AF change without operator task-code edits.
+unblock full-Build planning with a contract mode already proven executable on the exact PRD schema and current routed model, while preserving all other variables for causal evidence.
 
 STOP CONDITION:
-either the full Build reaches terminal success and then passes independent canonical validation/oracle, or one run identifies the first evidence-backed missing contract in the full lifecycle. At that point stop, write back, and repair only that proven framework gap before retrying the same canary.
+PM option RED -> GREEN, full Go suite PASS, rebuilt planner healthy, then the same FB-0 either advances beyond Product Manager or identifies the next single full-lifecycle blocker. Stop at that first new blocker and write it back before any further framework mutation.
 
 ## Acceptance Metrics Per Task
 
@@ -322,4 +346,4 @@ Record:
 
 ## Current Next Move
 
-Run **one** PR-3 bounded real Go task for fresh accepted task 2/3 on the already-proven planner/runtime/model route. Freeze `/tmp/swe-planner-fcm-overlay-20260912`, `fcm/fcm`, runtime guards and acceptance method; vary only task input. Prefer a defect already evidenced by the CURRENT live-vs-clean delta with an existing deterministic regression seam. Product code changes remain inside the isolated task worktree. Stop after either exact commit + canonical validation + independent executable oracle PASS, or the first new evidence-backed blocker.
+Run **the same FB-0 full `swe-planner.build` canary for attempt 4** from the clean frozen baseline `e03ee19d1940a29318ebd9f820c92be7fe4931f6` using planner `/tmp/swe-planner-fullbuild-route-20260912`, `fcm/fcm`, and the routable registered callback `http://172.16.22.7:8005`. Before START require zero live OpenCode process targeting the sacrificial repo and control-plane `swe-planner` health `active`. After START the operator makes zero task-code edits. Follow actual process/artifact/effect state rather than stale control-plane labels. Stop after either autonomous terminal success followed by canonical Go validation + independent oracle, or the first new evidence-backed full-lifecycle blocker; write that blocker back before any framework repair.
