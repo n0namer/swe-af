@@ -407,16 +407,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-no known component-level blocker remains from the PM structured-output or tested self-healing/delivery seams. The next unknown must be discovered by the autonomous full-Build canary; full-Build acceptance is still 0/3.
+F08 ambiguous-effect safety is now component-level verified. The next highest-risk unclosed family is **F06 timing/stale async state after agent restart**: control-plane can report stale `running`, and an old child can remain active/orphaned while a new execution targets the same workspace.
 
 THIS BATCH:
-coverage/contract hardening is complete. Do not add more unit tests merely to raise the global percentage. The next coherent batch is FB-0 attempt 5 on frozen baseline `755c899` using planner `/tmp/swe-planner-fullbuild-coverage-20260912`, route `fcm/fcm`, and the already-enabled recovery controls. Operator task-code edits are forbidden after START.
+F08 is complete. The next coherent 30-minute gate is a controlled **F06 restart/orphan convergence fault-injection** against a sacrificial workspace and exact tested planner. Do not start FB-0 attempt 5 until this external async boundary proves fail-closed/no-parallel-writer behavior or yields the first evidence-backed platform defect.
 
 NORTH-STAR DELTA:
-move from component-level executable guarantees to direct autonomous full-Build evidence on the exact hardened baseline.
+move from local UNKNOWN-effect safety to real control-plane/process state truth so a full Build cannot overlap an old mutating child after restart.
 
 STOP CONDITION:
-either FB-0 attempt 5 reaches terminal success and then passes canonical validation + independent oracle, or it identifies the first new evidence-backed full-lifecycle blocker. Stop at that blocker, write it back, and change only the proven owner-layer contract before retrying.
+either F06 proves state convergence/no overlapping mutator across one controlled restart, or the first stale/orphan divergence is captured with execution/process/workspace evidence and becomes the sole next owner-layer fix. Do not combine it with model/task changes.
 
 ## Acceptance Metrics Per Task
 
