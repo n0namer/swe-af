@@ -194,6 +194,9 @@ func TestProductManagerOpenCodeUsesHarnessWhenDirectAIIsAvailable(t *testing.T) 
 	if h.lastOpts.Provider != "opencode" || h.lastOpts.Model != "fcm/fcm" {
 		t.Fatalf("harness route = provider %q model %q", h.lastOpts.Provider, h.lastOpts.Model)
 	}
+	if h.lastOpts.SchemaMode != "incremental" {
+		t.Fatalf("OpenCode PM schema_mode = %q, want incremental", h.lastOpts.SchemaMode)
+	}
 	if got := out.(map[string]any)["validated_description"]; got != "planned through harness" {
 		t.Fatalf("validated_description = %v", got)
 	}

@@ -200,6 +200,7 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 				PermissionMode: permissionMode,
 				SystemPrompt:   systemPrompt,
 				Cwd:            repoPath,
+				SchemaMode:     "incremental",
 			}.ToOptions()
 			p, res, hErr := harnessx.Run[schemas.PRD](ctx, deps.Harness, taskPrompt, opts)
 			if hErr != nil {
