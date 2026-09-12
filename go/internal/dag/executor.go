@@ -100,9 +100,10 @@ func (s *sharedMemory) fn(action, key string, value any) any {
 // The returned error is non-nil when a directly-awaited reasoner call
 // (worktree setup, single-repo merge, integration test, cleanup-on-await, or
 // replanner) fails — matching Python, where those un-gathered awaits propagate.
-// Per-issue failures (including fatal harness errors raised inside an issue's
-// coding loop) are captured into IssueResults at the level barrier and never
-// abort the whole run.
+// Ordinary per-issue failures are captured into IssueResults at the level
+// barrier. Ambiguous mutation effects are different: RunDAG fails closed and
+// preserves the in-flight checkpoint so recovery can reconcile the effect
+// before any retry/replan/downstream mutation.
 func RunDAG(
 	ctx context.Context,
 	planResult map[string]any,
@@ -265,9 +266,19 @@ mainLoop:
 		dagState.InFlightIssues = issueNames(activeIssues)
 		saveCheckpoint(dagState, note)
 
-		// Execute all issues in this level concurrently.
-		levelResult := executeLevel(ctx, activeIssues, o.executeFn, dagState, cfg,
+		// Execute all issues in this level concurrently. Ambiguous mutation
+		// timeouts fail closed: keep the pre-level in-flight checkpoint intact so
+		// an operator/recovery controller can reconcile effects before any retry.
+		levelResult, levelErr := executeLevel(ctx, activeIssues, o.executeFn, dagState, cfg,
 			dagState.CurrentLevel, callFn, nodeID, note, memoryFn)
+		if levelErr != nil {
+			if note != nil {
+				note(fmt.Sprintf("Level %d stopped with unresolved effect: %v", dagState.CurrentLevel, levelErr),
+					[]string{"execution", "abort", "ambiguous_effect"})
+			}
+			saveCheckpoint(dagState, note)
+			return nil, levelErr
+		}
 
 		dagState.InFlightIssues = nil // level barrier reached
 		saveCheckpoint(dagState, note)

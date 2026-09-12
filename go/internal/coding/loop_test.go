@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/config"
@@ -342,6 +343,45 @@ func TestCoderExceptionFailsUnrecoverable(t *testing.T) {
 	}
 	if !strings.Contains(res.ErrorMessage, "Coder agent failed") {
 		t.Errorf("error_message = %q, want to contain 'Coder agent failed'", res.ErrorMessage)
+	}
+}
+
+func TestCoderTimeoutFailsClosedAsAmbiguousEffect(t *testing.T) {
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	var coderCalls atomic.Int32
+
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		if strings.Contains(target, "run_coder") {
+			coderCalls.Add(1)
+			<-release // deliberately ignore ctx: remote effect may still be in-flight after local timeout
+			close(finished)
+			return map[string]any{"files_changed": []string{"late.go"}, "summary": "late effect", "complete": true}, nil
+		}
+		return map[string]any{}, nil
+	}
+
+	_, err := RunCodingLoop(
+		context.Background(),
+		makeIssue("ISSUE-1", false),
+		makeDAGState(t.TempDir()),
+		callFn,
+		"test-node",
+		makeConfig(t, map[string]any{"agent_timeout_seconds": 1, "max_coding_iterations": 3}),
+		nil,
+		nil,
+	)
+	close(release)
+	<-finished
+
+	if err == nil {
+		t.Fatal("coder timeout returned nil error; want ambiguous-effect fail-closed error")
+	}
+	if !strings.Contains(err.Error(), "AMBIGUOUS_EFFECT") {
+		t.Fatalf("error = %q, want AMBIGUOUS_EFFECT marker", err)
+	}
+	if got := coderCalls.Load(); got != 1 {
+		t.Fatalf("coder calls = %d, want exactly 1 (no automatic retry while effect is unknown)", got)
 	}
 }
 

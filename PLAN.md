@@ -63,7 +63,7 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
   - CURRENT `/src/swe-af` direct canary -> `DIRECT_CANARY_OK`, FCM `697 -> 699`;
   - clean base + runtime-owned FCM overlay -> `OVERLAY_CANARY_OK`, FCM `699 -> 701`.
 - Runtime-owned OpenCode overlay in `/src/swe-af/go/internal/harnessx/run.go` now defines provider `fcm` while preserving no-install permissions. Deterministic RED->GREEN contract test added in `harnessx`; targeted packages and full CURRENT `go test ./...` PASS.
-- Current exact tested planner binary: `/tmp/swe-planner-fullbuild-pm-incremental-20260912`, SHA256 `4fa7008f06d25956ffc7acbeb5febf5d01b6aa872346630ef09bd6e1a78b353b`; current planner PID `496567`, callback/health on port `8005`, control-plane active at registered callback `http://172.16.22.7:8005`.
+- Current exact tested planner binary: `/tmp/swe-planner-fullbuild-f08-20260912`, SHA256 `f5adc31c29b3383f463f34df6863d3e06767e7904930b45b5f06463dd4a0d0de`; current planner PID `529917`, callback/health on port `8005`, control-plane active at registered callback `http://172.16.22.7:8005`.
 - The binary includes the proven runtime-owned FCM overlay plus a full-Build planning parity fix: when runtime/provider resolves to OpenCode, Product Manager now uses the harness/OpenCode path instead of AgentField direct AI. Deterministic RED `TestProductManagerOpenCodeUsesHarnessWhenDirectAIIsAvailable` reproduced the old direct-AI misroute for `fcm/fcm`; targeted planning tests and full `go test ./... -count=1` PASS after the fix.
 - Python reference `run_product_manager` always uses the configured harness provider/model; the Go direct-AI shortcut was therefore a port/runtime-contract regression, not an FCM outage.
 - Post-fix issue-level task `exec_20260912_094308_za4vz5sv` reached FCM repeatedly, edited the target repo, and completed with a bounded two-file commit. The issue execution route is recovered; full-Build acceptance remains separate and is currently 0/3.
@@ -114,6 +114,83 @@ Remaining material gaps (do not confuse with missing line coverage):
 - `cmd/*` 0% is startup plumbing, not a current P0; node registration functions are already ~92-100% covered.
 
 Decision: do not chase an arbitrary global coverage target. Use statement coverage to locate weak areas, but require behavior/oracle evidence on North-Star paths. Academic mutation-testing evidence supports focusing on the oracle gap and changed critical code rather than whole-repo mutation volume; future mutation checks should remain incremental and risk-targeted.
+
+### System-level fault-model test design (BMAD)
+
+Mode: **System-Level** (`bmad-help` -> `bmad-testarch-test-design`). This section is the canonical test-design output; no separate BMAD test-design documents are created because `PLAN.md` is the existing project SoT.
+
+Testability assessment:
+- strong: deterministic Go core, injectable `CallFn` seams, explicit checkpoints, isolated sacrificial repo, canonical Go validator, executable verifier/fix/replan state machines;
+- actionable gaps: no first-class ambiguous-effect state, no deterministic real control-plane restart/orphan harness, no real OpenCode complex-schema integration test, incomplete causal telemetry tying child execution/model/effect to parent;
+- reliability ASR: **UNKNOWN/ambiguous effect forbids autonomous mutation until reconciled**;
+- reliability ASR: **completed non-idempotent effect executes at most once across timeout/restart/resume**;
+- observability ASR: every async child must be correlatable to parent execution + workspace + tested/delivered identity.
+
+Risk register and fault families (P=probability 1-3, I=impact 1-3):
+
+| ID | Fault family | Cat | P | I | Score | Priority | Owner layer | Required evidence |
+|---|---|---:|---:|---:|---:|---|---|---|
+| F01 | config / routing / precedence | TECH | 2 | 3 | 6 | P0 | SWE/Platform | deterministic contract + live route canary |
+| F02 | version / provenance / tested!=delivered | TECH | 2 | 3 | 6 | P0 | SWE/SourceLoop | exact SHA/config manifest + differential canary |
+| F03 | omission (missing output/file/field/checkpoint/ack) | TECH | 2 | 3 | 6 | P0 | SWE/AgentField | unit + integration omission injection |
+| F04 | invalid value / schema / corrupted structured output | TECH | 3 | 2 | 6 | P0 | SWE/AgentField | schema RED/recovery + real OpenCode canary |
+| F05 | crash / dependency unavailable / 5xx / disconnect | OPS | 2 | 3 | 6 | P0 | AgentField/Platform | process/network fault injection |
+| F06 | timing / stale async state / delayed completion | OPS | 3 | 3 | 9 | P0 | AgentField/Platform | control-plane convergence test |
+| F07 | concurrency / ordering / parallel writers | TECH | 2 | 3 | 6 | P0 | SWE/AgentField | deterministic race/barrier + isolated-workspace test |
+| F08 | persistence / idempotency / ambiguous effect after timeout | DATA | 2 | 3 | 6 | P0 | SWE + execution substrate | timeout/effect fault injection + resume oracle |
+| F09 | recovery-policy failure (retry/advisor/replan/fix skipped or loops) | TECH | 2 | 3 | 6 | P0 | SWE | state-machine contract + mutation adequacy |
+| F10 | scope / delivery contamination / dirty worktree | DATA | 2 | 2 | 4 | P1 | SWE | fail-closed delivery tests |
+| F11 | oracle / validation false PASS | TECH | 3 | 3 | 9 | P0 | SWE QA | independent oracle + mutation test |
+| F12 | arbitrary model/tool behavior (ignores contract, wrong tool/action) | TECH | 3 | 2 | 6 | P0 | SWE/AgentField | adversarial structured-output/tool-call matrix |
+| F13 | resource / budget / rate-limit / runaway turns | PERF | 2 | 2 | 4 | P1 | FCM/SWE | bounded-budget + 429/timeout tests, cost telemetry |
+| F14 | observability / evidence loss / missing causal IDs or cost | OPS | 2 | 2 | 4 | P1 | AgentField/FCM/SWE | provenance completeness assertions |
+| F15 | permission / secret / external-mutation violation | SEC | 1 | 3 | 3 | P1 | SWE/AgentField | permission-deny + secret-redaction tests |
+| F16 | partial write / corrupt checkpoint / artifact-state mismatch | DATA | 2 | 3 | 6 | P0 | SWE | corruption injection + fail-closed resume |
+
+Coverage design (priority != execution timing):
+- **Unit/component:** F01, F02, F03, F04, F08, F09, F10, F11, F15, F16 where invariants are locally decidable.
+- **Real integration:** F03/F04 at OpenCode file protocol; F05/F06/F07/F08/F12/F14 at AgentField/control-plane/workspace boundaries.
+- **Fault injection / chaos:** restart, delayed/duplicated completion, timeout-after-effect, provider 429/5xx, corrupt checkpoint, parallel writer collision.
+- **Metamorphic/differential:** equivalent config forms -> same route; clean run vs resume -> same final state with no duplicate effect; pinned vs candidate SDK -> same harness semantics.
+- **Mutation adequacy:** only critical gates/recovery/oracles; a test is accepted only if a plausible mutation makes it RED.
+
+Current family status:
+- covered/strong: F01 routing, F02 exact identity discipline, **F08 ambiguous-effect fail-closed across built-in coder, external ExecuteFn, standalone implement_issue, DAG checkpoint and top-level Build**, F09 verifier-fix + advisor/replan/resume, F10 delivery contamination, F11 one proven mutation oracle;
+- partial: F03/F04 (unit + live canaries, but no deterministic real-OpenCode CI integration), F07 (concurrency limits but not workspace collision fault injection), F12, F14, F15, F16;
+- active gaps: **F05/F06 control-plane crash/restart/stale-state**.
+
+F08 executable evidence:
+- pre-fix RED `TestCoderTimeoutFailsClosedAsAmbiguousEffect`: mutation-capable coder ignored cancellation, remained in-flight after local timeout, while the coding loop returned ordinary failure;
+- pre-fix RED `TestCoderTimeoutAbortsDAGWithInFlightCheckpoint`: DAG continued recovery and even accepted the issue with debt while the coder call was still live;
+- GREEN `TestCoderTimeoutFailsClosedAsAmbiguousEffect`: exactly one coder call, typed/stable `AMBIGUOUS_EFFECT`, no automatic coder retry;
+- GREEN `TestCoderTimeoutAbortsDAGWithInFlightCheckpoint`: no advisor/replanner, RunDAG returns error, checkpoint preserves `in_flight_issues=[a]` for reconciliation;
+- GREEN `TestExternalExecuteFnAmbiguousEffectSkipsRetryAdvisor`: cross-process marker from remote ExecuteFn also fails closed; no retry-advisor/issue-advisor/replanner;
+- GREEN `TestAmbiguousCoderTimeoutPreservesWorktreeAndSkipsDelivery`: standalone `implement_issue` propagates UNKNOWN, preserves worktree, skips verifier/PR/delivery cleanup;
+- GREEN `TestBuildStopsImmediatelyOnAmbiguousExecuteEffect`: full Build stops before verifier/finalize when execute returns UNKNOWN;
+- regression guards `TestAdvisorTimeoutFailsNotHang` and `TestCoderExceptionFailsUnrecoverable` remain GREEN, proving read-only/ordinary failures did not become ambiguous-effect aborts;
+- targeted `coding/dag/issue/orch` fault tests PASS, full `/usr/local/go/bin/go test ./... -count=1` PASS, `git diff --check` PASS.
+
+NFR evidence plan:
+- reliability: P0 fault families 100% pass; duplicate non-idempotent effects = 0; UNKNOWN forbids further mutation; evidence = Go tests + fault-injection runlogs/checkpoints;
+- maintainability: canonical Go suite + targeted mutation checks; evidence = commands/coverage/mutation RED;
+- security: no secret disclosure and permission-denied external mutation; thresholds beyond existing permission contract remain UNKNOWN until explicitly specified;
+- performance/cost: no correctness gate based on guessed latency/cost; record wall time/model/cost where available and treat missing telemetry as evidence gap.
+
+Execution strategy:
+- PR/inner loop: deterministic unit/component/contract tests (<15 min), full Go suite, targeted mutation checks;
+- nightly/controlled: real OpenCode structured-output matrix and bounded provider failure tests;
+- weekly/pre-release: control-plane restart/orphan/stale-state chaos and full-Build recovery ladder.
+
+Quality gates:
+- P0 fault-family invariants: **100% PASS**;
+- P1: >=95% PASS, no unresolved high-risk regression on active production path;
+- no open score >=6 fault without an explicit fail-closed mitigation/evidence plan;
+- overall line coverage is secondary; risk/fault-family coverage and oracle adequacy are release evidence;
+- full NFR PASS/CONCERNS/FAIL remains deferred until executable evidence exists.
+
+Entry criteria for resilience testing: exact tested source/runtime identity, isolated sacrificial workspace, zero pre-existing mutating child on target, planner/control-plane reachable. Exit criteria: all P0 families have a discriminating contract at every applicable critical boundary, plus at least one real fault-injection proof for each external async boundary.
+
+Immediate mandatory gate: **F08 ambiguous-effect fail-closed**. A mutation-capable coder timeout must not be converted into ordinary retry/replan. It must stop autonomous mutation and preserve the workspace/checkpoint for effect reconciliation. After that, F06 restart/orphan state convergence is the next integration gate.
 
 ### Acceptance evidence
 
@@ -234,7 +311,7 @@ Fresh attempts:
 - Attempt 2: `exec_20260912_164532_i9s249f1` proved the PM routing fix functionally — a live Product Manager OpenCode process started with `-m fcm/fcm`. The attempt is **invalid acceptance evidence** because an orphan git-init OpenCode process from attempt 1 was concurrently mutating the same sacrificial repo. It was stopped and the repo was restored to exact baseline before the next attempt.
 - Attempt 3: `exec_20260912_164957_ikbjlc8x` did not reach the agent; it failed after 15s with `agent_unreachable` because the manually restarted planner had registered callback `http://localhost:8005`. The node contract explicitly requires `AGENT_CALLBACK_URL` in containers. Planner was restarted with `AGENT_CALLBACK_URL=http://172.16.22.7:8005`; control-plane now reports that callback active. This attempt contains no task-code effect and is infrastructure evidence only.
 - Attempt 4: `exec_20260912_165200_an8f8ym5` reached the correct PM OpenCode/FCM harness path but failed structured output: `Schema validation failed after 2 retry attempt(s)` / output file missing. Compatibility A/B then proved the base AgentField/OpenCode/FCM contract works for a simple schema, while exact `schemas.PRD` in single mode makes the routed model write the JSON Schema itself instead of a PRD instance. The same exact PRD contract in incremental mode PASS (`parsed=true`) after field-by-field construction. PM policy was therefore changed only for OpenCode: `SchemaMode=incremental`; non-OpenCode PM harness paths retain default policy. RED/edge-case tests, full planning package, full `go test ./... -count=1`, and `git diff --check` PASS.
-- Current clean precondition: sacrificial repo `/tmp/swe-af-fullbuild-current-20260912` is clean on baseline branch `fullbuild-current-baseline-20260912`, refreshed exact local SHA `4a67273`; full target `go test ./... -count=1` PASS; no live OpenCode process targets that workspace; planner `/tmp/swe-planner-fullbuild-pm-incremental-20260912` is healthy and registered at the routable callback.
+- Current clean precondition: sacrificial repo `/tmp/swe-af-fullbuild-current-20260912` is clean on baseline branch `fullbuild-current-baseline-20260912`, refreshed exact local SHA `755c899`; full target `go test ./... -count=1` PASS; no live OpenCode process targeted that workspace at planner reload; planner `/tmp/swe-planner-fullbuild-coverage-20260912` (SHA256 `e1721fc828dc814a2ab9d0456fae63b73f6570d4d43571eb0c61f9d497b2f4d4`) is healthy and registered at the routable callback.
 
 Goal: exercise the actual `swe-planner.build` / `orch.Build` lifecycle on a frozen materialization of CURRENT tested SWE-AF source, with zero operator edits to task code during the run.
 
@@ -330,16 +407,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-FB-0 now reaches the correct OpenCode/FCM Product Manager path but exact PRD structured output fails under SWE's forced OpenCode `SchemaMode=single`. Compatibility audit proves pinned and current AgentField SDK suites are green, simple live structured output passes, exact PRD single-mode fails by copying the schema itself, and exact PRD incremental-mode passes on the same OpenCode/FCM/model stack.
+F08 ambiguous-effect safety is now component-level verified. The next highest-risk unclosed family is **F06 timing/stale async state after agent restart**: control-plane can report stale `running`, and an old child can remain active/orphaned while a new execution targets the same workspace.
 
 THIS BATCH:
-make one bounded SWE policy correction only: Product Manager explicitly requests `SchemaMode=incremental`. Do not upgrade AgentField, change model/router, alter FCM, or globally switch all roles. Prove RED on PM harness options, apply the one-role change in `/src/swe-af`, run targeted planning + full Go validation, review the delta, rebuild the planner, then repeat the exact FB-0 full-Build canary from a clean frozen CURRENT baseline.
+F08 is complete. The next coherent 30-minute gate is a controlled **F06 restart/orphan convergence fault-injection** against a sacrificial workspace and exact tested planner. Do not start FB-0 attempt 5 until this external async boundary proves fail-closed/no-parallel-writer behavior or yields the first evidence-backed platform defect.
 
 NORTH-STAR DELTA:
-unblock full-Build planning with a contract mode already proven executable on the exact PRD schema and current routed model, while preserving all other variables for causal evidence.
+move from local UNKNOWN-effect safety to real control-plane/process state truth so a full Build cannot overlap an old mutating child after restart.
 
 STOP CONDITION:
-PM option RED -> GREEN, full Go suite PASS, rebuilt planner healthy, then the same FB-0 either advances beyond Product Manager or identifies the next single full-lifecycle blocker. Stop at that first new blocker and write it back before any further framework mutation.
+either F06 proves state convergence/no overlapping mutator across one controlled restart, or the first stale/orphan divergence is captured with execution/process/workspace evidence and becomes the sole next owner-layer fix. Do not combine it with model/task changes.
 
 ## Acceptance Metrics Per Task
 
@@ -371,4 +448,4 @@ Record:
 
 ## Current Next Move
 
-Run **the same FB-0 full `swe-planner.build` canary for attempt 4** from the clean frozen baseline `e03ee19d1940a29318ebd9f820c92be7fe4931f6` using planner `/tmp/swe-planner-fullbuild-route-20260912`, `fcm/fcm`, and the routable registered callback `http://172.16.22.7:8005`. Before START require zero live OpenCode process targeting the sacrificial repo and control-plane `swe-planner` health `active`. After START the operator makes zero task-code edits. Follow actual process/artifact/effect state rather than stale control-plane labels. Stop after either autonomous terminal success followed by canonical Go validation + independent oracle, or the first new evidence-backed full-lifecycle blocker; write that blocker back before any framework repair.
+Run one controlled **F06 timing/stale-state fault-injection** on a sacrificial workspace using planner `/tmp/swe-planner-fullbuild-f08-20260912` (SHA256 `f5adc31c29b3383f463f34df6863d3e06767e7904930b45b5f06463dd4a0d0de`). Exercise an agent/process restart while a child execution is observable, then prove from control-plane + process + workspace readback that stale `running` state converges and no orphan/old mutator can overlap a new execution on the same workspace. Do not combine this with model/task changes. If the first divergence reproduces, stop and fix only its authoritative owner layer before resuming FB-0.

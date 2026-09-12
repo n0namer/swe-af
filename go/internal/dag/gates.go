@@ -289,7 +289,9 @@ func executeSingleIssue(
 }
 
 // runExecuteFn runs the external execute_fn path with retry logic, wrapping
-// execute_fn errors into IssueResult for the advisor loop. Ports _run_execute_fn.
+// ordinary execute_fn errors into IssueResult for the advisor loop. An
+// AMBIGUOUS_EFFECT marker propagates fail-closed because a remote mutation may
+// still be in-flight and therefore must not enter automatic retry/advisor flow.
 func runExecuteFn(
 	ctx context.Context,
 	executeFn ExecuteFn,
@@ -330,6 +332,9 @@ func runExecuteFn(
 		var fhe *fatal.FatalHarnessError
 		if errors.As(err, &fhe) || errors.Is(err, context.Canceled) {
 			return schemas.IssueResult{}, err // raise
+		}
+		if coding.IsAmbiguousEffect(err) {
+			return schemas.IssueResult{}, err // fail closed: external mutation may still be in-flight
 		}
 		lastError = err.Error()
 		lastContext = err.Error()
@@ -383,9 +388,10 @@ func runExecuteFn(
 // (config.max_concurrent_issues; 0 = unlimited), returning a LevelResult with
 // issues classified into completed/failed/skipped. Ports _execute_level.
 //
-// Each issue closure translates its own error into a FAILED_UNRECOVERABLE
-// IssueResult and returns nil to the group, so one issue's failure never
-// cancels its siblings mid-level (mirroring asyncio.gather(return_exceptions=True)).
+// Ordinary per-issue errors are translated into FAILED_UNRECOVERABLE results
+// so one issue's failure does not cancel siblings (asyncio.gather semantics).
+// AmbiguousEffectError is different: a mutation-capable call may still be live,
+// so the whole level fails closed before any advisor/replan/downstream mutation.
 func executeLevel(
 	ctx context.Context,
 	activeIssues []map[string]any,
@@ -397,7 +403,7 @@ func executeLevel(
 	nodeID string,
 	note noteFunc,
 	memoryFn coding.MemoryFn,
-) schemas.LevelResult {
+) (schemas.LevelResult, error) {
 	maxConcurrent := cfg.MaxConcurrentIssues
 
 	if maxConcurrent > 0 && len(activeIssues) > maxConcurrent && note != nil {
@@ -421,10 +427,15 @@ func executeLevel(
 		g.Go(func() error {
 			res, err := executeSingleIssue(gctx, issue, dagState, executeFn, cfg, callFn, nodeID, note, memoryFn)
 			outcomes[i] = outcome{res, err}
+			if coding.IsAmbiguousEffect(err) {
+				return err
+			}
 			return nil
 		})
 	}
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		return schemas.LevelResult{}, err
+	}
 
 	levelResult := schemas.LevelResult{LevelIndex: levelIndex}
 	for i, oc := range outcomes {
@@ -454,7 +465,7 @@ func executeLevel(
 		}
 	}
 
-	return levelResult
+	return levelResult, nil
 }
 
 // skipDownstream marks all issues downstream of failures as skipped. Ports

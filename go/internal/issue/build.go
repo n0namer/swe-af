@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -202,6 +203,14 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 	loopResult, loopErr := coding.RunCodingLoop(
 		ctx, planned, dagState, callFn, deps.NodeID, execCfg, noteFn, nil,
 	)
+	if loopErr != nil {
+		var ambiguous *coding.AmbiguousEffectError
+		if errors.As(loopErr, &ambiguous) {
+			deps.note(ctx, fmt.Sprintf("Issue build stopped with unresolved effect: %v", loopErr),
+				"issue_build", "ambiguous_effect", "error")
+			return nil, loopErr
+		}
+	}
 	if loopErr != nil && ctx.Err() != nil {
 		// Context cancellation propagates (Python does not catch CancelledError).
 		removeWorktree(repoPath, worktreePath)
