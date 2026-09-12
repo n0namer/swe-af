@@ -225,7 +225,7 @@ Quality gates:
 
 Entry criteria for resilience testing: exact tested source/runtime identity, isolated sacrificial workspace, zero pre-existing mutating child on target, planner/control-plane reachable. Exit criteria: all P0 families have a discriminating contract at every applicable critical boundary, plus at least one real fault-injection proof for each external async boundary.
 
-Immediate mandatory gate: **F08 ambiguous-effect fail-closed**. A mutation-capable coder timeout must not be converted into ordinary retry/replan. It must stop autonomous mutation and preserve the workspace/checkpoint for effect reconciliation. After that, F06 restart/orphan state convergence is the next integration gate.
+Immediate mandatory gate: **F06 AgentField restart/state convergence**. The fault is reproduced and localized: Go AgentField agents lack per-process `instance_id`, so restart reap cannot identify a departed Go process and accepted executions can remain `running`. The next implementation gate is owner-layer AgentField Go SDK process-identity parity + exact SDK/control-plane tests, followed by a controlled DEV rebuild and the same restart probe. Do not resume FB-0 until F06 passes.
 
 ### Acceptance evidence
 
