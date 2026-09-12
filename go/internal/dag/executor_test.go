@@ -851,7 +851,10 @@ func TestRepoNameBackfilledFromTargetRepo(t *testing.T) {
 	iss := issue("feat")
 	iss["target_repo"] = "myrepo"
 	dagState := initDAGState(makePlan([]map[string]any{iss}, [][]string{{"feat"}}), "/repo", nil, "")
-	lr := executeLevel(context.Background(), []map[string]any{iss}, nil, dagState, testCfg(t, nil), 0, m.fn, "swe-planner", nil, nil)
+	lr, err := executeLevel(context.Background(), []map[string]any{iss}, nil, dagState, testCfg(t, nil), 0, m.fn, "swe-planner", nil, nil)
+	if err != nil {
+		t.Fatalf("executeLevel: %v", err)
+	}
 	if len(lr.Completed) != 1 || lr.Completed[0].RepoName != "myrepo" {
 		t.Fatalf("repo_name not backfilled: %+v", lr.Completed)
 	}
