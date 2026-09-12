@@ -91,6 +91,30 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
 - Separate parity debt: commit `c8ff657` (2026-08-24) reduced Go planning/issue-writer defaults from architecture/Python `150` turns to `2`. However AgentField OpenCode provider ignores `Options.MaxTurns` entirely in both pinned and current upstream, so this does **not** explain the current OpenCode PM failure. It remains a cross-provider parity/config debt, not this batch's fix.
 - Decision: **do not upgrade AgentField as a speculative fix**. Current evidence localizes FB-0 PM failure to SWE's structured-output policy (`single`) interacting with the currently routed model on the PRD contract. Minimal next fix is PM-specific incremental schema mode, followed by the exact same full-Build canary.
 
+### Test coverage / risk-based gap audit
+
+Fresh coverage was measured on CURRENT exact source with `go test ./... -count=1 -covermode=atomic -coverprofile=...` and `go tool cover -func`.
+
+Coverage snapshot:
+- SWE-AF overall Go statement coverage: **74.1%** (pre-batch baseline 73.9%).
+- critical packages: `internal/coding` 54.1%, `internal/dag` 62.7%, `internal/orch` **72.6%** (70.7% before this batch), `internal/issue` 78.9%, `internal/roles/planning` 79.0%, `internal/harnessx` 86.4%, `internal/node` 92.2%.
+- critical functions: `orch.Build` **69.8%** (61.4% before this batch), `orch.Plan` 87.3%, `dag.RunDAG` 77.6%, `coding.RunCodingLoop` 80.9%, `roles/planning.RunProductManager` 74.2%, `harnessx.executeStructured` 100%.
+- exact pinned AgentField SDK overall suites PASS; AgentField `harness` coverage is **92.1%**. Relevant functions: `Runner.Run` 92.7%, `handleSchemaWithRetry` 92.3%, `OpenCodeProvider.Execute` 87.1%, `DiagnoseOutputFailure` 95.5%.
+
+High-risk contracts added/strengthened in this batch:
+1. `TestBuildVerifierFailureGeneratesFixAndReverifies`: proves full Build self-healing path `verifier RED -> generate_fix_issues -> execute fixes -> verifier GREEN`. This moved `Build` coverage from 61.4% to 69.8% and `failedCriteriaOf` to 100%.
+2. `TestPlanForwardsExplicitOpenCodeRouteToProductManager`: protects top-level `Plan` propagation of explicit `ai_provider=open_code` + `model=fcm/fcm`, the boundary previously implicated in PM misrouting.
+3. `TestAgentFieldHarnessArtifactsNeverLandOnBranch`: reproduces the MICRO-2 delivery failure where `.agentfield-out-*/.agentfield_output.json` / `.agentfield_schema.json` became product delivery. Deterministic RED reproduced `GIT_DELIVERY`; minimal runtime-junk policy now scrubs/excludes/ignores only reserved AgentField harness artifacts. Existing `TestScopedIssueRejectsUnexpectedDeliveryFiles` remains GREEN, proving ordinary unexpected files still fail closed.
+4. Mutation adequacy spot-check: in a disposable copy, the verifier-fix exit condition was mutated to skip the fix cycle. `TestBuildVerifierFailureGeneratesFixAndReverifies` failed exactly as intended. The test therefore distinguishes the working and broken self-healing behavior; it is not coverage-only theater.
+
+Remaining material gaps (do not confuse with missing line coverage):
+- AgentField has no deterministic **real OpenCode** integration test for complex structured-output file protocol; existing retry tests use mocks/fake CLI. Current live A/B canaries therefore remain required for this boundary.
+- control-plane stale `running` state / orphan child after agent restart is an integration/fault-injection concern outside SWE unit coverage; it requires execution-state reconciliation tests against the real control plane, not more Go unit mocks.
+- `dag.runExecuteFn` 25.8% and legacy/multi-repo worktree functions (`setupWorktrees` 11.5%, `runIntegrationTests` 45.3%, cleanup paths ~23-39%) remain lower-covered. Existing advisor/replan/resume contracts are already directly tested; raise these only when the corresponding external-execute or multi-repo path enters the active acceptance ladder.
+- `cmd/*` 0% is startup plumbing, not a current P0; node registration functions are already ~92-100% covered.
+
+Decision: do not chase an arbitrary global coverage target. Use statement coverage to locate weak areas, but require behavior/oracle evidence on North-Star paths. Academic mutation-testing evidence supports focusing on the oracle gap and changed critical code rather than whole-repo mutation volume; future mutation checks should remain incremental and risk-targeted.
+
 ### Acceptance evidence
 
 - L3-24 (`qa-synthesizer-fcm-smart-l3-24`): historical strong positive evidence. Full issue reached coder -> reviewer block -> repair -> second review -> verifier; bounded two-file delivery; independently inspected; canonical pytest was unavailable, so acceptance had an explicit validation limitation.
