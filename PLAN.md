@@ -330,16 +330,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-FB-0 now reaches the correct OpenCode/FCM Product Manager path but exact PRD structured output fails under SWE's forced OpenCode `SchemaMode=single`. Compatibility audit proves pinned and current AgentField SDK suites are green, simple live structured output passes, exact PRD single-mode fails by copying the schema itself, and exact PRD incremental-mode passes on the same OpenCode/FCM/model stack.
+no known component-level blocker remains from the PM structured-output or tested self-healing/delivery seams. The next unknown must be discovered by the autonomous full-Build canary; full-Build acceptance is still 0/3.
 
 THIS BATCH:
-make one bounded SWE policy correction only: Product Manager explicitly requests `SchemaMode=incremental`. Do not upgrade AgentField, change model/router, alter FCM, or globally switch all roles. Prove RED on PM harness options, apply the one-role change in `/src/swe-af`, run targeted planning + full Go validation, review the delta, rebuild the planner, then repeat the exact FB-0 full-Build canary from a clean frozen CURRENT baseline.
+coverage/contract hardening is complete. Do not add more unit tests merely to raise the global percentage. The next coherent batch is FB-0 attempt 5 on frozen baseline `755c899` using planner `/tmp/swe-planner-fullbuild-coverage-20260912`, route `fcm/fcm`, and the already-enabled recovery controls. Operator task-code edits are forbidden after START.
 
 NORTH-STAR DELTA:
-unblock full-Build planning with a contract mode already proven executable on the exact PRD schema and current routed model, while preserving all other variables for causal evidence.
+move from component-level executable guarantees to direct autonomous full-Build evidence on the exact hardened baseline.
 
 STOP CONDITION:
-PM option RED -> GREEN, full Go suite PASS, rebuilt planner healthy, then the same FB-0 either advances beyond Product Manager or identifies the next single full-lifecycle blocker. Stop at that first new blocker and write it back before any further framework mutation.
+either FB-0 attempt 5 reaches terminal success and then passes canonical validation + independent oracle, or it identifies the first new evidence-backed full-lifecycle blocker. Stop at that blocker, write it back, and change only the proven owner-layer contract before retrying.
 
 ## Acceptance Metrics Per Task
 
