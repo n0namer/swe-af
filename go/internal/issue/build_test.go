@@ -332,6 +332,52 @@ func TestScopedIssueRejectsUnexpectedDeliveryFiles(t *testing.T) {
 	}
 }
 
+func TestAgentFieldHarnessArtifactsNeverLandOnBranch(t *testing.T) {
+	repo := initRepo(t)
+	rec := &recorder{}
+	inner := scriptedCallFn(t, rec, scriptOpts{coderCommits: false, coderWrites: true})
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		if strings.HasSuffix(target, "run_coder") {
+			worktree, _ := kwargs["worktree_path"].(string)
+			outDir := filepath.Join(worktree, ".agentfield-out-123")
+			if err := os.MkdirAll(outDir, 0o755); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(filepath.Join(outDir, ".agentfield_output.json"), []byte(`{"status":"ok"}`), 0o644); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(filepath.Join(worktree, ".agentfield_schema.json"), []byte(`{"type":"object"}`), 0o644); err != nil {
+				return nil, err
+			}
+			gitT(t, worktree, "add", "-A", ".")
+			gitT(t, worktree, "commit", "-q", "-m", "agent committed harness artifacts")
+		}
+		return inner(ctx, target, kwargs)
+	}
+	result := runImplement(t, repo, callFn, map[string]any{
+		"issue": map[string]any{
+			"title":               "Scoped feature",
+			"description":         "Modify only feature.py.",
+			"acceptance_criteria": []any{"feature.py is updated"},
+			"files_to_modify":     []any{"feature.py"},
+		},
+		"config": map[string]any{"verify": false},
+	})
+
+	if result["success"] != true {
+		t.Fatalf("success = %v, want true; error=%v", result["success"], result["error_message"])
+	}
+	for _, f := range result["files_changed"].([]string) {
+		if strings.HasPrefix(f, ".agentfield-out-") || f == ".agentfield_output.json" || f == ".agentfield_schema.json" {
+			t.Fatalf("harness artifact in files_changed: %s", f)
+		}
+	}
+	tracked := gitT(t, repo, "ls-tree", "-r", "--name-only", result["branch"].(string))
+	if strings.Contains(tracked, ".agentfield-out-") || strings.Contains(tracked, ".agentfield_output.json") || strings.Contains(tracked, ".agentfield_schema.json") {
+		t.Fatalf("harness artifact tracked on branch:\n%s", tracked)
+	}
+}
+
 func TestBytecodeJunkNeverLandsOnBranch(t *testing.T) {
 	// The real coder runs tests in the worktree, generating __pycache__, and
 	// a sloppy model may even commit it. Neither may reach the branch.
