@@ -65,6 +65,17 @@ func (e *AmbiguousEffectError) Error() string {
 
 func (e *AmbiguousEffectError) Unwrap() error { return e.Cause }
 
+// IsAmbiguousEffect recognizes both the local typed error and the stable marker
+// preserved when the error crosses an AgentField/control-plane envelope and its
+// concrete Go type is no longer available.
+func IsAmbiguousEffect(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ambiguous *AmbiguousEffectError
+	return errors.As(err, &ambiguous) || strings.Contains(err.Error(), "AMBIGUOUS_EFFECT:")
+}
+
 // MemoryFn is the shared-memory seam (in-process cross-issue learning). action
 // is "get" or "set"; value is nil for "get". A nil MemoryFn disables learning
 // (mirrors the Python `memory_fn is None` guard).
@@ -77,11 +88,11 @@ type NoteFn func(msg string, tags []string)
 // RunCodingLoop runs the coding loop for a single issue and returns its
 // IssueResult. It is the Go port of coding_loop.run_coding_loop.
 //
-// The returned error is non-nil ONLY for propagated failures that Python would
-// re-raise rather than turn into a failed IssueResult: a fatal, non-retryable
-// harness error (*fatal.FatalHarnessError) or context cancellation. Every other
-// terminal condition (approve, block, stuck, exhaustion, coder failure) is
-// encoded in the IssueResult with err == nil.
+// The returned error is non-nil for failures that must escape ordinary issue
+// recovery: a fatal non-retryable harness error, context cancellation, or an
+// AmbiguousEffectError when a mutation-capable coder exceeds its local timeout
+// and its remote effect cannot yet be proven absent/present. Every other
+// terminal condition remains encoded in IssueResult with err == nil.
 func RunCodingLoop(
 	ctx context.Context,
 	issue map[string]any,

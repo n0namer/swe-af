@@ -289,7 +289,9 @@ func executeSingleIssue(
 }
 
 // runExecuteFn runs the external execute_fn path with retry logic, wrapping
-// execute_fn errors into IssueResult for the advisor loop. Ports _run_execute_fn.
+// ordinary execute_fn errors into IssueResult for the advisor loop. An
+// AMBIGUOUS_EFFECT marker propagates fail-closed because a remote mutation may
+// still be in-flight and therefore must not enter automatic retry/advisor flow.
 func runExecuteFn(
 	ctx context.Context,
 	executeFn ExecuteFn,
@@ -330,6 +332,9 @@ func runExecuteFn(
 		var fhe *fatal.FatalHarnessError
 		if errors.As(err, &fhe) || errors.Is(err, context.Canceled) {
 			return schemas.IssueResult{}, err // raise
+		}
+		if coding.IsAmbiguousEffect(err) {
+			return schemas.IssueResult{}, err // fail closed: external mutation may still be in-flight
 		}
 		lastError = err.Error()
 		lastContext = err.Error()
@@ -422,8 +427,7 @@ func executeLevel(
 		g.Go(func() error {
 			res, err := executeSingleIssue(gctx, issue, dagState, executeFn, cfg, callFn, nodeID, note, memoryFn)
 			outcomes[i] = outcome{res, err}
-			var ambiguous *coding.AmbiguousEffectError
-			if errors.As(err, &ambiguous) {
+			if coding.IsAmbiguousEffect(err) {
 				return err
 			}
 			return nil

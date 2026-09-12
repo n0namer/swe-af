@@ -3,6 +3,7 @@ package dag
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -385,6 +386,49 @@ func TestCoderTimeoutAbortsDAGWithInFlightCheckpoint(t *testing.T) {
 	}
 	if len(cp.InFlightIssues) != 1 || cp.InFlightIssues[0] != "a" {
 		t.Fatalf("checkpoint in_flight_issues = %v, want [a] for reconciliation", cp.InFlightIssues)
+	}
+}
+
+func TestExternalExecuteFnAmbiguousEffectSkipsRetryAdvisor(t *testing.T) {
+	dir := t.TempDir()
+	plan := makePlan([]map[string]any{issue("a")}, [][]string{{"a"}})
+	plan["artifacts_dir"] = dir
+	m := newMock()
+	executeCalls := 0
+	executeFn := func(ctx context.Context, iss map[string]any, state *schemas.DAGState) (map[string]any, error) {
+		executeCalls++
+		return nil, errors.New("AMBIGUOUS_EFFECT: remote implement_issue timed out after possible mutation")
+	}
+	cfg := testCfg(t, map[string]any{
+		"max_retries_per_issue":   2,
+		"enable_issue_advisor":    true,
+		"max_advisor_invocations": 2,
+		"enable_replanning":       true,
+		"max_replans":             2,
+	})
+
+	state, err := RunDAG(context.Background(), plan, "/repo", m.fn, "swe-planner", cfg, WithExecuteFn(executeFn))
+	if err == nil {
+		t.Fatalf("RunDAG returned state=%v with nil error; want cross-process AMBIGUOUS_EFFECT", state)
+	}
+	if !strings.Contains(err.Error(), "AMBIGUOUS_EFFECT") {
+		t.Fatalf("error = %q, want AMBIGUOUS_EFFECT marker", err)
+	}
+	if executeCalls != 1 {
+		t.Fatalf("execute_fn calls = %d, want exactly 1", executeCalls)
+	}
+	if m.count("run_retry_advisor") != 0 || m.count("run_issue_advisor") != 0 || m.count("run_replanner") != 0 {
+		t.Fatalf("recovery ran while effect UNKNOWN: retry=%d advisor=%d replan=%d",
+			m.count("run_retry_advisor"), m.count("run_issue_advisor"), m.count("run_replanner"))
+	}
+	cp := loadCheckpoint(dir)
+	if cp == nil || len(cp.InFlightIssues) != 1 || cp.InFlightIssues[0] != "a" {
+		t.Fatalf("checkpoint in_flight_issues = %v, want [a]", func() any {
+			if cp == nil {
+				return nil
+			}
+			return cp.InFlightIssues
+		}())
 	}
 }
 

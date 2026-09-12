@@ -164,6 +164,43 @@ func TestBuildVerifiedSuccess(t *testing.T) {
 	}
 }
 
+func TestBuildStopsImmediatelyOnAmbiguousExecuteEffect(t *testing.T) {
+	defer withExecCtx("run-ambiguous", "exec-ambiguous")()
+
+	var verifyCalls, finalizeCalls int
+	app := &mockApp{handler: func(_ context.Context, target string, input map[string]any) (map[string]any, error) {
+		switch {
+		case strings.HasSuffix(target, ".plan"):
+			return map[string]any{
+				"prd": map[string]any{}, "issues": []any{}, "artifacts_dir": input["artifacts_dir"],
+			}, nil
+		case strings.HasSuffix(target, ".run_git_init"):
+			return map[string]any{"success": false, "error_message": "no remote"}, nil
+		case strings.HasSuffix(target, ".execute"):
+			return nil, errors.New("AMBIGUOUS_EFFECT: coder timed out after possible mutation")
+		case strings.HasSuffix(target, ".run_verifier"):
+			verifyCalls++
+			return map[string]any{"passed": true}, nil
+		case strings.HasSuffix(target, ".run_repo_finalize"):
+			finalizeCalls++
+			return map[string]any{"success": true}, nil
+		default:
+			return map[string]any{}, nil
+		}
+	}}
+
+	out, err := Build(context.Background(), &Deps{App: app, NodeID: "swe-planner"}, map[string]any{
+		"goal": "ambiguous mutation", "repo_path": t.TempDir(),
+		"config": map[string]any{"git_init_max_retries": 1, "enable_github_pr": false, "check_ci": false},
+	})
+	if err == nil || !strings.Contains(err.Error(), "AMBIGUOUS_EFFECT") {
+		t.Fatalf("Build result=%v err=%v, want AMBIGUOUS_EFFECT", out, err)
+	}
+	if verifyCalls != 0 || finalizeCalls != 0 {
+		t.Fatalf("downstream stages ran after ambiguous effect: verify=%d finalize=%d", verifyCalls, finalizeCalls)
+	}
+}
+
 func TestBuildVerifierFailureGeneratesFixAndReverifies(t *testing.T) {
 	defer withExecCtx("run-fix", "exec-fix")()
 
