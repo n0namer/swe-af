@@ -281,16 +281,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-fresh controlled streak is 1/3. Execution route is proven; the shortest path is two more independently accepted tasks, not more infrastructure work.
+production acceptance has not yet exercised the top-level autonomous `orch.Build` lifecycle. Component-level `implement_issue` evidence is useful but insufficient; MICRO-2 proved a repairable verifier failure can terminate there without self-repair.
 
 THIS BATCH:
-run exactly one new small real Go task for accepted task 2/3. Freeze planner binary/process, `fcm/fcm` route, runtime guards and acceptance method; vary only task input. Prefer a source defect already evidenced by the CURRENT live-vs-clean delta and an existing deterministic regression seam. Product edits remain inside the isolated task worktree.
+materialize a frozen local baseline from CURRENT tested `/src/swe-af`, then run exactly one `swe-planner.build` canary with the production recovery controls enabled (replanning, issue advisor/retries, integration testing, verifier-fix cycles, deterministic Git). Keep the proven `fcm/fcm` route. Disable only external GitHub PR/CI side effects for this first canary because they are outside the already-authorized local scope; do not claim CI coverage.
 
 NORTH-STAR DELTA:
-move the fresh streak from 1/3 to 2/3 with exact commit + canonical test + independent executable oracle.
+replace micro-harness confidence with direct evidence about whether the full SWE controller can autonomously plan, implement, validate, repair, verify and finalize one real SWE-AF change without operator task-code edits.
 
 STOP CONDITION:
-either task 2/3 is independently accepted with no new regressions, or one fresh execution identifies one evidence-backed blocker. Stop at that blocker; do not stack model/prompt/runtime changes.
+either the full Build reaches terminal success and then passes independent canonical validation/oracle, or one run identifies the first evidence-backed missing contract in the full lifecycle. At that point stop, write back, and repair only that proven framework gap before retrying the same canary.
 
 ## Acceptance Metrics Per Task
 
