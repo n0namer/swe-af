@@ -239,16 +239,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-fresh PR-1 evidence proves the current OpenCode `-m fcm/fcm` trajectory can fail before any request reaches the FCM broker; SWE source and FCM inference are not yet implicated.
+fresh controlled streak is 1/3. Execution route is proven; the shortest path is two more independently accepted tasks, not more infrastructure work.
 
 THIS BATCH:
-change no product code. Run one minimal pre-broker discriminator using the exact current OpenCode runtime/config/model in a disposable workspace, and compare broker counters/telemetry before and after. Hold model, prompt policy and runtime enforcement constant.
+run exactly one new small real Go task for accepted task 2/3. Freeze planner binary/process, `fcm/fcm` route, runtime guards and acceptance method; vary only task input. Prefer a source defect already evidenced by the CURRENT live-vs-clean delta and an existing deterministic regression seam. Product edits remain inside the isolated task worktree.
 
 NORTH-STAR DELTA:
-separate local OpenCode provider/config/bootstrap failure from SWE harness integration so the next mutation, if any, targets exactly one proven layer.
+move the fresh streak from 1/3 to 2/3 with exact commit + canonical test + independent executable oracle.
 
 STOP CONDITION:
-either direct OpenCode reaches FCM and isolates the divergence to the SWE harness invocation, or direct OpenCode reproduces the no-broker failure and localizes the OpenCode provider/config seam. Stop after one evidenced boundary and replan.
+either task 2/3 is independently accepted with no new regressions, or one fresh execution identifies one evidence-backed blocker. Stop at that blocker; do not stack model/prompt/runtime changes.
 
 ## Acceptance Metrics Per Task
 
