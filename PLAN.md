@@ -156,6 +156,8 @@ This task already satisfies the milestone's required recovery/no-duplicate case 
 
 Status: ACTIVE / P0
 
+Selected task: `openclaw-hitl-enables-build-approval`. Current live-vs-clean evidence shows `Build` only engages the approval checkpoint when legacy `HAX_API_KEY` is set, while CURRENT production design also supports the deployment-local OpenClaw HITL governor. Scope is bounded to `go/internal/orch/build.go` + `build_test.go`; canonical package is `./internal/orch`.
+
 DoD:
 - one new small real engineering task on the now-proven execution lane;
 - freeze planner/runtime/model route; vary only task input unless fresh evidence proves a route defect;
