@@ -148,48 +148,73 @@ Evidence:
 - rebuilt planner `/tmp/swe-planner-fcm-overlay-20260912` (SHA256 `0224447d...`) is active on PID `424603`;
 - post-fix real task `exec_20260912_094308_za4vz5sv` reached FCM, edited source and completed.
 
-### Gate PR-2 — accepted task 1/3
+### Gate MICRO-1 — issue-level diagnostic evidence
 
-Status: DONE
+Status: DONE / DOES NOT COUNT TOWARD FULL-BUILD STREAK
 
-Task: `checkpoint-completed-issue-before-cancel`.
+Task: `checkpoint-completed-issue-before-cancel` via `implement_issue`.
 
-Acceptance:
+Evidence:
 - exact target base `2c374989b39d0b53b34ef33fd2ba6289e74194ae`;
-- final local task branch head `b0ebb1b`;
+- final local task branch head `0cfe48c`;
 - two-file bounded diff;
-- deterministic real resume/no-repeat oracle PASS on exact final commit;
-- `git diff --check` PASS;
-- full candidate suite has one failure that reproduces identically on exact base -> no new regression;
-- CURRENT live equivalent recovery test + full `go test ./... -count=1` PASS;
+- exact-commit targeted recovery tests PASS;
+- full exact-commit `go test ./... -count=1` PASS;
+- independent real interruption -> checkpoint -> resume oracle observed effects `a=1`, `b=1`; PASS;
 - duplicate effects = 0;
 - wall time ~34.9 min; numeric token/RUB cost remains `EVIDENCE_MISSING`.
 
-This task already satisfies the milestone's required recovery/no-duplicate case and required multi-file case. Reviewer PASS alone did not close the task; operator BMAD test-design/TDD review found and fixed a false-positive resume test.
+This is strong component evidence for the issue-level coding/recovery seam, but because the run used `implement_issue` and required operator repair after a false-positive model test, it is **not** an autonomous full-Build acceptance task.
 
-### Gate PR-3 — accepted task 2/3
+### Gate MICRO-2 — issue-level self-repair gap
+
+Status: DONE / BLOCKING EVIDENCE
+
+Task: `openclaw-hitl-enables-build-approval-pr3` via `implement_issue`, execution `exec_20260912_141025_thblod44`.
+
+Fresh terminal evidence:
+- control plane status `succeeded`, but result `success=false`;
+- duration `2,679,677 ms` (~44.7 min);
+- commits `0d12147de8fa4109f9046150f51e0f7066fedf8d`, `f53048294d6cb1c3dd91092ed66d9bbf20cd1b4d`;
+- verifier correctly reported `existing internal/orch tests pass = false` because `build_test.go` used `os` without importing it;
+- reviewer still marked the semantic code path approved and explicitly noted the compile blocker;
+- delivery also committed generated `.agentfield-out-598283605/.agentfield_output.json`, causing `GIT_DELIVERY` unexpected-file / dirty-worktree failure;
+- `implement_issue` did **not** run a verifier-fix-reverify cycle for the repairable missing import; it terminated with `success=false`.
+
+Decision: do not manually repair this task and do not count it toward production readiness. This is direct evidence that the issue-level harness is intentionally insufficient as the top-level autonomous acceptance boundary.
+
+### Gate FB-0 — first autonomous full-Build canary
 
 Status: ACTIVE / P0
 
-Selected task: `openclaw-hitl-enables-build-approval`. Current live-vs-clean evidence shows `Build` only engages the approval checkpoint when legacy `HAX_API_KEY` is set, while CURRENT production design also supports the deployment-local OpenClaw HITL governor. Scope is bounded to `go/internal/orch/build.go` + `build_test.go`; canonical package is `./internal/orch`.
+Goal: exercise the actual `swe-planner.build` / `orch.Build` lifecycle on a frozen materialization of CURRENT tested SWE-AF source, with zero operator edits to task code during the run.
+
+Canary engineering objective: add a deterministic pre-review validation contract so trivial compile/test failures are fed back into the coding repair loop before semantic reviewer spend. This directly addresses the observed missing-import waste without replacing the existing reviewer/verifier loops.
+
+Configuration policy:
+- use the proven planner/runtime route and `fcm/fcm`;
+- `enable_replanning=true`;
+- `enable_issue_advisor=true`;
+- `enable_integration_testing=true`;
+- bounded retries/replans/verify-fix cycles remain enabled;
+- deterministic Git enabled;
+- `enable_learning=false` for a reproducible baseline;
+- external GitHub PR/CI side effects disabled for this first local canary only; CI semantics remain a later safe-surface gate, not silently claimed as covered.
 
 DoD:
-- one new small real engineering task on the now-proven execution lane;
-- freeze planner/runtime/model route; vary only task input unless fresh evidence proves a route defect;
-- actual source edit in isolated task workspace;
-- bounded exact commit/diff;
-- affected canonical test PASS;
-- regression result shows no new failures relative to exact base;
-- independent executable oracle PASS;
-- exact tested identity = delivered identity;
-- wall time + route/fallbacks + numeric cost if available recorded;
-- no ambiguous or duplicated mutation.
+- Build performs planning -> DAG execution -> coding/review/repair -> integration -> verifier/fix lifecycle as applicable;
+- operator performs zero task-code edits between Build START and terminal state;
+- any repairable compile/test/reviewer/verifier failure is repaired by Build itself or the run fails with evidence;
+- exact final source identity and artifacts are recoverable;
+- canonical Go validation + independent oracle run after terminal state;
+- no generated harness artifact is accepted as product source;
+- cost/latency/repair/replan counts recorded.
 
-### Gate PR-4 — accepted task 3/3
+### Gate FB-1 / FB-2 — full-Build streak 2/3 and 3/3
 
-Status: PENDING PR-3
+Status: PENDING FB-0
 
-Repeat the same acceptance discipline on a different bounded real task. No new architecture or cost optimization until the fresh streak reaches 3/3.
+Repeat on different real engineering tasks with the same frozen/proven control stack. At least one full-Build run must exercise interruption/recovery with zero duplicate effects. No cost optimization before 3/3 full-Build correctness.
 
 ### Gate PR-5 — state truth + durable source
 
