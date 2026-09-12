@@ -192,7 +192,7 @@ Coverage design (priority != execution timing):
 Current family status:
 - covered/strong: F01 routing, F02 exact identity discipline, **F08 ambiguous-effect fail-closed across built-in coder, external ExecuteFn, standalone implement_issue, DAG checkpoint and top-level Build**, F09 verifier-fix + advisor/replan/resume, F10 delivery contamination, F11 one proven mutation oracle;
 - partial: F03/F04 (unit + live canaries, but no deterministic real-OpenCode CI integration), F07 (concurrency limits but not workspace collision fault injection), F12, F14, F15, F16;
-- active gaps: **F05/F06 control-plane crash/restart/stale-state**.
+- active gaps: **F05/F06 control-plane crash/restart/stale-state**. F06 is now reproduced and root-caused to the AgentField Go-agent process-identity/restart contract; it is a supporting-platform release blocker, not an unlocalized SWE defect.
 
 F08 executable evidence:
 - pre-fix RED `TestCoderTimeoutFailsClosedAsAmbiguousEffect`: mutation-capable coder ignored cancellation, remained in-flight after local timeout, while the coding loop returned ordinary failure;
