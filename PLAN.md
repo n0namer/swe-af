@@ -124,65 +124,55 @@ After 3/3, materialize the accepted source into canonical Git/SourceLoop, create
 
 ### Gate PR-1 — recover one stable execution route
 
-Status: BLOCKED / P0 — fresh PR-1 experiment localized the failure before the FCM broker request.
+Status: DONE
 
-Why first: CURRENT product Go tests pass; another product-code patch is not justified until a fresh execution experiment proves a source defect.
-
-2026-09-12 PR-1 evidence: `exec_20260912_093427_ti492y5g` ran a different real Go recovery task on clean base `2c374989b39d0b53b34ef33fd2ba6289e74194ae`. Live process evidence proved OpenCode argv `-m fcm/fcm` in isolated worktree `.worktrees/1505a247-checkpoint-completed-issue-before-cancel`. The run terminated in ~30s with `failed_unrecoverable`, `commits=[]`, `files_changed=[]`, upstream-facing `Unexpected server error`, and missing structured output. The temporary worktree/branch was cleaned and no mutation effect remained. Critically, FCM `/health` showed `requestsRouted=697` both immediately before and after the failed run, and runtime telemetry gained no new call. Therefore this reproduction did not reach the FCM broker: the current critical boundary is OpenCode/provider-adapter/config/runtime handling **before broker request**, not SWE product logic and not FCM inference. Stop repeating full `implement_issue` until that pre-broker seam is diagnosed.
-
-DoD:
-1. Freeze CURRENT SWE source/contracts/runtime guards.
-2. Vary one execution-route factor only.
-3. Prefer a route already evidenced to complete tool trajectories (known stronger route or another FCM route that passes the same tool canary).
-4. Run one smallest discriminating real-task/canonical-validator experiment.
-5. Capture exact execution ID, provider/model route, actual diff/commit or no-effect state, error boundary, wall time and cost if available.
-6. Stop on the first evidence-backed failed gate; do not stack prompt/schema/model/enforcement changes.
-
-PASS:
-- a bounded deliverable reaches canonical validation + independent oracle.
-
-FAIL/BLOCKED:
-- one fresh experiment localizes a single boundary with evidence and leaves no ambiguous/repeated mutation.
+Evidence:
+- pre-fix execution `exec_20260912_093427_ti492y5g` failed before any FCM request;
+- A/B canaries proved the clean target repo lacked runtime-owned `fcm` provider config;
+- runtime overlay now owns the FCM provider contract; deterministic RED->GREEN test and full CURRENT Go suite PASS;
+- rebuilt planner `/tmp/swe-planner-fcm-overlay-20260912` (SHA256 `0224447d...`) is active on PID `424603`;
+- post-fix real task `exec_20260912_094308_za4vz5sv` reached FCM, edited source and completed.
 
 ### Gate PR-2 — accepted task 1/3
 
-Status: PENDING PR-1
+Status: DONE
 
-Use a small real Go task when possible because the canonical Go runner is already available.
+Task: `checkpoint-completed-issue-before-cancel`.
+
+Acceptance:
+- exact target base `2c374989b39d0b53b34ef33fd2ba6289e74194ae`;
+- final local task branch head `b0ebb1b`;
+- two-file bounded diff;
+- deterministic real resume/no-repeat oracle PASS on exact final commit;
+- `git diff --check` PASS;
+- full candidate suite has one failure that reproduces identically on exact base -> no new regression;
+- CURRENT live equivalent recovery test + full `go test ./... -count=1` PASS;
+- duplicate effects = 0;
+- wall time ~34.9 min; numeric token/RUB cost remains `EVIDENCE_MISSING`.
+
+This task already satisfies the milestone's required recovery/no-duplicate case and required multi-file case. Reviewer PASS alone did not close the task; operator BMAD test-design/TDD review found and fixed a false-positive resume test.
+
+### Gate PR-3 — accepted task 2/3
+
+Status: ACTIVE / P0
 
 DoD:
-- actual source edit in the task workspace;
+- one new small real engineering task on the now-proven execution lane;
+- freeze planner/runtime/model route; vary only task input unless fresh evidence proves a route defect;
+- actual source edit in isolated task workspace;
 - bounded exact commit/diff;
-- affected canonical Go test PASS;
-- relevant regression/full package test PASS;
-- independent oracle PASS;
-- no unrelated file/effect;
-- exact tested=delivered identity;
-- cost/latency/continuations recorded.
+- affected canonical test PASS;
+- regression result shows no new failures relative to exact base;
+- independent executable oracle PASS;
+- exact tested identity = delivered identity;
+- wall time + route/fallbacks + numeric cost if available recorded;
+- no ambiguous or duplicated mutation.
 
-### Gate PR-3 — accepted task 2/3: recovery/no-duplicate-effect
-
-Status: PENDING PR-2
-
-DoD:
-- task performs an observable effect;
-- interruption/timeout or partial-result point is exercised only where post-state/effect identity is readable;
-- continuation observes already-satisfied effects and does not repeat them;
-- UNKNOWN state fails closed/read-only;
-- canonical tests + independent oracle PASS;
-- duplicate non-idempotent effects = 0.
-
-### Gate PR-4 — accepted task 3/3: multi-file
+### Gate PR-4 — accepted task 3/3
 
 Status: PENDING PR-3
 
-DoD:
-- real multi-file engineering change;
-- exact bounded diff;
-- canonical affected + regression validation PASS;
-- independent oracle PASS;
-- exact tested=delivered identity;
-- cost/latency recorded.
+Repeat the same acceptance discipline on a different bounded real task. No new architecture or cost optimization until the fresh streak reaches 3/3.
 
 ### Gate PR-5 — state truth + durable source
 
