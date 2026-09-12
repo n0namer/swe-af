@@ -450,6 +450,33 @@ func TestRoleOptionsOpenCodeUsesOnlySWEOwnedBinary(t *testing.T) {
 	}
 }
 
+func TestOpenCodeNoInstallPermissionOverlayIncludesRuntimeFCMProvider(t *testing.T) {
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(OpenCodeNoInstallPermissionOverlay), &cfg); err != nil {
+		t.Fatalf("overlay must be valid JSON: %v", err)
+	}
+	providers, ok := cfg["provider"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime overlay must own provider config, got: %v", cfg)
+	}
+	fcm, ok := providers["fcm"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime overlay must define provider fcm, got: %v", providers)
+	}
+	options, ok := fcm["options"].(map[string]any)
+	if !ok || options["baseURL"] != "{env:LLM_BROKER_BASE_URL}" || options["apiKey"] != "{env:LLM_BROKER_API_KEY}" {
+		t.Fatalf("fcm provider must use runtime broker env, got: %v", fcm)
+	}
+	permissions, ok := cfg["permission"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime overlay must preserve permissions, got: %v", cfg)
+	}
+	bash, ok := permissions["bash"].(map[string]any)
+	if !ok || bash["pip install *"] != "deny" || bash["go get *"] != "deny" {
+		t.Fatalf("runtime overlay must preserve no-install guards, got: %v", permissions)
+	}
+}
+
 func TestRunCentralizesOpenCodeSingleSchemaMode(t *testing.T) {
 	seenMode := ""
 	mh := &mockHarness{

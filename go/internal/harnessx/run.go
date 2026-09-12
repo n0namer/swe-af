@@ -10,11 +10,14 @@ import (
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
 )
 
-// OpenCodeNoInstallPermissionOverlay keeps autonomous read/test/build commands
-// available while fail-closing dependency installation and cross-worktree
-// virtualenv execution. Role code may prepend the current worktree's virtualenv
-// to PATH; absolute sibling-worktree runners remain denied.
-const OpenCodeNoInstallPermissionOverlay = `{"permission":{"task":"deny","external_directory":"deny","bash":{"*":"allow","pip install *":"deny","pip3 install *":"deny","python -m pip install *":"deny","python3 -m pip install *":"deny","uv pip install *":"deny","uv add *":"deny","npm install *":"deny","npm i *":"deny","pnpm install *":"deny","pnpm add *":"deny","yarn install *":"deny","yarn add *":"deny","go get *":"deny","apt install *":"deny","apt-get install *":"deny","apk add *":"deny","*/.worktrees/*/.venv/bin/*":"deny","*/.worktrees/*/venv/bin/*":"deny"}}}`
+// OpenCodeNoInstallPermissionOverlay is the runtime-owned OpenCode config overlay.
+// Target repositories must not need to define SWE's internal FCM provider in
+// their own opencode.json just to execute through the broker. The same overlay
+// keeps autonomous read/test/build commands available while fail-closing
+// dependency installation and cross-worktree virtualenv execution. Role code
+// may prepend the current worktree's virtualenv to PATH; absolute sibling-
+// worktree runners remain denied.
+const OpenCodeNoInstallPermissionOverlay = `{"provider":{"fcm":{"name":"FCM OpenAI-compatible","env":["LLM_BROKER_API_KEY"],"npm":"@ai-sdk/openai-compatible","options":{"apiKey":"{env:LLM_BROKER_API_KEY}","baseURL":"{env:LLM_BROKER_BASE_URL}"},"models":{"fcm":{"id":"fcm","name":"FCM"},"fcm:keyless-dev":{"id":"fcm:keyless-dev","name":"FCM Keyless Dev"}}}},"permission":{"task":"deny","external_directory":"deny","bash":{"*":"allow","pip install *":"deny","pip3 install *":"deny","python -m pip install *":"deny","python3 -m pip install *":"deny","uv pip install *":"deny","uv add *":"deny","npm install *":"deny","npm i *":"deny","pnpm install *":"deny","pnpm add *":"deny","yarn install *":"deny","yarn add *":"deny","go get *":"deny","apt install *":"deny","apt-get install *":"deny","apk add *":"deny","*/.worktrees/*/.venv/bin/*":"deny","*/.worktrees/*/venv/bin/*":"deny"}}}`
 
 // runIDFromContext extracts the build's run ID from the reasoner execution
 // context. In production this reads agent.ExecutionContextFrom(ctx).RunID, which
