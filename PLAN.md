@@ -85,7 +85,16 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
   - canonical pytest remains unavailable and no dependency was installed.
   - Verdict: this bounded task is independently executable-accepted with an explicit canonical-pytest environment limitation. It is not broad L3 PASS.
 - L3-26: failed cheap baseline; zero accepted deliverable.
-- Because L3-26 failed after L3-24/L3-25, those historical positives do not by themselves satisfy the fresh production streak below.
+- Fresh PR-1 / accepted task 1/3 (`checkpoint-completed-issue-before-cancel`):
+  - execution `exec_20260912_094308_za4vz5sv`, clean target base `2c374989b39d0b53b34ef33fd2ba6289e74194ae`, route `fcm/fcm`;
+  - runtime duration `2,092,499 ms` (~34.9 min); coder artifact reports `fallback_count=1`, `peak_models_routed=3`; numeric token/RUB cost is not recorded -> `EVIDENCE_MISSING`, not zero;
+  - model-produced commit `8d28dcd49176d640853f333023ac842935b3a528` changed `go/internal/dag/executor.go` + `executor_test.go`, but reviewer explicitly noted the resume test did not actually exercise resume; reviewer PASS was therefore insufficient;
+  - operator BMAD test-design / TDD review replaced the weak test with a deterministic downstream-interruption -> real `WithResume(true)` oracle. RED reproduced lost completed-state; minimal GREEN added immediate checkpoint after completed/failed/skipped results;
+  - final local task branch head `b0ebb1b` is clean; exact commit recovery tests PASS and `git diff --check` PASS;
+  - full candidate `go test ./...` has exactly one failure, `TestLevelFailureThresholdAborts`; the same failure reproduces on the exact base, so it is a pre-existing baseline failure and not a regression from this task;
+  - CURRENT live `/src/swe-af` already contained equivalent immediate-checkpoint semantics plus `TestResumeAfterCancellationDoesNotRepeatCompletedIssue`; that test PASS and fresh full CURRENT `/usr/local/go/bin/go test ./... -count=1` PASS;
+  - verdict: independently accepted fresh task **1/3** with explicit pre-existing target-base test limitation; it also satisfies the milestone's recovery/no-duplicate and multi-file task requirements. Duplicate effects observed: 0.
+- Because L3-26 failed after L3-24/L3-25, those historical positives alone do not satisfy the fresh production streak; PR-1 starts the new controlled streak at 1/3.
 
 ### Supporting systems / non-P0 debt
 
