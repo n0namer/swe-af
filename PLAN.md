@@ -118,13 +118,15 @@ Upstream chronology:
 - `2638b9e92a1f9ee6c6f9a3cd223da231bf1ece86` (2026-08-31) closes additional dispatch/shutdown persistence holes;
 - however current upstream Go SDK still lacks process instance identity, so a control-plane-only upgrade is **not sufficient** for this Go planner.
 
-Decision / minimal owner-layer fix:
-1. do **not** patch SWE-AF for F06 and do not reduce stale timeouts as a substitute for process identity;
-2. AgentField Go SDK must gain process-scoped `instance_id` parity with Python: fresh ID once per Agent process, stable for that process, propagated on registration and heartbeat; tests must prove unique-across-process/stable-within-process/wire propagation;
-3. validate the exact AgentField SDK/control-plane candidate with canonical AgentField tests, then rebuild the existing DEV workforce/control-plane stack from exact SHAs and rerun the same F06 restart probe;
-4. F06 closes only when the old execution terminalizes/reconciles within the documented restart window and process/workspace readback proves no overlapping old/new mutator.
+Implementation / verification status:
+1. SWE-AF was **not** patched for F06 and stale timeouts were not reduced. Exact deployed AgentField source `4d337c1...` was cloned container-locally to `/tmp/agentfield-f06-fix`; GitHub was not used as a programming loop and the control-plane was not redeployed.
+2. Deterministic RED `TestAgentInstanceIDPropagatesAndChangesPerProcess` proved the Go wire payload omitted `instance_id`. Minimal GREEN added one UUIDv4-compatible 32-char process ID per `Agent`, stable across registration/reconnect/lease heartbeat and unique across new Agent processes. Review also added shutdown cancellation of every tracked in-flight reasoner context so context-aware children cannot survive planner shutdown as mutators.
+3. Exact local AgentField commit `b160245833ec51f5296905c32e49260a62c76e26` (`fix(go-sdk): identify agent process instances`) changes only `sdk/go/agent/agent.go`, `agent_lifecycle.go`, `agent_lifecycle_test.go`, `cancel.go`, and `sdk/go/types/types.go`. Targeted tests, targeted `-race`, full `sdk/go` suite and `git diff --check` PASS. Existing control-plane restart/orphan suite, including `TestRegisterNodeHandler_ReapsOrphansOnInstanceChange`, also PASS on the exact source.
+4. Frozen SWE baseline `cdc3910...` was validated against that SDK through a temporary local Go module replace: full SWE `go test ./... -count=1` PASS; planner `/tmp/swe-planner-f06-sdk-20260913` was built and loaded process-only without redeploy.
+5. The original F06 fault was then re-injected on a real full `build` execution `exec_20260912_223956_dfmcy6va` / run `run_20260912_223956_a87y880t`. It was observed `running`, planner PID `548717` received SIGTERM, and the patched planner restarted as PID `548849`. The execution became terminal `failed: context canceled` after ~101 ms and remained terminal at +0.5s/+2s/+5s; old PID was zombie, new PID running, no OpenCode mutator targeted the workspace, and the sacrificial repo stayed clean. The current node record carries a non-empty process `instance_id`.
+6. F06 is therefore **VERIFIED/CLOSED for the current process-only runtime**: restart no longer leaves accepted work stale `running`, and shutdown cancels the active reasoner before a second writer can overlap it. Durable AgentField source publication / normal DEV deployment is still pending and must not be confused with this runtime proof.
 
-This is a supporting-platform code + deployment release boundary, not the SWE container debugging loop. Persistent AgentField SDK/control-plane mutation requires explicit platform-scope authorization before APPLY.
+Deferred neighboring F07/identity risks exposed by review, not folded into this gate: reject/ignore stale heartbeat/status updates from an old `instance_id`; prevent duplicate execution-ID cancel registration from overwriting an older cancel func; close the narrow shutdown race where a new request could arrive between cancel-all and listener shutdown.
 
 ### Test coverage / risk-based gap audit
 
