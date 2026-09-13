@@ -493,16 +493,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-F06 restart/state convergence is **VERIFIED/CLOSED for the current process-only runtime**. The production milestone remains blocked because autonomous full-Build acceptance is still 0/3; the next unknown must come from FB-0 attempt 5, not more infrastructure speculation.
+The current handoff state contains a **newer uncommitted AgentField graph-assisted delta on top of tested commit `b1602458...`**. It includes identity/concurrency/shutdown changes discovered with Codebase Index + Graphify. Until that delta is independently reconciled, tested, reduced to an exact local commit or reverted, the planner/runtime evidence tied to `b1602458...` is not sufficient authority for launching FB-0 attempt 5.
 
 THIS BATCH:
-start FB-0 attempt 5 from clean frozen baseline `cdc39105e92937e0085410a656346471b2dc6834` using planner `/tmp/swe-planner-f06-sdk-20260913`, route `fcm/fcm`, and the already-proven recovery configuration. After START perform zero operator task-code edits; observe process/artifact/effect truth and stop at the first new evidence-backed lifecycle blocker.
+perform the mandatory takeover reconciliation from `AI Handoff / Bootstrap Protocol`: inspect the exact AgentField diff, preserve only evidence-backed fixes, complete applicable RED->GREEN tests and race/full suites, re-run Codebase Index + Graphify fault-family discovery, perform one BMAD adversarial/edge review, create one exact local tested AgentField commit, validate it against frozen SWE and repeat the same restart fault if restart/process containment changed. Do not run FB-0 in the same batch.
 
 NORTH-STAR DELTA:
-F06 removed the stale-running/orphan safety blocker: Go Agent processes now have stable per-process identity, shutdown cancels in-flight reasoners, and the same restart fault converges terminally with zero overlapping mutator. The critical path returns to autonomous Build correctness.
+convert the current graph-discovered identity/concurrency work from an uncommitted exploratory state into one independently reproducible owner-source artifact. This removes ambiguity before the autonomous full-Build streak and prevents carrying an unverified supporting-platform delta into acceptance evidence.
 
 STOP CONDITION:
-either FB-0 attempt 5 reaches autonomous terminal success and then passes canonical Go validation + independent oracle, or it identifies the first new full-lifecycle blocker. Write that blocker back before any further framework mutation. Durable publication of local AgentField commit `b1602458...` is required before a clean deployed-runtime milestone, but is not allowed to displace the current correctness gate.
+either the graph-assisted AgentField delta is one exact tested local commit with all applicable P0 identity/concurrency boundaries GREEN and no uncovered critical graph boundary, or the first unresolved owner-layer blocker is captured and becomes the sole next move. Only after fresh write-back may the next AI decide whether FB-0 attempt 5 is again the mandatory gate.
 
 ## Acceptance Metrics Per Task
 
