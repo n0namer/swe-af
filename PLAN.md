@@ -229,8 +229,8 @@ Coverage design (priority != execution timing):
 Current family status:
 - covered/strong: F01 routing, F02 exact identity discipline, **F08 ambiguous-effect fail-closed across built-in coder, external ExecuteFn, standalone implement_issue, DAG checkpoint and top-level Build**, F09 verifier-fix + advisor/replan/resume, F10 delivery contamination, F11 one proven mutation oracle;
 - partial: F03/F04 (unit + live canaries, but no deterministic real-OpenCode CI integration), F07 (concurrency limits but not workspace collision fault injection), F12, F14, F15, F16;
-- covered/strong on CURRENT runtime: **F06 restart/state convergence** — deterministic SDK RED->GREEN + race/full suites + existing control-plane orphan tests + live same-fault re-injection prove terminal convergence and zero overlapping mutator after planner restart. Durable AgentField publication remains pending.
-- active gaps: **F05 dependency/crash handling** and partial F07 concurrency/identity neighbors (stale old-instance heartbeat/status, duplicate execution-ID cancel registration, narrow shutdown accept race).
+- **F06 process-only subcase remains VERIFIED** for local AgentField commit `b1602458...`: deterministic SDK RED->GREEN + prior race/full suites + live same-fault re-injection proved terminal convergence and zero overlapping mutator for planner restart. **The broader F06/F07 family is REOPENED** by fresh post-base graph evidence: Go drain/order (#1000/#1011), async control-plane shutdown/admission (#1001), persisted execution-generation ownership (#1004), and stale workflow activity/reap (#1046) are not covered by `b1602458...` alone.
+- active P0 gaps: F05 dependency/crash handling plus the reopened F06/F07 boundaries in the takeover matrix. P1 siblings include multi-replica false-reap (#1031) on topologies with replicas >1 and non-async dispatch-lane parity (#1033).
 
 F08 executable evidence:
 - pre-fix RED `TestCoderTimeoutFailsClosedAsAmbiguousEffect`: mutation-capable coder ignored cancellation, remained in-flight after local timeout, while the coding loop returned ordinary failure;
