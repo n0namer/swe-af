@@ -16,6 +16,7 @@ import (
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
+	"github.com/Agent-Field/SWE-AF/go/internal/harnessx"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
 )
@@ -199,6 +200,9 @@ func TestProductManagerOpenCodeUsesHarnessWhenDirectAIIsAvailable(t *testing.T) 
 	}
 	if h.lastOpts.SchemaMode != "incremental" {
 		t.Fatalf("OpenCode PM schema_mode = %q, want incremental", h.lastOpts.SchemaMode)
+	}
+	if got := h.lastOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != harnessx.OpenCodeNoInstallPermissionOverlay {
+		t.Fatalf("OpenCode PM missing runtime-owned FCM overlay")
 	}
 	if got := out.(map[string]any)["validated_description"]; got != "planned through harness" {
 		t.Fatalf("validated_description = %v", got)

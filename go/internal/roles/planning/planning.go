@@ -193,8 +193,12 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 			parsed = &direct
 		} else {
 			schemaMode := ""
+			var roleEnv map[string]string
 			if provider == "opencode" {
 				schemaMode = "incremental"
+				roleEnv = map[string]string{
+					"OPENCODE_CONFIG_CONTENT": harnessx.OpenCodeNoInstallPermissionOverlay,
+				}
 			}
 			opts := harnessx.RoleOptions{
 				Provider:       provider,
@@ -204,6 +208,7 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 				PermissionMode: permissionMode,
 				SystemPrompt:   systemPrompt,
 				Cwd:            repoPath,
+				Env:            roleEnv,
 				SchemaMode:     schemaMode,
 			}.ToOptions()
 			p, res, hErr := harnessx.Run[schemas.PRD](ctx, deps.Harness, taskPrompt, opts)
