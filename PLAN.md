@@ -441,6 +441,33 @@ Fresh terminal evidence:
 
 Decision: do not manually repair this task and do not count it toward production readiness. This is direct evidence that the issue-level harness is intentionally insufficient as the top-level autonomous acceptance boundary.
 
+### Frozen autonomy experiment manifest — preregistered before FB-0 attempt 5
+
+Purpose: prevent task/config/oracle/operator drift while measuring the first autonomous full-Build streak. This is an operational readiness experiment, not a statistical claim about general SWE reliability.
+
+Frozen stack identity for the streak unless a run exposes a proven framework blocker:
+- SWE target/base: `/tmp/swe-af-fullbuild-current-20260912` at `cdc39105e92937e0085410a656346471b2dc6834` before each task START;
+- AgentField exact candidate: `/tmp/agentfield-f06-fix` at `c0923acdfca043c2c07e3d34daaa09e2a7e41d38`;
+- planner artifact: `/tmp/swe-planner-agentfield-c092-20260913`, SHA256 `c923a3653cceddbbc0672f6c6b8b673f3b819ef15751878e255014a9d0732e79`;
+- route/model: OpenCode through `fcm/fcm`;
+- policy: replanning ON, issue advisor ON, integration testing ON, deterministic Git ON, learning OFF; bounded native retry/replan/verifier-fix policies unchanged during an accepted run;
+- external PR/CI side effects OFF for the local streak unless a later task explicitly requires a safe isolated CI surface;
+- acceptance oracle is frozen before START: terminal full `swe-planner.build` result + canonical deterministic validation on the resulting exact source + an independent executable task-specific oracle. Semantic reviewer prose alone never accepts a task.
+
+Intervention freeze from Build START to terminal state:
+- forbidden: operator task-code edits, prompt/model/provider/config/retry/oracle changes for the active task, manual continuation that changes task semantics, or starting a second mutator on the same workspace;
+- allowed observation: execution/control-plane state, process/effect/workspace readback, logs/telemetry and condition-based waiting;
+- infrastructure failure may be diagnosed after post-state readback, but any framework/source/config mutation invalidates that task as acceptance evidence; repair uses deterministic RED->GREEN where practical and restarts the streak from 0/3 on the repaired frozen stack.
+
+Preregistered task ladder:
+1. **FB-0 / pre-review deterministic validation** — exact objective already specified below: add a deterministic pre-review validation contract so trivial compile/test failures are fed into the coding repair loop before semantic reviewer spend. Must be a real full Build and independently validated after terminal state.
+2. **FB-1 / different multi-file behavior task** — select the first eligible real repository task from the canonical project backlog/task source in stable ascending task order that (a) is not semantically the FB-0 change, (b) requires at least two product/test files, (c) has a provisioned deterministic validator, and (d) does not require unavailable external credentials/services. Do not skip an eligible earlier task because it appears harder. If no eligible canonical task exists, record `TASK_POOL_GAP` before creating/choosing a new benchmark task; do not improvise after seeing FB-0 outcome.
+3. **FB-2 / interruption-recovery task** — select the first eligible task by the same stable-order rule whose execution can be subjected to one preregistered interruption after a completed non-idempotent sub-effect. Acceptance additionally requires resume/recovery with that effect count remaining exactly one. If the canonical pool has no such eligible task, record `TASK_POOL_GAP` and define the task before running it, not after observing FB-1.
+
+Streak rule: only consecutive independently accepted full Builds on the same frozen stack count. A task-level autonomous repair inside Build is allowed and measured. Operator/framework repair, invalid environment, or failed independent oracle does not count and resets the operational streak after the repaired/frozen stack is revalidated. `3/3` closes the first operational autonomy milestone only; broader reliability/generalization requires a later held-out evaluation with no framework changes between tasks.
+
+Per-task experiment record must include: task text/ID/source, base SHA, AgentField SHA, planner SHA, route/model, config policy, execution/run IDs, final source SHA/diff, canonical validator command/result, independent oracle/result, wall time, model calls/tokens/cost when available, retries/continuations/repairs/replans, UNKNOWN states, duplicate effects, tested-vs-delivered identity and any evidence gap. Cost is measured now; economic PASS/FAIL remains undefined until an explicit business SLO exists.
+
 ### Gate FB-0 — first autonomous full-Build canary
 
 Status: ACTIVE / P0
