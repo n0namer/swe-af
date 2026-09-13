@@ -204,6 +204,29 @@ Exact-source capability attempt after user authorization:
 
 This sharpens the blocker from “approval missing” to **server-owner capability gap**: the user authorized the bounded scope widening, but the current typed mutation service is not callable for this target. Product mutation remains blocked until the owner of the DEV terminal mutation allowlist exposes this target (or an equivalent exact-source typed route) through supported configuration/deployment.
 
+#### DEV terminal owner-route recovery — 2026-09-13
+
+The owner-layer fix was then executed through the canonical `n0namer/vps-terminal` source rather than by overwriting a hidden Coolify env value:
+- owner rules `AGENTS.md` + `ERRORS.md` were re-read before mutation; they require exact source identity, container-first/debug evidence and independent activation readback;
+- Coolify exposes the `TARGET_REGISTRY_MUTATION_ALLOWLIST` key but masks its value, so direct env overwrite was rejected as unsafe because it could erase unrelated allowed targets;
+- exact deployed owner base is `n0namer/vps-terminal@7ed1daa2824096e2624c0025f7ee9571fa78ff87`, app `vps-terminal-dev` / `tsnhqqr60rcacdv8kfiw4eqf`, canonical DEV branch `archops/k4b-container-cleanup`;
+- isolated branch `archops/agentfield-registry-scope` was created from that exact SHA. Candidate head `e1b671fd279eee6c03a640ae37fe8ebba27ce501` changes only `gateway/live-aci.mjs`, `gateway/server-live.mjs`, and existing test owner `gateway/test/live-aci.test.mjs`;
+- candidate adds pure `mergeAllowedTargetIds(...)`: configured env entries are preserved/deduplicated and required `agentfield-dev-workforce` is added exactly once. `server-live.mjs` composes the required target additively instead of replacing the hidden env value. Focused regression asserts both preservation and deduplication;
+- PR `n0namer/vps-terminal#160` targets the exact currently configured DEV branch. It remains **open/unmerged** pending executable validation;
+- canonical GitHub Actions `ci` cannot currently validate the candidate: both push and PR runs terminate `startup_failure` with **0 jobs**, and the same startup failure is observable on the branch baseline. Classify this as `VALIDATION_BLOCKER`, not application test FAIL;
+- Coding Station remains unavailable (`Gateway Timeout`), so it did not provide a substitute exact-source validator;
+- registered target `vps-terminal-dev-gateway` exposes `/app/gateway` with `node_check`, but stale-safe apply of the exact candidate failed `EROFS`; the image source is read-only. No direct registry/runtime file bypass was used;
+- with user-authorized DEV deploy scope, Coolify desired source was temporarily changed to candidate branch/head and a forced deployment was requested. Initial request stayed queued/not-applied; one safe retry with `instant_deploy=true` was issued after independent runtime readback still showed `7ed1daa...`. No further retry is permitted without new evidence;
+- Coolify logs then showed `ApplicationDeploymentJob RUNNING`; host inventory observed the old gateway removed and the DEV action endpoint temporarily unavailable, proving the deployment reached runtime replacement rather than remaining a mere queue acknowledgement. At the latest write-back point the replacement had **not yet reached a verified healthy candidate identity**. Do not count health/config desired SHA as candidate PASS until an image/source fingerprint proves `e1b671f...` is loaded and canonical validation executes on that identity.
+
+BMAD trace gate for this operator fix:
+1. candidate source identity = `e1b671fd279eee6c03a640ae37fe8ebba27ce501`;
+2. executable requirement = additive allowlist preserves arbitrary configured entries and contains `agentfield-dev-workforce` once;
+3. required validation = focused helper test + repository `npm run check` (or exact equivalent on the candidate image), syntax/runtime readiness, then typed target-registry upsert readback;
+4. activation proof = DEV gateway loaded source/image corresponds to candidate/merged identity; `/health` alone is insufficient;
+5. functional oracle = revision-guarded upsert of `agentfield-dev-workforce` succeeds and readback shows only `/tmp/agentfield-f06-fix` added to its `live_patch_roots` while every other target field is unchanged;
+6. rollback = restore app branch/SHA to `archops/k4b-container-cleanup@7ed1daa...` if candidate validation or activation fails. Do not merge PR #160 until this gate is GREEN.
+
 ### Test coverage / risk-based gap audit
 
 Fresh coverage was measured on CURRENT exact source with `go test ./... -count=1 -covermode=atomic -coverprofile=...` and `go tool cover -func`.
