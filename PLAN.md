@@ -330,7 +330,7 @@ Quality gates:
 
 Entry criteria for resilience testing: exact tested source/runtime identity, isolated sacrificial workspace, zero pre-existing mutating child on target, planner/control-plane reachable. Exit criteria: all P0 families have a discriminating contract at every applicable critical boundary, plus at least one real fault-injection proof for each external async boundary.
 
-Immediate mandatory gate: **AgentField takeover reconciliation remains P0; FB-0 attempt 5 is blocked.** The process-only F06 proof is still valid, but fresh BMAD/GraphQL fault-family discovery proved additional post-base boundaries on the active async/restart path that `b1602458...` does not cover. Close the takeover matrix to one exact tested local AgentField commit (or capture the first unresolved owner-layer blocker) before returning to frozen baseline `cdc39105e92937e0085410a656346471b2dc6834` and FB-0.
+Immediate mandatory gate: **AgentField takeover reconciliation is VERIFIED/CLOSED at exact local commit `c0923acdfca043c2c07e3d34daaa09e2a7e41d38`; FB-0 attempt 5 is now the active P0.** Frozen SWE baseline `cdc39105e92937e0085410a656346471b2dc6834` is clean and full-suite compatible with the c092 Go SDK; the exact planner artifact SHA is `c923a3653cceddbbc0672f6c6b8b673f3b819ef15751878e255014a9d0732e79`. Candidate control-plane + planner process-only fault injection proved both hard-crash generation reap and graceful SIGTERM convergence with no overlapping live mutator. The next batch must rehydrate that exact candidate runtime identity, verify the sacrificial repo is clean and has zero live mutators, then run FB-0 attempt 5 with zero operator task-code edits.
 
 ### Acceptance evidence
 
