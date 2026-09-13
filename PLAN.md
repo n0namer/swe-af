@@ -173,7 +173,7 @@ BMAD usage in this takeover is evidence-driven, not ceremonial:
 - `bmad-quick-dev` was loaded. Its full workflow requires project `_bmad/bmm/config.yaml` plus project customization state, but `/src/swe-af/_bmad` does not exist. No BMAD project/config/plan files were created because `PLAN.md` already owns project state; use the Quick Dev Ready-for-Development rules (actionable file-level tasks, ordered dependencies, explicit executable ACs) as the implementation standard once the exact owner source is writable/testable.
 - `bmad-review-adversarial-general` and `bmad-review-edge-case-hunter` were applied to the exact 12-file uncommitted AgentField diff and compared against the post-base upstream fixes.
 
-Adversarial/edge findings that must be resolved before a local commit:
+Historical adversarial/edge findings — resolved or explicitly dispositioned before exact commit `c0923acdfca043c2c07e3d34daaa09e2a7e41d38`:
 1. The dirty Go patch sets `shuttingDown=true` **before** notifying the control plane. Upstream #1011 explicitly reversed this after adversarial testing: work arriving while shutdown notification is in flight must remain admissible; admission closes after notify. The current local order can manufacture non-retryable 503 failures.
 2. The dirty patch cancels current registrations but has no `executionWG`/bounded graceful drain/post-cancel settlement contract from #1000. Accepted async work is therefore not proven to finish or terminalize before shutdown returns.
 3. The local shutdown tests only prove “after shutdown, new work is rejected”; they do not cover the critical notify-window interleaving that #1011 demonstrated.
