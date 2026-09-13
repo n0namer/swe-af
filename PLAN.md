@@ -163,6 +163,47 @@ CURRENT validation/capability blocker:
 
 Takeover gate verdict: **NOT CLOSED**. FB-0 remains blocked. The first unresolved owner-layer blocker is now the absence of an authorized exact-source test/patch route for `/tmp/agentfield-f06-fix`; once that route exists, reconcile the P0 matrix above against the exact frozen base/local delta, using the upstream commits only as fault/evidence references rather than performing a speculative wholesale upgrade.
 
+#### BMAD quick-dev + adversarial/edge reconciliation — 2026-09-13
+
+BMAD usage in this takeover is evidence-driven, not ceremonial:
+- `bmad-help` remains the entrypoint and `bmad-testarch-test-design` owns the system-level risk matrix above.
+- `bmad-quick-dev` was loaded. Its full workflow requires project `_bmad/bmm/config.yaml` plus project customization state, but `/src/swe-af/_bmad` does not exist. No BMAD project/config/plan files were created because `PLAN.md` already owns project state; use the Quick Dev Ready-for-Development rules (actionable file-level tasks, ordered dependencies, explicit executable ACs) as the implementation standard once the exact owner source is writable/testable.
+- `bmad-review-adversarial-general` and `bmad-review-edge-case-hunter` were applied to the exact 12-file uncommitted AgentField diff and compared against the post-base upstream fixes.
+
+Adversarial/edge findings that must be resolved before a local commit:
+1. The dirty Go patch sets `shuttingDown=true` **before** notifying the control plane. Upstream #1011 explicitly reversed this after adversarial testing: work arriving while shutdown notification is in flight must remain admissible; admission closes after notify. The current local order can manufacture non-retryable 503 failures.
+2. The dirty patch cancels current registrations but has no `executionWG`/bounded graceful drain/post-cancel settlement contract from #1000. Accepted async work is therefore not proven to finish or terminalize before shutdown returns.
+3. The local shutdown tests only prove “after shutdown, new work is rejected”; they do not cover the critical notify-window interleaving that #1011 demonstrated.
+4. The deployed base still lacks #1001 async admission-before-persistence. Queue/concurrency rejection may persist execution/workflow/payload state that should not exist.
+5. The deployed base still lacks #1001 worker-pool shutdown terminalization. Accepted/queued async jobs can be abandoned as non-terminal `running` state.
+6. The local delta does not add persisted execution/workflow `instance_id`, migration `035_execution_instance_id.sql`, or storage read/write propagation from #1004. Node process identity alone cannot make orphan reap generation-safe.
+7. The local delta does not implement #1004 instance-scoped/deferred orphan reap. A replacement generation can still be affected by node-wide cleanup.
+8. The local delta does not implement #1046 paired execution-activity protection for stale workflow cleanup. Long-running SWE work can still be falsely reaped while the paired execution is active.
+9. `rejectStaleAgentInstance` currently rejects a **missing** incoming `instance_id` after a modern node has registered. That is stricter than the original takeover contract (“reject when both IDs are non-empty and differ”) and needs an explicit compatibility decision plus discriminating tests; do not ship the stricter rule accidentally.
+10. Heartbeat handling now performs an unconditional authoritative `GetAgent` before the presence/cache fast path. That changes hot-path storage/error behavior and requires positive current-instance, legacy-empty-instance, cache-hit and storage-error regressions, not only stale-negative tests.
+11. The dirty heartbeat/status tests cover stale and missing-ID rejection but do not pin the positive paths: current instance accepted and legacy stored-empty instance accepted.
+12. Skill shutdown tracking is keyed by execution ID; if skill calls without `X-Execution-ID` are valid, that path is not proven cancellable/drain-safe.
+13. The fallback/internal async reasoner path can observe shutdown after registration, but the diff does not prove terminal-status propagation for every non-HTTP invocation path.
+14. Python `owner_task` deregistration is a plausible sibling ABA guard, but its current test exercises the registry API directly. Upstream main still uses unconditional `pop`; retain the Python production change only if a real caller-level interleaving is RED on the exact base and GREEN with the fix.
+15. `.archsteer/` is generated analysis output and must be excluded from the exact product commit.
+16. No fresh race/full-suite executable evidence exists for the dirty delta; the earlier GREEN for `b1602458...` cannot be inherited by these later changes.
+
+Local-delta disposition until executable RED/GREEN is restored:
+- **candidate to keep after re-test:** Go cancel-registration pointer ownership / duplicate-ID ABA fix;
+- **must redesign before acceptance:** Go shutdown/admission code, using `notify -> close admission -> drain -> deadline cancel -> settlement` rather than the current early-close behavior;
+- **hold for explicit compatibility oracle:** stale heartbeat/status handling when incoming `instance_id` is missing;
+- **experiment only:** Python owner-aware deregistration until caller-level RED exists;
+- **missing P0 behavior:** #1001 async admission/shutdown, #1004 persisted generation/reap, #1046 stale workflow activity; #1000/#1011 define the Go drain/order contract.
+
+Exact-source capability attempt after user authorization:
+- durable current target entry is `agentfield-dev-workforce`, revision `1`, selector `com.docker.compose.project=edshqtkwskg3lrczekhcmd71`, capabilities unchanged, `live_patch_roots=["/src"]`;
+- a minimal typed registry upsert was attempted with revision `2`, preserving selector/capabilities/checks and adding only `/tmp/agentfield-f06-fix` to `live_patch_roots`;
+- the server rejected it with `target_registry_scope_denied: target_id is outside the server-owned mutation allowlist`; no registry state changed;
+- a readback of all registered `live_patch_roots` found no existing target that lawfully covers `/tmp/agentfield-f06-fix`;
+- direct editing of `/var/lib/vps-terminal/targets.runtime.json`, operator redeploy, or creation of a duplicate workspace/runtime is intentionally not used as a bypass.
+
+This sharpens the blocker from “approval missing” to **server-owner capability gap**: the user authorized the bounded scope widening, but the current typed mutation service is not callable for this target. Product mutation remains blocked until the owner of the DEV terminal mutation allowlist exposes this target (or an equivalent exact-source typed route) through supported configuration/deployment.
+
 ### Test coverage / risk-based gap audit
 
 Fresh coverage was measured on CURRENT exact source with `go test ./... -count=1 -covermode=atomic -coverprofile=...` and `go tool cover -func`.
