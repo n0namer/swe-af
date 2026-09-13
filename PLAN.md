@@ -552,12 +552,12 @@ The next AI must independently verify these facts instead of trusting this prose
 - F06 process-identity/restart fix evidence remains reproducible and no later runtime change invalidated it;
 - `/tmp/agentfield-f06-fix` CURRENT HEAD and working-tree delta are inspected before deciding whether FB-0 can resume.
 
-At the time this handoff section was written, fresh readback showed:
-- `/tmp/agentfield-f06-fix` HEAD = `b160245833ec51f5296905c32e49260a62c76e26` with **additional uncommitted graph-assisted changes** in Go SDK cancellation/shutdown code, control-plane heartbeat/status identity guards/tests, and Python cancellation files/tests; `.archsteer/` is generated analysis output and must not be treated as product source;
-- `/tmp/swe-af-fullbuild-current-20260912` remained clean on `fullbuild-current-baseline-20260912`;
-- planner PID `548849` still existed at readback, but every takeover must re-check rather than reuse that PID as truth.
+CURRENT handoff readback at the end of the takeover batch:
+- `/tmp/agentfield-f06-fix` HEAD = exact clean local candidate `c0923acdfca043c2c07e3d34daaa09e2a7e41d38`; unsupported Python experiment and generated `.archsteer/` are absent;
+- `/tmp/swe-af-fullbuild-current-20260912` is clean at exact baseline `cdc39105e92937e0085410a656346471b2dc6834` and its full Go suite PASS with the c092 SDK through a temporary external modfile;
+- exact planner artifact is `/tmp/swe-planner-agentfield-c092-20260913`, SHA256 `c923a3653cceddbbc0672f6c6b8b673f3b819ef15751878e255014a9d0732e79`; the isolated c092 control-plane/planner fault runtime was stopped and its temporary DB/config removed after hard-crash + SIGTERM verification, so no old PID should be reused as truth.
 
-Therefore the takeover must **not** jump directly to FB-0 until it reconciles and closes or reverts the uncommitted AgentField delta with evidence.
+The AgentField takeover is complete. The next operator must re-observe clean repo/mutator/runtime preconditions and then execute FB-0 attempt 5; do not reopen the takeover without new evidence from FB-0 or a changed topology/runtime.
 
 ### Takeover batch — required DoD
 
