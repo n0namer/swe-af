@@ -449,9 +449,9 @@ Frozen stack identity for the streak unless a run exposes a proven framework blo
 - SWE target/base: `/tmp/swe-af-fullbuild-current-20260912` at `cdc39105e92937e0085410a656346471b2dc6834` before each task START;
 - AgentField exact candidate: `/tmp/agentfield-f06-fix` at `c0923acdfca043c2c07e3d34daaa09e2a7e41d38`;
 - planner artifact: `/tmp/swe-planner-agentfield-c092-20260913`, SHA256 `c923a3653cceddbbc0672f6c6b8b673f3b819ef15751878e255014a9d0732e79`;
-- route/model: OpenCode through `fcm/fcm`;
-- policy: replanning ON, issue advisor ON, integration testing ON, deterministic Git ON, learning OFF; bounded native retry/replan/verifier-fix policies unchanged during an accepted run;
-- external PR/CI side effects OFF for the local streak unless a later task explicitly requires a safe isolated CI surface;
+- route/model is explicit in every Build request, not inherited from ambient env: `config.runtime="open_code"` and `config.models.default="fcm/fcm"`; this is required because the current workforce has `ANTHROPIC_API_KEY` present while `SWE_DEFAULT_RUNTIME`/model vars and `OPENROUTER_API_KEY` are absent, which otherwise resolves to `claude_code -> sonnet`;
+- frozen Build config for the local streak: `{"runtime":"open_code","models":{"default":"fcm/fcm"},"enable_github_pr":false,"check_ci":false}`. All omitted fields keep exact BuildConfig defaults: replanning ON, issue advisor ON, integration testing ON, deterministic Git ON, learning OFF and bounded native retry/replan/verifier-fix policies;
+- external PR/CI side effects remain OFF for the local streak unless a later task explicitly requires a safe isolated CI surface;
 - acceptance oracle is frozen before START: terminal full `swe-planner.build` result + canonical deterministic validation on the resulting exact source + an independent executable task-specific oracle. Semantic reviewer prose alone never accepts a task.
 
 Intervention freeze from Build START to terminal state:
