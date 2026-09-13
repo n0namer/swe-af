@@ -528,16 +528,16 @@ GLOBAL NORTH STAR:
 working SWE/SWE-AF with independently accepted real engineering tasks.
 
 CURRENT BLOCKER:
-The current handoff state contains a **newer uncommitted AgentField graph-assisted delta on top of tested commit `b1602458...`**. It includes identity/concurrency/shutdown changes discovered with Codebase Index + Graphify. Until that delta is independently reconciled, tested, reduced to an exact local commit or reverted, the planner/runtime evidence tied to `b1602458...` is not sufficient authority for launching FB-0 attempt 5.
+The exact AgentField owner clone `/tmp/agentfield-f06-fix` is still dirty above tested `b1602458...`, and fresh BMAD + GitHub GraphQL/code-graph reconciliation proved the fault family is broader than that local delta: current-path P0 siblings include Go accepted-work drain/order (#1000/#1011), async control-plane shutdown/admission (#1001), persisted execution-generation ownership/reap (#1004), plus stale workflow-vs-execution activity/reap risk (#1046). The CURRENT callable DEV surface cannot safely execute tests or stale-safe patches on that exact clone: it is outside registered live-patch roots, generic `go test`/managed execution is mediated, Codebase Index/Graphify binaries are present but not executable through the current operator gate, Octocode has a version mismatch, AgentField discovery is `Bad Gateway`, and Coding Station is unavailable. FB-0 is blocked.
 
 THIS BATCH:
-perform the mandatory takeover reconciliation from `AI Handoff / Bootstrap Protocol`: inspect the exact AgentField diff, preserve only evidence-backed fixes, complete applicable RED->GREEN tests and race/full suites, re-run Codebase Index + Graphify fault-family discovery, perform one BMAD adversarial/edge review, create one exact local tested AgentField commit, validate it against frozen SWE and repeat the same restart fault if restart/process containment changed. Do not run FB-0 in the same batch.
+completed the mandatory takeover OBSERVE/test-design slice without mutating product source: independently re-read `dev/PLAN.md`, `/src/swe-af/AGENTS.md`, relevant `ARCHITECTURE.md`, BMAD `bmad-help` + `bmad-testarch-test-design`; re-read exact AgentField dirty state; used GitHub GraphQL/code/history to sweep the post-base restart/identity/shutdown/stale-state cluster; separated P0 current-path boundaries from P1 topology/lane siblings; and exhaustively tried existing typed execution/capture routes without creating new infrastructure or duplicate source workspaces. No AgentField PASS/GREEN is claimed because executable verification is blocked.
 
 NORTH-STAR DELTA:
-convert the current graph-discovered identity/concurrency work from an uncommitted exploratory state into one independently reproducible owner-source artifact. This removes ambiguity before the autonomous full-Build streak and prevents carrying an unverified supporting-platform delta into acceptance evidence.
+prevented a false transition to FB-0, converted the broad restart/identity concern into an explicit discriminating P0 matrix, and identified the first unresolved owner-layer blocker rather than carrying an incompletely proven platform delta into autonomous acceptance evidence.
 
 STOP CONDITION:
-either the graph-assisted AgentField delta is one exact tested local commit with all applicable P0 identity/concurrency boundaries GREEN and no uncovered critical graph boundary, or the first unresolved owner-layer blocker is captured and becomes the sole next move. Only after fresh write-back may the next AI decide whether FB-0 attempt 5 is again the mandatory gate.
+the second allowed takeover stop condition is met: the **first unresolved owner-layer blocker is captured** — no authorized exact-source test/patch route currently reaches `/tmp/agentfield-f06-fix`. Keep this as the sole next move. Do not start FB-0 and do not publish/deploy the dirty AgentField delta. After the route is restored, resume the same reconciliation gate, obtain RED->GREEN/race/full-suite/graph/restart evidence, and only then decide whether FB-0 attempt 5 is again mandatory.
 
 ## Acceptance Metrics Per Task
 
