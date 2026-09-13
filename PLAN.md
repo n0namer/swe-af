@@ -445,10 +445,10 @@ Decision: do not manually repair this task and do not count it toward production
 
 Purpose: prevent task/config/oracle/operator drift while measuring the first autonomous full-Build streak. This is an operational readiness experiment, not a statistical claim about general SWE reliability.
 
-Frozen stack identity for the streak unless a run exposes a proven framework blocker:
-- SWE target/base: `/tmp/swe-af-fullbuild-current-20260912` at `cdc39105e92937e0085410a656346471b2dc6834` before each task START;
+Frozen stack identity for the streak unless a run exposes a proven framework blocker. Attempt 6 exposed one such blocker, so the stack was amended **before Attempt 7 START** and the streak remains/reset to 0/3:
+- SWE target/base: `/tmp/swe-af-fullbuild-current-20260912` at `6f5b4382e6231721f60be7045b9d91fd85e34fb5` before each task START. This commit is exactly prior baseline `cdc39105e92937e0085410a656346471b2dc6834` plus the two-file OpenCode PM FCM-overlay framework fix and its regression assertion;
 - AgentField exact candidate: `/tmp/agentfield-f06-fix` at `c0923acdfca043c2c07e3d34daaa09e2a7e41d38`;
-- planner artifact: `/tmp/swe-planner-agentfield-c092-20260913`, SHA256 `c923a3653cceddbbc0672f6c6b8b673f3b819ef15751878e255014a9d0732e79`;
+- planner artifact: `/tmp/swe-planner-fb0-6f5b438-c092`, SHA256 `3dc66b5d7f727f1b3e973e8e2fe6b7b29004853d7079f26fa599e13bacab5cd3`;
 - route/model is explicit in every Build request, not inherited from ambient env: `config.runtime="open_code"` and `config.models.default="fcm/fcm"`; this is required because the current workforce has `ANTHROPIC_API_KEY` present while `SWE_DEFAULT_RUNTIME`/model vars and `OPENROUTER_API_KEY` are absent, which otherwise resolves to `claude_code -> sonnet`;
 - frozen Build config for the local streak: `{"runtime":"open_code","models":{"default":"fcm/fcm"},"enable_github_pr":false,"check_ci":false}`. All omitted fields keep exact BuildConfig defaults: replanning ON, issue advisor ON, integration testing ON, deterministic Git ON, learning OFF and bounded native retry/replan/verifier-fix policies;
 - external PR/CI side effects remain OFF for the local streak unless a later task explicitly requires a safe isolated CI surface;
