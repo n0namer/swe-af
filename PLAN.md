@@ -126,7 +126,42 @@ Implementation / verification status:
 5. The original F06 fault was then re-injected on a real full `build` execution `exec_20260912_223956_dfmcy6va` / run `run_20260912_223956_a87y880t`. It was observed `running`, planner PID `548717` received SIGTERM, and the patched planner restarted as PID `548849`. The execution became terminal `failed: context canceled` after ~101 ms and remained terminal at +0.5s/+2s/+5s; old PID was zombie, new PID running, no OpenCode mutator targeted the workspace, and the sacrificial repo stayed clean. The current node record carries a non-empty process `instance_id`.
 6. F06 is therefore **VERIFIED/CLOSED for the current process-only runtime**: restart no longer leaves accepted work stale `running`, and shutdown cancels the active reasoner before a second writer can overlap it. Durable AgentField source publication / normal DEV deployment is still pending and must not be confused with this runtime proof.
 
-Deferred neighboring F07/identity risks exposed by review, not folded into this gate: reject/ignore stale heartbeat/status updates from an old `instance_id`; prevent duplicate execution-ID cancel registration from overwriting an older cancel func; close the narrow shutdown race where a new request could arrive between cancel-all and listener shutdown.
+### AgentField takeover reconciliation — 2026-09-13 fresh BMAD/graph evidence
+
+The F06 **process-only** proof above remains valid for exact local commit `b160245833ec51f5296905c32e49260a62c76e26`, but it no longer closes the broader restart / generation-ownership / stale-state / late-effect fault family. Fresh takeover readback and independent upstream graph analysis reopened that family before FB-0.
+
+CURRENT owner-source readback:
+- `/tmp/agentfield-f06-fix` still exists at HEAD `b160245833ec51f5296905c32e49260a62c76e26` with 12 modified product/test files plus generated `.archsteer/`; the frozen SWE repo remains clean at `cdc39105e92937e0085410a656346471b2dc6834`.
+- The local delta contains the previously described Go cancel-owner ABA test/fix, stale old-instance heartbeat/status guards, shutdown admission/cancellation changes including skills/async reasoners, and Python cancellation edits. Python production edits still have no proven RED and must not be retained merely because they are dirty.
+- BMAD mode is System-Level `bmad-testarch-test-design`; no separate test-plan document is created because this `PLAN.md` is the canonical owner.
+
+Independent GitHub GraphQL/code search against `Agent-Field/agentfield` proved that the deployed/frozen AgentField base `4d337c1ae5104418311fcba414a1c2f85c2abb89` (2026-08-24) predates a cluster of merged fixes for the same fault family:
+- PR #1000 / `93994097fabc8999259afe6c10431a64e0437fca`: Go/TS graceful shutdown drains control-plane-dispatched executions under `AGENTFIELD_SHUTDOWN_TIMEOUT`; accepted async work is tracked, drained, then cancelled+settled on deadline.
+- PR #1001 / `9a517debd0eac5b0e01c07328a1b1c3c827cc583`: **async control-plane lane** rejects before persistence and drains/fails queued async jobs on control-plane shutdown. This is directly relevant because SWE-AF uses the async execution API.
+- PR #1004 / `c477f6d3263542ff872805918bfb40941edd5bf7`: executions/workflow executions are stamped with serving `instance_id`; re-registration orphan cleanup becomes instance-scoped and deferred through a drain window. The frozen base stores only `agent_node_id`, so it cannot distinguish old vs replacement execution generations during reap.
+- PR #1011 / `b01e8315dee590f9dd6d50d939e66c08c80a5766`: adversarial follow-up restores Go SDK **notify-then-drain** ordering; setting shutdown admission too early could reject work arriving during the control-plane notify and turn it into a non-retryable failure.
+- PR #1046 / `78215f17ac762d12729177d17292aeb6ad960800`: stale workflow cleanup must consult the paired execution activity clock. Upstream reproduced live heartbeats followed by premature workflow reap and late completion HTTP 409. SWE runs have already lasted ~35–45 minutes, so this boundary is P0-risk until CURRENT cleanup applicability is executable-read back.
+
+Neighboring but not automatically current-path P0:
+- PR #1031 / `2d7fc7264a7aaf5dd36fa4ed05ad55f8a297e117` adds a multi-replica orphan-reap kill switch because a new `instance_id` may be a sibling replica rather than a replacement. CURRENT workforce compose readback shows `container_number=1`, so keep this P1 unless replica topology changes.
+- PR #1033 / `2638b9e92a1f9ee6c6f9a3cd223da231bf1ece86` extends admit-before-persist / shutdown terminalization to sync, restart and MCP lanes. Its own contract states the async lane was already protected by #1001; retain as sibling regression coverage, not an excuse for a broad upgrade.
+
+P0 test-design matrix for reconciliation (a test must discriminate broken vs working behavior):
+1. Go process `instance_id`: stable within one Agent process, unique across processes, present on registration + heartbeat wire payload.
+2. Go in-process cancel ownership: duplicate execution ID cannot let an older release remove the newest generation owner.
+3. stale process messages: old/missing instance heartbeat/status cannot mutate a modern replacement after ownership changes; legacy compatibility must be explicit rather than accidental.
+4. Go shutdown: accepted async reasoner/skill work is tracked; notify/admission/drain ordering is race-safe; deadline cancellation settles terminal status; no post-shutdown untracked owner is admitted.
+5. control-plane async shutdown/admission: queue/capacity rejection persists zero execution/effect state; pool shutdown terminalizes already-persisted accepted work rather than abandoning `running` rows.
+6. persisted execution generation: execution + workflow rows carry serving `instance_id`; orphan reap targets only the departing generation (plus explicitly supported legacy rows), not the replacement.
+7. stale cleanup: recent activity on the paired execution prevents workflow reap; genuinely stale pairs still converge terminally.
+8. real restart fault: SIGTERM/restart on frozen SWE produces one terminal outcome, zero overlapping OpenCode mutator and clean workspace; tested identity = exercised identity.
+
+CURRENT validation/capability blocker:
+- Codebase Index and Graphify are present in the workforce but current operator mediation blocks executing their binaries; the typed Octocode research lane is unavailable due `octocode_version_mismatch` (expected 18.3.0); AgentField capability discovery returns `Bad Gateway`.
+- Exact owner clone `/tmp/agentfield-f06-fix` is outside the registered DEV live-patch roots. Generic `go test` / managed-session execution on that clone is blocked by operator mediation; Coding Station readiness/inventory timed out; SourceLoop journal for `agentfield-dev-workforce` contains `/src/swe-af` changes but no capture/write route for the `/tmp/agentfield-f06-fix` owner clone.
+- Therefore executable RED/GREEN, source mutation, final graph re-index and an exact tested AgentField commit cannot be honestly completed through the CURRENT callable surface. This is `VALIDATION_BLOCKER` / `CAPABILITY_GAP`, not an application-test failure and not permission to use GitHub-edit -> redeploy or create a duplicate source workspace.
+
+Takeover gate verdict: **NOT CLOSED**. FB-0 remains blocked. The first unresolved owner-layer blocker is now the absence of an authorized exact-source test/patch route for `/tmp/agentfield-f06-fix`; once that route exists, reconcile the P0 matrix above against the exact frozen base/local delta, using the upstream commits only as fault/evidence references rather than performing a speculative wholesale upgrade.
 
 ### Test coverage / risk-based gap audit
 
