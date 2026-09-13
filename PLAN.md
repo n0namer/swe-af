@@ -570,7 +570,7 @@ Use one bounded reconciliation batch:
 6. validate the exact AgentField candidate against frozen SWE via local module replace/full Go suite and, if the change affects restart/process containment, repeat the same real F06 fault injection before calling it VERIFIED;
 7. write exact files/tests/commands/commit/runtime evidence back into this `PLAN.md`, refresh anti-drift, and only then choose the next gate from fresh evidence.
 
-Takeover STOP CONDITION: either the graph-assisted AgentField delta is reduced to one exact tested local commit with all applicable P0 identity/concurrency invariants GREEN and no uncovered critical boundary, or the first unresolved owner-layer blocker is captured and becomes the sole next move. Do not combine reconciliation with FB-0 execution in the same batch.
+Takeover STOP CONDITION: **SATISFIED** at exact clean AgentField commit `c0923acdfca043c2c07e3d34daaa09e2a7e41d38`, with applicable P0 identity/concurrency/restart invariants GREEN, frozen SWE compatibility PASS, and real hard-crash + SIGTERM runtime proof complete. FB-0 remains intentionally a separate next batch.
 
 ## Engineering Method for 30-Minute Batches
 
