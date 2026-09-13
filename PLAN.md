@@ -41,6 +41,7 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
   - NORTH-STAR DELTA
   - STOP CONDITION
 - STOP_SIDEQUEST if work does not materially shorten the path to independently accepted SWE tasks.
+- **Native architecture maximization:** for any active fault family, prefer and exercise the full relevant SWE-AF + AgentField mechanisms already present in the architecture before introducing narrower local substitutes. A local fix is insufficient if the native lifecycle/identity/persistence/recovery/validation primitive that owns the risk is available but bypassed. “Maximum use” means maximum *relevant* native capability, not enabling unrelated features for ceremony. End-to-end acceptance must prove the relevant native mechanisms compose correctly across SWE-AF, AgentField, SourceLoop/FVE, canonical validators and independent oracles.
 
 ## CURRENT — 2026-09-13
 
