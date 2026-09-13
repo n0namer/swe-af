@@ -191,7 +191,7 @@ Historical adversarial/edge findings — resolved or explicitly dispositioned be
 15. `.archsteer/` is generated analysis output and must be excluded from the exact product commit.
 16. No fresh race/full-suite executable evidence exists for the dirty delta; the earlier GREEN for `b1602458...` cannot be inherited by these later changes.
 
-Local-delta disposition until executable RED/GREEN is restored:
+Historical local-delta disposition before c092 closure (superseded by the exact tested commit and runtime proof):
 - **candidate to keep after re-test:** Go cancel-registration pointer ownership / duplicate-ID ABA fix;
 - **must redesign before acceptance:** Go shutdown/admission code, using `notify -> close admission -> drain -> deadline cancel -> settlement` rather than the current early-close behavior;
 - **hold for explicit compatibility oracle:** stale heartbeat/status handling when incoming `instance_id` is missing;
