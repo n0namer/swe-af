@@ -559,7 +559,7 @@ CURRENT handoff readback at the end of the takeover batch:
 
 The AgentField takeover is complete. The next operator must re-observe clean repo/mutator/runtime preconditions and then execute FB-0 attempt 5; do not reopen the takeover without new evidence from FB-0 or a changed topology/runtime.
 
-### Takeover batch — required DoD
+### Takeover batch — COMPLETED DoD (historical checklist)
 
 Use one bounded reconciliation batch:
 1. inspect `git diff` in `/tmp/agentfield-f06-fix`; classify each delta by fault-family/boundary and discard only unsupported/accidental changes, preserving proven work;
