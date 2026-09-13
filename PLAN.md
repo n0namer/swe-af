@@ -263,7 +263,7 @@ Quality gates:
 
 Entry criteria for resilience testing: exact tested source/runtime identity, isolated sacrificial workspace, zero pre-existing mutating child on target, planner/control-plane reachable. Exit criteria: all P0 families have a discriminating contract at every applicable critical boundary, plus at least one real fault-injection proof for each external async boundary.
 
-Immediate mandatory gate: **FB-0 full-Build attempt 5** on frozen baseline `cdc39105e92937e0085410a656346471b2dc6834` with process-only planner `/tmp/swe-planner-f06-sdk-20260913` (SHA256 `581862f59722400ee0999176339dfb99f8dc67cd7901bf39d9861caa5df4d4`). F06 is verified on CURRENT runtime; do not divert into durable AgentField publication before the autonomous full-Build critical path unless a fresh runtime defect requires it.
+Immediate mandatory gate: **AgentField takeover reconciliation remains P0; FB-0 attempt 5 is blocked.** The process-only F06 proof is still valid, but fresh BMAD/GraphQL fault-family discovery proved additional post-base boundaries on the active async/restart path that `b1602458...` does not cover. Close the takeover matrix to one exact tested local AgentField commit (or capture the first unresolved owner-layer blocker) before returning to frozen baseline `cdc39105e92937e0085410a656346471b2dc6834` and FB-0.
 
 ### Acceptance evidence
 
