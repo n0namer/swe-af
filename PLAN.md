@@ -422,6 +422,54 @@ If this becomes the proven blocker, first deterministic RED tests must cover:
 
 No implementation closes without a deterministic test for every guarantee.
 
+## AI Handoff / Bootstrap Protocol
+
+This section is the mandatory bootstrap for any new AI/operator taking over the project. The handoff text or chat history is **not** authoritative by itself: first reconcile this `PLAN.md` against CURRENT runtime/readback and only then continue.
+
+### Authority / reading order
+
+Read only what is needed, in this order:
+1. **This file first:** `n0namer/swe-af`, branch `dev`, `PLAN.md`. Extract Global North Star, CURRENT, active gate, DoD, anti-drift and Current Next Move.
+2. **Local execution rules before mutation:** `/src/swe-af/AGENTS.md`; if touching another owner repo/workspace, read its nearest `AGENTS.md` and root `ERRORS.md` when present.
+3. **Architecture only for decisions that need it:** `/src/swe-af/docs/ARCHITECTURE.md`. Do not let runtime accidents redefine architecture; runtime readback owns actual state, architecture/SoT owns intended design.
+4. **BMAD entrypoint:** canonical `n0namer/BMAD-MNNZ/.agents/skills/bmad-help/SKILL.md`. BMAD-MNNZ is rules/skills only, never project SoT. From `bmad-help`, load exactly the specialized skill needed for the current gate (typically `bmad-testarch-test-design` for fault/risk design, `bmad-quick-dev` for a proven bounded source fix, then adversarial/edge review once).
+5. **CURRENT runtime/readback:** verify live source identity, dirty state, exact loaded planner binary/PID, planner registration/`instance_id`, target workspace cleanliness, live OpenCode mutators, control-plane execution state, and exact tested artifacts. Never assume PIDs, `/tmp` artifacts, health, or execution state survived from this document.
+6. **Supporting owner source only if the active blocker requires it:** current AgentField work has been container-local at `/tmp/agentfield-f06-fix`, based on deployed AgentField SHA `4d337c1ae5104418311fcba414a1c2f85c2abb89`. If that path is absent, reconstruct from the exact deployed/source identity; do not guess from latest upstream.
+7. **External code-graph tools if present:** Codebase Index `/tmp/tools-codebase-index`, Graphify `/tmp/tools-graphify`, ArchSteer `/tmp/tools-archsteer`. Reuse them before installing alternatives. Codebase Index + Graphify are the primary Go fault-boundary discovery tools; ArchSteer is useful as an architecture/governance view but is not authoritative for Go coverage.
+
+### North Star to preserve
+
+Bring SWE/SWE-AF to a genuinely autonomous end-to-end engineering system that can take a real task, localize and edit the correct source, validate it canonically, repair bounded failures by itself, recover across interruption without duplicate effects, produce an exact deliverable, and pass an independent executable oracle. Production evidence is the **full `orch.Build` lifecycle**, not `implement_issue`, reviewer prose, HTTP health, or a commit existing. First milestone is a fresh **3/3 consecutive independently accepted full-Build streak**, then materialize the exact accepted source and replay on a clean runtime.
+
+### Mandatory takeover reconciliation before any new mutation
+
+The next AI must independently verify these facts instead of trusting this prose:
+- canonical SoT is still this `dev/PLAN.md` and no newer explicit project decision supersedes it;
+- `/src/swe-af` actual source/dirty state and frozen sacrificial baseline are what CURRENT says;
+- current planner/process/control-plane identity is fresh and the target workspace has zero pre-existing mutators;
+- F06 process-identity/restart fix evidence remains reproducible and no later runtime change invalidated it;
+- `/tmp/agentfield-f06-fix` CURRENT HEAD and working-tree delta are inspected before deciding whether FB-0 can resume.
+
+At the time this handoff section was written, fresh readback showed:
+- `/tmp/agentfield-f06-fix` HEAD = `b160245833ec51f5296905c32e49260a62c76e26` with **additional uncommitted graph-assisted changes** in Go SDK cancellation/shutdown code, control-plane heartbeat/status identity guards/tests, and Python cancellation files/tests; `.archsteer/` is generated analysis output and must not be treated as product source;
+- `/tmp/swe-af-fullbuild-current-20260912` remained clean on `fullbuild-current-baseline-20260912`;
+- planner PID `548849` still existed at readback, but every takeover must re-check rather than reuse that PID as truth.
+
+Therefore the takeover must **not** jump directly to FB-0 until it reconciles and closes or reverts the uncommitted AgentField delta with evidence.
+
+### Takeover batch — required DoD
+
+Use one bounded reconciliation batch:
+1. inspect `git diff` in `/tmp/agentfield-f06-fix`; classify each delta by fault-family/boundary and discard only unsupported/accidental changes, preserving proven work;
+2. rerun the discriminating tests for the graph-found identity/concurrency family: process `instance_id` propagation/stability, restart reap, stale old-instance status/heartbeat rejection, duplicate execution-ID cancel ownership, shutdown admission/cancellation including skills/async reasoners, plus any cross-language sibling test that actually has a RED oracle;
+3. run targeted `-race` where applicable, full AgentField Go SDK suite, relevant control-plane handler suite, Python targeted suite if changed, and `git diff --check`; do not call missing dependencies an application failure;
+4. re-index the final exact AgentField source with Codebase Index + Graphify and repeat the same fault-family search. Do not add duplicate tests where terminal-state/row-lock/PID/owner guards already have a discriminating oracle; add RED->GREEN only for a genuinely uncovered critical boundary;
+5. run one BMAD adversarial/edge review on the final delta, triage findings once, then create a **local-only exact tested commit** in the owner clone. Do not publish/deploy merely to debug;
+6. validate the exact AgentField candidate against frozen SWE via local module replace/full Go suite and, if the change affects restart/process containment, repeat the same real F06 fault injection before calling it VERIFIED;
+7. write exact files/tests/commands/commit/runtime evidence back into this `PLAN.md`, refresh anti-drift, and only then choose the next gate from fresh evidence.
+
+Takeover STOP CONDITION: either the graph-assisted AgentField delta is reduced to one exact tested local commit with all applicable P0 identity/concurrency invariants GREEN and no uncovered critical boundary, or the first unresolved owner-layer blocker is captured and becomes the sole next move. Do not combine reconciliation with FB-0 execution in the same batch.
+
 ## Engineering Method for 30-Minute Batches
 
 BMAD:
