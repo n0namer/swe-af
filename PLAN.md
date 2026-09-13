@@ -157,12 +157,14 @@ P0 test-design matrix for reconciliation (a test must discriminate broken vs wor
 7. stale cleanup: recent activity on the paired execution prevents workflow reap; genuinely stale pairs still converge terminally.
 8. real restart fault: SIGTERM/restart on frozen SWE produces one terminal outcome, zero overlapping OpenCode mutator and clean workspace; tested identity = exercised identity.
 
-CURRENT validation/capability blocker:
-- Codebase Index and Graphify are present in the workforce but current operator mediation blocks executing their binaries; the typed Octocode research lane is unavailable due `octocode_version_mismatch` (expected 18.3.0); AgentField capability discovery returns `Bad Gateway`.
-- Exact owner clone `/tmp/agentfield-f06-fix` is outside the registered DEV live-patch roots. Generic `go test` / managed-session execution on that clone is blocked by operator mediation; Coding Station readiness/inventory timed out; SourceLoop journal for `agentfield-dev-workforce` contains `/src/swe-af` changes but no capture/write route for the `/tmp/agentfield-f06-fix` owner clone.
-- Therefore executable RED/GREEN, source mutation, final graph re-index and an exact tested AgentField commit cannot be honestly completed through the CURRENT callable surface. This is `VALIDATION_BLOCKER` / `CAPABILITY_GAP`, not an application-test failure and not permission to use GitHub-edit -> redeploy or create a duplicate source workspace.
+CURRENT validation/capability state:
+- Exact owner clone `/tmp/agentfield-f06-fix` is now an authorized and exercised container-first route. DEV target `agentfield-dev-workforce` covers the clone for stale-safe patch/test work; ordinary `vps-terminal` was independently proven to provide the bounded local Git write path needed for cleanup/staging/commit on the same target. Coding Station is **not** on the critical path.
+- Unsupported Python ABA experiment files were restored to HEAD; generated `.archsteer/` and the in-repo temporary patch artifact were removed; the exact candidate contains only the proven Go/control-plane delta plus migration `035_execution_instance_id.sql`.
+- Fresh exact-tree validators before commit: `go test ./internal/storage ./internal/handlers ./internal/server -count=1` PASS, full `sdk/go` `go test ./... -count=1` PASS, `git diff --check` PASS, staged `git diff --cached --check` PASS.
+- One local-only exact AgentField commit now exists: `c0923acdfca043c2c07e3d34daaa09e2a7e41d38` (`fix(agentfield): harden restart generation and stale-state recovery`), 27 files, 1,163 insertions / 133 deletions, including migration `035_execution_instance_id.sql`; post-commit `git status --short` is clean.
+- Targeted `-race` remains an environment validator limitation rather than a product failure: legacy `boltdb/bolt@v1.3.1` trips Go checkptr before the target test, while `-race` with checkptr disabled exceeds the 120s execution ceiling without verdict.
 
-Takeover gate verdict: **NOT CLOSED**. FB-0 remains blocked. The first unresolved owner-layer blocker is now the absence of an authorized exact-source test/patch route for `/tmp/agentfield-f06-fix`; once that route exists, reconcile the P0 matrix above against the exact frozen base/local delta, using the upstream commits only as fault/evidence references rather than performing a speculative wholesale upgrade.
+Takeover gate verdict: **BEHAVIOR MATRIX CLOSED LOCALLY; EXACT CANDIDATE CREATED**. FB-0 remains blocked only until this exact AgentField commit is validated against frozen SWE and the real F06 SIGTERM/restart fault is re-injected with tested identity = exercised identity.
 
 #### BMAD quick-dev + adversarial/edge reconciliation — 2026-09-13
 
