@@ -242,7 +242,7 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		Tools:          codingTools,
 		PermissionMode: in.PermissionMode,
 		SystemPrompt:   tools.MaybeApplyCoderGuardrail(prompts.CoderSystemPrompt),
-		Cwd:            in.WorktreePath,
+		Cwd:            resolveCoderCwd(in.WorktreePath, in.Issue),
 	}.ToOptions()
 
 	parsed, result, hErr := harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
