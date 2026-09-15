@@ -365,6 +365,13 @@ func TestScrubUntracksAgentCommittedJunk(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(pycache, "m.cpython-312.pyc"), []byte{0}, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	agentOut := filepath.Join(worktree, "go", ".agentfield-out-123", ".agentfield_output.json")
+	if err := os.MkdirAll(filepath.Dir(agentOut), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(agentOut, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	gitT(t, worktree, "add", "-A", ".")
 	gitT(t, worktree, "commit", "-q", "-m", "agent committed junk")
 
@@ -372,7 +379,7 @@ func TestScrubUntracksAgentCommittedJunk(t *testing.T) {
 	if err != nil || sha == "" {
 		t.Fatalf("scrub: sha=%q err=%v", sha, err)
 	}
-	if tracked := gitT(t, worktree, "ls-files"); strings.Contains(tracked, "__pycache__") {
+	if tracked := gitT(t, worktree, "ls-files"); strings.Contains(tracked, "__pycache__") || strings.Contains(tracked, ".agentfield-out-") {
 		t.Errorf("junk still tracked:\n%s", tracked)
 	}
 	if again, err := scrubTrackedJunk(worktree, "junk-issue"); err != nil || again != "" {
