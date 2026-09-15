@@ -638,6 +638,16 @@ the operator-side debug-clone capability is now executable rather than hypotheti
 STOP CONDITION:
 do not weaken `/opt/reconcile_dev_workspace.sh`, do not create a substitute validator/service, do not mutate SWE semantics before a real F16 RED, and do not repeat lifecycle calls without fresh post-state. First re-observe the already-queued AgentField DEV lifecycle action. If the declared workforce source appears, immediately call `prepareDebugClone(agentfield-dev-workforce,/src)`, execute the approved TTL clone, prove exact `/src/swe-af` + `/usr/local/go/bin/go`, and run the corrupt-checkpoint discriminator. If the owner lifecycle completes yet workforce remains absent, classify that exact compose/source-generation recovery boundary before changing operator code.
 
+## SourceLoop integration model — 2026-09-15
+
+- `dev` is the single long-lived downstream integration line. `main` remains the clean upstream mirror per `AGENTS.md`; PROD/release identity is an exact accepted SHA/tag, not a moving branch.
+- SourceLoop logical patch identity is durable provenance, not a Git branch. New verified runtime deltas become ordered logical patches and replay into `dev`; do not create a permanent `sourceloop/<patch>` branch for each new change.
+- Upstream sync uses a temporary replay worktree/branch: start from the fresh upstream-derived `dev` base, replay ACTIVE logical patches in order, classify each `REPLAYED`, `SUPERSEDED_BY_UPSTREAM`, or `CONFLICT`, run its regression, then advance `dev` only after the replay batch is accepted. Retire the temporary replay surface afterwards.
+- Existing `sourceloop/*` branches are legacy recovery/evidence until their logical identities and generations are durably represented; do not delete them before migration evidence exists.
+- `resume_build_id` was semantically replayed from original base `6f5b4382e6231721f60be7045b9d91fd85e34fb5` onto the current `dev` generation. Obsolete `expected_base_sha` and old Python-venv context were intentionally not resurrected. `TestResumeBuildIDReusesExistingIssueWorktree` PASS and `go test ./internal/issue ./internal/node -count=1` PASS.
+- Legacy Architect/OpenCode patch is `PARTIALLY_SUPERSEDED / HOLD`: current `dev` commit `84d11f0` centrally sets `SchemaMode=incremental` for every OpenCode `RoleOptions.ToOptions()`, superseding the old per-Architect schema-mode implementation. The former `OpenCodeNoInstallPermissionOverlay` API is absent on current `dev`; do not resurrect that stale API without fresh evidence proving an overlay is still required. The legacy branch remains evidence.
+- Full `go test ./... -count=1` on the replay worktree stops at `internal/dag TestLevelFailureThresholdAborts` (`expected 2 coder calls, got 10`). The same targeted test fails identically on clean `origin/dev@dc39e0ff...`; classify this as pre-existing baseline validation debt, not a SourceLoop replay regression.
+
 ## Acceptance Metrics Per Task
 
 Record:
