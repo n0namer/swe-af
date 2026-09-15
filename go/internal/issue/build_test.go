@@ -379,7 +379,7 @@ func TestScrubUntracksAgentCommittedJunk(t *testing.T) {
 	if err != nil || sha == "" {
 		t.Fatalf("scrub: sha=%q err=%v", sha, err)
 	}
-	if tracked := gitT(t, worktree, "ls-files"); strings.Contains(tracked, "__pycache__") {
+	if tracked := gitT(t, worktree, "ls-files"); strings.Contains(tracked, "__pycache__") || strings.Contains(tracked, ".agentfield-out-") {
 		t.Errorf("junk still tracked:\n%s", tracked)
 	}
 	if again, err := scrubTrackedJunk(worktree, "junk-issue"); err != nil || again != "" {
