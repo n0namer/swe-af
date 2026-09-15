@@ -101,7 +101,7 @@ func hasCommitIdentity(repoPath string) bool {
 // issue branch. The coder runs tests inside the worktree, so these appear as
 // a side effect and an indiscriminate `git add` (ours or the coder's) would
 // sweep them in. Ports git_ops._JUNK_PATHSPECS.
-var junkPathspecs = []string{"*__pycache__*", "*.pyc", "*.pyo"}
+var junkPathspecs = []string{"*__pycache__*", "*.pyc", "*.pyo", "*agentfield-out-*/*"}
 
 // commitIndex commits whatever is staged. Returns the sha, or "" when the
 // index is clean. Ports git_ops._commit_index.
