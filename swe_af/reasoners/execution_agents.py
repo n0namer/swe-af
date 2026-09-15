@@ -1275,7 +1275,7 @@ async def run_qa_synthesizer(
         # validated schema instance itself — there is no .parsed wrapper.
         if isinstance(result, QASynthesisResult):
             router.note(
-                f"QA synthesizer complete: action={result.action}, "
+                f"QA synthesizer complete: action={result.action.value}, "
                 f"stuck={result.stuck}",
                 tags=["qa_synthesizer", "complete"],
             )
@@ -1682,45 +1682,46 @@ async def run_ci_fixer(
             permission_mode=permission_mode or None,
         )
         check_fatal_harness_error(result)
-if result.parsed is not None:
+        if result.parsed is not None:
             router.note(
-                f"CI fixer complete: ... "
+                f"CI fixer complete: fixed={result.parsed.fixed}, "
                 f"pushed={result.parsed.pushed}, "
-                ... file(s) changed",
+                f"{len(result.parsed.files_changed)} file(s) changed",
                 tags=["ci_fixer", "complete"],
             )
             return result.parsed.model_dump()
-        except FatalHarnessError:
-            raise
-        except Exception as e:
-            router.note(
-                f"CI fixer agent failed: {e}",
-                tags=["ci_fixer", "error"],
-            )
+    except FatalHarnessError:
+        raise
+    except Exception as e:
+        router.note(
+            f"CI fixer agent failed: {e}",
+            tags=["ci_fixer", "error"],
+        )
 
-        return CIFixResult(
-            fixed=False,
-            summary="CI fixer agent failed to produce a valid result.",
-            error_message="CI fixer agent failed to produce a valid result.",
-        ).model_dump()
+    return CIFixResult(
+        fixed=False,
+        summary="CI fixer agent failed to produce a valid result.",
+        error_message="CI fixer agent failed to produce a valid result.",
+    ).model_dump()
 
-    @internal_role(router, "ci")
-    async def run_pr_resolver(
-        repo_path: str,
-        pr_number: int,
-        pr_url: str,
-        head_branch: str,
-        base_branch: str,
-        merge_state: str = "skipped",
-        conflicted_files: list[str] | None = None,
-        failed_checks: list[dict] | None = None,
-        review_comments: list[dict] | None = None,
-        goal: str = "",
-        additional_context: str = "",
-        model: str = "sonnet",
-        permission_mode: str = "",
-        ai_provider: str = "claude",
-    ) -> dict:
+
+@internal_role(router, "ci")
+async def run_pr_resolver(
+    repo_path: str,
+    pr_number: int,
+    pr_url: str,
+    head_branch: str,
+    base_branch: str,
+    merge_state: str = "skipped",
+    conflicted_files: list[str] | None = None,
+    failed_checks: list[dict] | None = None,
+    review_comments: list[dict] | None = None,
+    goal: str = "",
+    additional_context: str = "",
+    model: str = "sonnet",
+    permission_mode: str = "",
+    ai_provider: str = "claude",
+) -> dict:
     """Resolve an open PR: complete an in-progress merge, fix CI, address comments, push.
 
     The agent is started with the working tree already on the PR's head
