@@ -295,6 +295,50 @@ func TestCreatesBranchAndLeavesCallerUntouched(t *testing.T) {
 	}
 }
 
+func TestDeclaredFileScopeRejectsOutOfScopeMutation(t *testing.T) {
+	repo := initRepo(t)
+	rec := &recorder{}
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		rec.add(target)
+		name := target[strings.LastIndex(target, ".")+1:]
+		switch name {
+		case "run_coder":
+			worktree, _ := kwargs["worktree_path"].(string)
+			if err := os.WriteFile(filepath.Join(worktree, "feature.py"), []byte("VALUE = 1\n"), 0o644); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(filepath.Join(worktree, "extra.py"), []byte("EXTRA = true\n"), 0o644); err != nil {
+				return nil, err
+			}
+			gitT(t, worktree, "add", "feature.py", "extra.py")
+			gitT(t, worktree, "commit", "-q", "-m", "feat: coder widened scope")
+			return map[string]any{"files_changed": []any{"feature.py", "extra.py"}, "summary": "done", "complete": true}, nil
+		case "run_code_reviewer":
+			return map[string]any{"approved": true, "blocking": false, "summary": "LGTM"}, nil
+		default:
+			return nil, fmt.Errorf("unexpected call target after scope violation: %s", target)
+		}
+	}
+
+	result := runImplement(t, repo, callFn, map[string]any{
+		"issue": map[string]any{
+			"title":           "Scoped feature",
+			"description":     "Modify only the declared file.",
+			"files_to_modify": []any{"feature.py"},
+		},
+		"config": map[string]any{"verify": true, "keep_worktree": true},
+	})
+	if result["success"] != false || result["outcome"] != "failed_unrecoverable" {
+		t.Fatalf("scope violation result = success %v outcome %v", result["success"], result["outcome"])
+	}
+	if msg, _ := result["error_message"].(string); !strings.Contains(msg, "extra.py") || !strings.Contains(msg, "out-of-scope") {
+		t.Fatalf("scope violation error_message = %q", msg)
+	}
+	if strings.Contains(strings.Join(rec.names(), ","), "run_verifier") {
+		t.Fatalf("verifier should not run after deterministic scope violation: %v", rec.names())
+	}
+}
+
 func TestUncommittedCoderWorkGetsCheckpointCommit(t *testing.T) {
 	repo := initRepo(t)
 	rec := &recorder{}
