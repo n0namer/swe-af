@@ -443,6 +443,14 @@ func RunArchitect(ctx context.Context, deps *Deps, input map[string]any) (any, e
 	if err != nil {
 		return nil, err
 	}
+	schemaMode := ""
+	var roleEnv map[string]string
+	if provider == "opencode" {
+		schemaMode = "incremental"
+		roleEnv = map[string]string{
+			"OPENCODE_CONFIG_CONTENT": harnessx.OpenCodeNoInstallPermissionOverlay,
+		}
+	}
 	opts := harnessx.RoleOptions{
 		Provider:       provider,
 		Model:          model,
@@ -451,6 +459,8 @@ func RunArchitect(ctx context.Context, deps *Deps, input map[string]any) (any, e
 		PermissionMode: permissionMode,
 		SystemPrompt:   systemPrompt,
 		Cwd:            repoPath,
+		Env:            roleEnv,
+		SchemaMode:     schemaMode,
 	}.ToOptions()
 	parsed, res, err := harnessx.Run[schemas.Architecture](ctx, deps.Harness, taskPrompt, opts)
 	if err != nil {
