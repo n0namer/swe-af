@@ -327,6 +327,13 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		filesChanged = changedFiles(repoPath, baseSHA, branch)
 		stat = diffStat(repoPath, baseSHA, branch)
 
+		if violations := declaredScopeViolations(spec, filesChanged); len(violations) > 0 {
+			outcomeValue = "failed_unrecoverable"
+			errorMessage = fmt.Sprintf("out-of-scope files changed: %s", strings.Join(violations, ", "))
+			loopSummary = errorMessage
+			deps.note(ctx, errorMessage, "issue_build", "scope", "error")
+		}
+
 		codingOK := completedOutcomes[outcomeValue]
 		if cfg.Verify && codingOK && len(commits) > 0 {
 			verification = runVerification(ctx, deps, cfg, execCfg, spec, planned,
