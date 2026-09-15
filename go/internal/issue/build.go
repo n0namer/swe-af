@@ -58,6 +58,7 @@ type implementInput struct {
 	RepoPath          string         `json:"repo_path"`
 	BaseBranch        string         `json:"base_branch"`
 	ExpectedBaseSHA   string         `json:"expected_base_sha"`
+	ResumeBuildID     string         `json:"resume_build_id"`
 	ArtifactsDir      string         `json:"artifacts_dir"`
 	AdditionalContext string         `json:"additional_context"`
 	Config            map[string]any `json:"config"`
@@ -138,6 +139,17 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 	}
 
 	buildID := newBuildID()
+	resuming := false
+	if in.ResumeBuildID != "" {
+		if len(in.ResumeBuildID) != 8 {
+			return nil, fmt.Errorf("implement_issue: invalid resume_build_id %q", in.ResumeBuildID)
+		}
+		if _, err := hex.DecodeString(in.ResumeBuildID); err != nil {
+			return nil, fmt.Errorf("implement_issue: invalid resume_build_id %q", in.ResumeBuildID)
+		}
+		buildID = in.ResumeBuildID
+		resuming = true
+	}
 	branch := cfg.BranchPrefix + buildID + "-" + plannedName
 	worktreePath := filepath.Join(repoPath, ".worktrees", buildID+"-"+plannedName)
 	var absArtifacts string
@@ -150,12 +162,27 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		return nil, err
 	}
 
-	if err := addWorktree(repoPath, worktreePath, branch, baseSHA); err != nil {
+	if resuming {
+		if info, err := os.Stat(worktreePath); err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("implement_issue: resume worktree missing for build %s", buildID)
+		}
+		gotBranch, err := currentBranch(worktreePath)
+		if err != nil || gotBranch != branch {
+			return nil, fmt.Errorf("implement_issue: resume worktree branch mismatch: got %q, want %q", gotBranch, branch)
+		}
+		if _, _, code := runGit(repoPath, "merge-base", "--is-ancestor", baseSHA, branch); code != 0 {
+			return nil, fmt.Errorf("implement_issue: resume branch %s is not based on %s", branch, baseSHA)
+		}
+		deps.note(ctx, fmt.Sprintf("Issue build %s: resuming existing worktree %s", buildID, worktreePath),
+			"issue_build", "resume")
+	} else if err := addWorktree(repoPath, worktreePath, branch, baseSHA); err != nil {
 		return nil, err
 	}
 	if venvPath, created, err := ensurePythonVirtualenv(worktreePath); err != nil {
-		removeWorktree(repoPath, worktreePath)
-		deleteBranch(repoPath, branch)
+		if !resuming {
+			removeWorktree(repoPath, worktreePath)
+			deleteBranch(repoPath, branch)
+		}
 		return nil, err
 	} else if created {
 		deps.note(ctx, fmt.Sprintf("Issue build %s: bootstrapped Python virtualenv at %s", buildID, venvPath),
@@ -172,8 +199,10 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 
 	execCfg, err := config.LoadExecutionConfig(cfg.ToExecutionRaw())
 	if err != nil {
-		removeWorktree(repoPath, worktreePath)
-		deleteBranch(repoPath, branch)
+		if !resuming {
+			removeWorktree(repoPath, worktreePath)
+			deleteBranch(repoPath, branch)
+		}
 		return nil, err
 	}
 	dagState := &schemas.DAGState{
@@ -212,8 +241,11 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		}
 	}
 	if loopErr != nil && ctx.Err() != nil {
-		// Context cancellation propagates (Python does not catch CancelledError).
-		removeWorktree(repoPath, worktreePath)
+		// Context cancellation propagates. A resumed build preserves its existing
+		// worktree so a later explicit continuation cannot lose partial state.
+		if !resuming {
+			removeWorktree(repoPath, worktreePath)
+		}
 		return nil, loopErr
 	}
 	if loopErr != nil {
@@ -289,11 +321,12 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		}
 	}
 
-	if !cfg.KeepWorktree {
+	if !cfg.KeepWorktree && !resuming {
 		removeWorktree(repoPath, worktreePath)
 	}
-	if len(commits) == 0 {
-		// A branch with zero commits is pure noise for the caller.
+	if len(commits) == 0 && !resuming {
+		// A fresh branch with zero commits is pure noise for the caller. A resumed
+		// branch may contain the only copy of partial work and must be preserved.
 		deleteBranch(repoPath, branch)
 	}
 

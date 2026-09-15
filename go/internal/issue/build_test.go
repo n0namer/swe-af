@@ -305,10 +305,10 @@ func TestResumeBuildIDReusesExistingIssueWorktree(t *testing.T) {
 		case "run_coder":
 			got, _ := kwargs["worktree_path"].(string)
 			if got != worktree {
-				t.Fatalf("coder worktree = %q, want resume %q", got, worktree)
+				return nil, fmt.Errorf("coder worktree = %q, want resume %q", got, worktree)
 			}
 			if _, err := os.Stat(filepath.Join(got, "partial.py")); err != nil {
-				t.Fatalf("partial state lost on resume: %v", err)
+				return nil, fmt.Errorf("partial state lost on resume: %w", err)
 			}
 			gitT(t, got, "add", "partial.py")
 			gitT(t, got, "commit", "-q", "-m", "finish resumed issue")
@@ -341,7 +341,7 @@ func TestResumeBuildIDReusesExistingIssueWorktree(t *testing.T) {
 	if result["build_id"] != buildID || result["branch"] != branch {
 		t.Fatalf("resume identity = build %v branch %v, want %s / %s", result["build_id"], result["branch"], buildID, branch)
 	}
-	if got := strings.Fields(gitT(t, repo, "branch", "--list", "issue/*")); len(got) != 1 {
+	if got := strings.Fields(gitT(t, repo, "branch", "--format=%(refname:short)", "--list", "issue/*")); len(got) != 1 || got[0] != branch {
 		t.Fatalf("resume created duplicate issue branch: %v", got)
 	}
 }
