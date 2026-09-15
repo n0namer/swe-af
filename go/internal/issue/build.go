@@ -55,6 +55,7 @@ type implementInput struct {
 	Issue             map[string]any `json:"issue"`
 	RepoPath          string         `json:"repo_path"`
 	BaseBranch        string         `json:"base_branch"`
+	ResumeBuildID     string         `json:"resume_build_id"`
 	ArtifactsDir      string         `json:"artifacts_dir"`
 	AdditionalContext string         `json:"additional_context"`
 	Config            map[string]any `json:"config"`
