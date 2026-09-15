@@ -66,6 +66,38 @@ var completedOutcomes = map[string]bool{
 	"completed_with_debt": true,
 }
 
+func declaredScopeViolations(spec *Spec, files []string) []string {
+	if spec == nil {
+		return nil
+	}
+	allowed := map[string]struct{}{}
+	add := func(paths []string) {
+		for _, raw := range paths {
+			path := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+			if path == "" || path == "." {
+				continue
+			}
+			allowed[path] = struct{}{}
+		}
+	}
+	add(spec.FilesToCreate)
+	add(spec.FilesToModify)
+	if len(allowed) == 0 {
+		return nil
+	}
+	var violations []string
+	for _, raw := range files {
+		path := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+		if path == "" || path == "." {
+			continue
+		}
+		if _, ok := allowed[path]; !ok {
+			violations = append(violations, path)
+		}
+	}
+	return violations
+}
+
 func newBuildID() string {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
