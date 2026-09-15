@@ -456,6 +456,33 @@ func TestArchitectSuccessKeys(t *testing.T) {
 		"decisions", "file_changes_overview")
 }
 
+func TestArchitectOpenCodeUsesIncrementalSchemaContract(t *testing.T) {
+	h := &fakeHarness{fn: func(_ int, _ string, dest any, _ harness.Options) (*harness.Result, error) {
+		a := dest.(*schemas.Architecture)
+		a.Summary = "layered"
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	deps, _ := newDeps(h)
+	_, err := RunArchitect(context.Background(), deps, map[string]any{
+		"prd": map[string]any{"validated_description": "x"},
+		"repo_path": t.TempDir(),
+		"model": "fcm/fcm",
+		"ai_provider": "open_code",
+	})
+	if err != nil {
+		t.Fatalf("RunArchitect: %v", err)
+	}
+	if h.lastOpts.Provider != "opencode" || h.lastOpts.Model != "fcm/fcm" {
+		t.Fatalf("harness route = provider %q model %q", h.lastOpts.Provider, h.lastOpts.Model)
+	}
+	if h.lastOpts.SchemaMode != "incremental" {
+		t.Fatalf("OpenCode Architect schema_mode = %q, want incremental", h.lastOpts.SchemaMode)
+	}
+	if got := h.lastOpts.Env["OPENCODE_CONFIG_CONTENT"]; got != harnessx.OpenCodeNoInstallPermissionOverlay {
+		t.Fatalf("OpenCode Architect missing runtime-owned FCM overlay")
+	}
+}
+
 // Contract: when feedback is given it is included in the (task) prompt.
 func TestArchitectIncludesFeedback(t *testing.T) {
 	h := &fakeHarness{fn: func(_ int, _ string, dest any, _ harness.Options) (*harness.Result, error) {
