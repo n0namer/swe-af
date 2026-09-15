@@ -241,8 +241,11 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		}
 	}
 	if loopErr != nil && ctx.Err() != nil {
-		// Context cancellation propagates (Python does not catch CancelledError).
-		removeWorktree(repoPath, worktreePath)
+		// Context cancellation propagates. A resumed build preserves its existing
+		// worktree so a later explicit continuation cannot lose partial state.
+		if !resuming {
+			removeWorktree(repoPath, worktreePath)
+		}
 		return nil, loopErr
 	}
 	if loopErr != nil {
