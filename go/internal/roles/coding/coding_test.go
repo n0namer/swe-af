@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -226,6 +228,37 @@ func TestRunCoderAppliesGuardrailAndCwd(t *testing.T) {
 	}
 	if mh.gotOpts.Cwd != "/my/worktree" {
 		t.Fatalf("expected cwd=worktree, got %q", mh.gotOpts.Cwd)
+	}
+}
+
+func TestRunCoderUsesNestedModuleRootForDeclaredFiles(t *testing.T) {
+	worktree := t.TempDir()
+	moduleRoot := filepath.Join(worktree, "go")
+	if err := os.MkdirAll(filepath.Join(moduleRoot, "internal", "roles", "planning"), 0o755); err != nil {
+		t.Fatalf("create nested module dirs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleRoot, "go.mod"), []byte("module example.com/repo\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	mh := &mockHarness{fn: func(dest any) (*harness.Result, error) {
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	if _, err := RunCoder(context.Background(), newDeps(mh, nil, &noteRecorder{}), map[string]any{
+		"issue": map[string]any{
+			"name": "nested-module",
+			"files_to_modify": []any{
+				"go/internal/roles/planning/planning.go",
+				"go/internal/roles/planning/planning_test.go",
+			},
+		},
+		"worktree_path": worktree,
+		"ai_provider":   "claude",
+		"model":         "sonnet",
+	}); err != nil {
+		t.Fatalf("RunCoder: %v", err)
+	}
+	if mh.gotOpts.Cwd != moduleRoot {
+		t.Fatalf("expected nested module cwd %q, got %q", moduleRoot, mh.gotOpts.Cwd)
 	}
 }
 
