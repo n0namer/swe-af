@@ -285,6 +285,67 @@ func TestAmbiguousCoderTimeoutPreservesWorktreeAndSkipsDelivery(t *testing.T) {
 	}
 }
 
+func TestResumeBuildIDReusesExistingIssueWorktree(t *testing.T) {
+	repo := initRepo(t)
+	baseSHA := gitT(t, repo, "rev-parse", "HEAD")
+	buildID := "deadbeef"
+	plannedName := "add-retry-helper"
+	branch := "issue/" + buildID + "-" + plannedName
+	worktree := filepath.Join(repo, ".worktrees", buildID+"-"+plannedName)
+	gitT(t, repo, "worktree", "add", "-q", "-b", branch, worktree, baseSHA)
+	if err := os.WriteFile(filepath.Join(worktree, "partial.py"), []byte("PARTIAL = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &recorder{}
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		rec.add(target)
+		name := target[strings.LastIndex(target, ".")+1:]
+		switch name {
+		case "run_coder":
+			got, _ := kwargs["worktree_path"].(string)
+			if got != worktree {
+				t.Fatalf("coder worktree = %q, want resume %q", got, worktree)
+			}
+			if _, err := os.Stat(filepath.Join(got, "partial.py")); err != nil {
+				t.Fatalf("partial state lost on resume: %v", err)
+			}
+			gitT(t, got, "add", "partial.py")
+			gitT(t, got, "commit", "-q", "-m", "finish resumed issue")
+			return map[string]any{"files_changed": []any{"partial.py"}, "summary": "resumed partial work", "complete": true}, nil
+		case "run_code_reviewer":
+			return map[string]any{"approved": true, "blocking": false, "summary": "LGTM"}, nil
+		case "run_qa":
+			return map[string]any{"passed": true, "summary": "qa ok"}, nil
+		case "run_qa_synthesizer":
+			return map[string]any{"action": "approve", "summary": "synth ok"}, nil
+		case "run_verifier":
+			return map[string]any{"passed": true, "summary": "verified"}, nil
+		}
+		return nil, fmt.Errorf("unexpected call target: %s", target)
+	}
+
+	result := runImplement(t, repo, callFn, map[string]any{
+		"resume_build_id": buildID,
+		"issue": map[string]any{
+			"title":               "Add retry helper",
+			"description":         "Resume partial work instead of starting another mutation.",
+			"acceptance_criteria": []any{"partial work is preserved"},
+			"files_to_create":     []any{"partial.py"},
+		},
+		"config": map[string]any{"verify": true, "keep_worktree": true},
+	})
+	if result["success"] != true {
+		t.Fatalf("resume result = %v", result)
+	}
+	if result["build_id"] != buildID || result["branch"] != branch {
+		t.Fatalf("resume identity = build %v branch %v, want %s / %s", result["build_id"], result["branch"], buildID, branch)
+	}
+	if got := strings.Fields(gitT(t, repo, "branch", "--list", "issue/*")); len(got) != 1 {
+		t.Fatalf("resume created duplicate issue branch: %v", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // C1 — happy path
 // ---------------------------------------------------------------------------
