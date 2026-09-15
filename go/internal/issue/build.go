@@ -321,11 +321,12 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		}
 	}
 
-	if !cfg.KeepWorktree {
+	if !cfg.KeepWorktree && !resuming {
 		removeWorktree(repoPath, worktreePath)
 	}
-	if len(commits) == 0 {
-		// A branch with zero commits is pure noise for the caller.
+	if len(commits) == 0 && !resuming {
+		// A fresh branch with zero commits is pure noise for the caller. A resumed
+		// branch may contain the only copy of partial work and must be preserved.
 		deleteBranch(repoPath, branch)
 	}
 
