@@ -132,6 +132,17 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 	}
 
 	buildID := newBuildID()
+	resuming := false
+	if in.ResumeBuildID != "" {
+		if len(in.ResumeBuildID) != 8 {
+			return nil, fmt.Errorf("implement_issue: invalid resume_build_id %q", in.ResumeBuildID)
+		}
+		if _, err := hex.DecodeString(in.ResumeBuildID); err != nil {
+			return nil, fmt.Errorf("implement_issue: invalid resume_build_id %q", in.ResumeBuildID)
+		}
+		buildID = in.ResumeBuildID
+		resuming = true
+	}
 	branch := cfg.BranchPrefix + buildID + "-" + plannedName
 	worktreePath := filepath.Join(repoPath, ".worktrees", buildID+"-"+plannedName)
 	var absArtifacts string
