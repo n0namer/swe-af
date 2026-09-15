@@ -182,8 +182,10 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 
 	execCfg, err := config.LoadExecutionConfig(cfg.ToExecutionRaw())
 	if err != nil {
-		removeWorktree(repoPath, worktreePath)
-		deleteBranch(repoPath, branch)
+		if !resuming {
+			removeWorktree(repoPath, worktreePath)
+			deleteBranch(repoPath, branch)
+		}
 		return nil, err
 	}
 	dagState := &schemas.DAGState{
