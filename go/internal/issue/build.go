@@ -155,7 +155,20 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		return nil, err
 	}
 
-	if err := addWorktree(repoPath, worktreePath, branch, baseSHA); err != nil {
+	if resuming {
+		if info, err := os.Stat(worktreePath); err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("implement_issue: resume worktree missing for build %s", buildID)
+		}
+		gotBranch, err := currentBranch(worktreePath)
+		if err != nil || gotBranch != branch {
+			return nil, fmt.Errorf("implement_issue: resume worktree branch mismatch: got %q, want %q", gotBranch, branch)
+		}
+		if _, _, code := runGit(repoPath, "merge-base", "--is-ancestor", baseSHA, branch); code != 0 {
+			return nil, fmt.Errorf("implement_issue: resume branch %s is not based on %s", branch, baseSHA)
+		}
+		deps.note(ctx, fmt.Sprintf("Issue build %s: resuming existing worktree %s", buildID, worktreePath),
+			"issue_build", "resume")
+	} else if err := addWorktree(repoPath, worktreePath, branch, baseSHA); err != nil {
 		return nil, err
 	}
 	deps.note(ctx,
