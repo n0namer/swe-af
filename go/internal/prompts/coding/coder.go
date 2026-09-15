@@ -292,7 +292,7 @@ After implementation, report:
 
 You have full development access:
 - READ / WRITE / EDIT files
-- BASH for running commands (tests, builds, git)
+- BASH for running commands (tests, builds, git). When calling BASH, pass only the raw shell command in the tool argument; never include XML-like wrappers such as <parameter=command>.
 - GLOB / GREP for searching the codebase`
 
 // CoderTaskPromptOpts carries the keyword arguments of coder_task_prompt.
