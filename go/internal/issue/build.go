@@ -66,6 +66,38 @@ var completedOutcomes = map[string]bool{
 	"completed_with_debt": true,
 }
 
+func declaredScopeViolations(spec *Spec, files []string) []string {
+	if spec == nil {
+		return nil
+	}
+	allowed := map[string]struct{}{}
+	add := func(paths []string) {
+		for _, raw := range paths {
+			path := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+			if path == "" || path == "." {
+				continue
+			}
+			allowed[path] = struct{}{}
+		}
+	}
+	add(spec.FilesToCreate)
+	add(spec.FilesToModify)
+	if len(allowed) == 0 {
+		return nil
+	}
+	var violations []string
+	for _, raw := range files {
+		path := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+		if path == "" || path == "." {
+			continue
+		}
+		if _, ok := allowed[path]; !ok {
+			violations = append(violations, path)
+		}
+	}
+	return violations
+}
+
 func newBuildID() string {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
@@ -294,6 +326,13 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		commits = newCommits(repoPath, baseSHA, branch)
 		filesChanged = changedFiles(repoPath, baseSHA, branch)
 		stat = diffStat(repoPath, baseSHA, branch)
+
+		if violations := declaredScopeViolations(spec, filesChanged); len(violations) > 0 {
+			outcomeValue = "failed_unrecoverable"
+			errorMessage = fmt.Sprintf("out-of-scope files changed: %s", strings.Join(violations, ", "))
+			loopSummary = errorMessage
+			deps.note(ctx, errorMessage, "issue_build", "scope", "error")
+		}
 
 		codingOK := completedOutcomes[outcomeValue]
 		if cfg.Verify && codingOK && len(commits) > 0 {
