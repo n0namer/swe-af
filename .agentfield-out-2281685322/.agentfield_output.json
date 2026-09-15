@@ -1,1 +1,23 @@
-{}
+{
+  "validated_description": "Inspect the current SWE-AF repository to identify a single, documentation-neutral verification task. This task must be a purely observational or structural check that requires no code modification, dependency installation, or environment changes. The goal is to propose a verification capability that can be executed by an autonomous agent to confirm a specific, measurable property of the codebase (e.g., file existence, specific import presence, or directory structure) without altering the system state.",
+  "acceptance_criteria": [
+    "grep -r 'TODO' . | wc -l returns a specific non-zero integer (replace with actual count)",
+    "ls -d swe_af/execution/dag_executor.py > /dev/null && echo 'EXISTS' || echo 'MISSING' | grep -q 'EXISTS'",
+    "python3 -m compileall -q swe_af/ > /dev/null 2>&1 && echo 'COMPILE_PASS' || echo 'COMPILE_FAIL' | grep -q 'COMPILE_PASS'"
+  ],
+  "must_have": [
+    "A single, clearly defined verification task.",
+    "Acceptance criteria expressed as executable shell commands.",
+    "Task must be documentation-neutral (no changes to .md files)."
+  ],
+  "nice_to_have": [
+    "Task targets a critical path component (e.g., execution or reasoning)."
+  ],
+  "out_of_scope": [
+    "Modifying any source code.",
+    "Modifying any documentation.",
+    "Installing any new Python packages or Go dependencies.",
+    "Creating new files or directories.",
+    "Running long-running integration tests or benchmarks."
+  ]
+}
