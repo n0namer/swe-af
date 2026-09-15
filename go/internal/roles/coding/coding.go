@@ -27,6 +27,8 @@ package coding
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Agent-Field/agentfield/sdk/go/ai"
