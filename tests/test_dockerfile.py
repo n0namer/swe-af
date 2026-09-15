@@ -97,6 +97,17 @@ class TestOpenCodeProviders:
         existing = opencode_config["provider"]["openrouter"]
         assert existing["options"]["apiKey"] == "{env:OPENROUTER_API_KEY}"
 
+    def test_broker_provider_declares_runtime_models(self, opencode_config: dict) -> None:
+        broker = opencode_config["provider"]["broker"]
+        assert broker["npm"] == "@ai-sdk/openai-compatible"
+        assert broker["env"] == ["LLM_BROKER_API_KEY"]
+        assert broker["options"] == {
+            "apiKey": "{env:LLM_BROKER_API_KEY}",
+            "baseURL": "{env:LLM_BROKER_BASE_URL}",
+        }
+        assert broker["models"]["fcm"]["id"] == "fcm"
+        assert broker["models"]["fast-coding"]["id"] == "fcm:fast-coding"
+
     def test_infron_provider_is_openai_compatible(self, opencode_config: dict) -> None:
         infron = opencode_config["provider"]["infron"]
         assert infron["npm"] == "@ai-sdk/openai-compatible"

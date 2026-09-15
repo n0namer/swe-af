@@ -8,6 +8,27 @@
         "apiKey": "{env:OPENROUTER_API_KEY}"
       }
     },
+    "broker": {
+      "name": "AgentField LLM Broker (OpenAI-compatible)",
+      "env": [
+        "LLM_BROKER_API_KEY"
+      ],
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:LLM_BROKER_API_KEY}",
+        "baseURL": "{env:LLM_BROKER_BASE_URL}"
+      },
+      "models": {
+        "fcm": {
+          "id": "fcm",
+          "name": "FCM"
+        },
+        "fast-coding": {
+          "id": "fcm:fast-coding",
+          "name": "FCM Fast Coding"
+        }
+      }
+    },
     "minimax-global-openai": {
       "name": "MiniMax Global (OpenAI-compatible)",
       "env": [
