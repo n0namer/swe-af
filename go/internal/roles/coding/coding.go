@@ -122,6 +122,90 @@ func (c *coderInput) UnmarshalJSON(b []byte) error {
 	return resolveRoleDefaults(&c.AIProvider, &c.Model, "coder")
 }
 
+var coderProjectMarkers = []string{"go.mod", "package.json", "pyproject.toml", "Cargo.toml"}
+
+func resolveCoderCwd(worktreePath string, issue map[string]any) string {
+	worktreePath = filepath.Clean(worktreePath)
+	paths := declaredCoderPaths(issue)
+	if len(paths) == 0 {
+		return worktreePath
+	}
+	firstAbs := filepath.Join(worktreePath, filepath.FromSlash(paths[0]))
+	for dir := filepath.Dir(firstAbs); ; dir = filepath.Dir(dir) {
+		if !pathWithin(dir, firstAbs) || !pathWithin(worktreePath, dir) {
+			break
+		}
+		if hasCoderProjectMarker(dir) {
+			allInside := true
+			for _, rel := range paths[1:] {
+				if !pathWithin(dir, filepath.Join(worktreePath, filepath.FromSlash(rel))) {
+					allInside = false
+					break
+				}
+			}
+			if allInside {
+				return dir
+			}
+		}
+		if dir == worktreePath {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+	}
+	return worktreePath
+}
+
+func declaredCoderPaths(issue map[string]any) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	for _, key := range []string{"files_to_modify", "files_to_create"} {
+		appendPath := func(raw string) {
+			path := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+			if path == "" || path == "." || filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
+				return
+			}
+			if _, ok := seen[path]; ok {
+				return
+			}
+			seen[path] = struct{}{}
+			out = append(out, path)
+		}
+		switch values := issue[key].(type) {
+		case []any:
+			for _, value := range values {
+				if path, ok := value.(string); ok {
+					appendPath(path)
+				}
+			}
+		case []string:
+			for _, path := range values {
+				appendPath(path)
+			}
+		}
+	}
+	return out
+}
+
+func hasCoderProjectMarker(dir string) bool {
+	for _, marker := range coderProjectMarkers {
+		if info, err := os.Stat(filepath.Join(dir, marker)); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func pathWithin(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+}
+
 // RunCoder ports run_coder (execution_agents.py:963). Implements an issue and
 // returns a CoderResult-shaped result.
 func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
