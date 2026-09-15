@@ -648,6 +648,58 @@ func TestFatalCoderErrorReturnsStructuredFailureAndCleansUp(t *testing.T) {
 	}
 }
 
+func TestCancellationAfterObservedCommitReturnsStructuredProgress(t *testing.T) {
+	repo := initRepo(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	callFn := func(_ context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		name := target[strings.LastIndex(target, ".")+1:]
+		if name != "run_coder" {
+			return nil, fmt.Errorf("unexpected call target after cancellation: %s", target)
+		}
+		worktree, _ := kwargs["worktree_path"].(string)
+		if err := os.WriteFile(filepath.Join(worktree, "feature.py"), []byte("VALUE = 1\n"), 0o644); err != nil {
+			return nil, err
+		}
+		gitT(t, worktree, "add", "feature.py")
+		gitT(t, worktree, "commit", "-q", "-m", "feat: completed before cancellation surfaced")
+		cancel()
+		return nil, context.Canceled
+	}
+
+	raw, err := ImplementIssue(ctx, &Deps{Call: callFn, NodeID: "test-node"}, map[string]any{
+		"issue": map[string]any{
+			"title":               "Add retry helper",
+			"description":         "Preserve an observed commit when transport completion is ambiguous.",
+			"acceptance_criteria": []any{"observed commit is preserved for explicit continuation"},
+		},
+		"repo_path": repo,
+		"config":    map[string]any{"verify": false, "keep_worktree": true},
+	})
+	if err != nil {
+		t.Fatalf("ImplementIssue returned raw cancellation after observed effect: %v", err)
+	}
+	result, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("result type %T", raw)
+	}
+	if result["success"] != false || result["outcome"] != "interrupted_with_progress" {
+		t.Fatalf("result = success %v outcome %v", result["success"], result["outcome"])
+	}
+	commits, _ := result["commits"].([]string)
+	if len(commits) != 1 {
+		t.Fatalf("commits = %v, want exactly one observed commit", result["commits"])
+	}
+	branch, _ := result["branch"].(string)
+	if !strings.HasPrefix(branch, "issue/") {
+		t.Fatalf("branch = %q, want preserved issue branch", branch)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".worktrees")); err != nil {
+		t.Fatalf("worktree root should remain available for explicit continuation: %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Setup validation
 // ---------------------------------------------------------------------------

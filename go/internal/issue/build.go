@@ -215,8 +215,47 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		ctx, planned, dagState, callFn, deps.NodeID, execCfg, noteFn, nil,
 	)
 	if loopErr != nil && ctx.Err() != nil {
-		// Context cancellation propagates. A resumed build preserves its existing
-		// worktree so a later explicit continuation cannot lose partial state.
+		// A cancelled/expired transport can race with a completed mutation. Observe
+		// authoritative Git post-state before deciding whether continuation is
+		// still required. Never claim completion here: reviewer/QA/verifier may not
+		// have run. When an effect is observable, preserve the worktree and return a
+		// structured recoverable result so an explicit resume can continue the same
+		// logical build without repeating the mutation.
+		commits = newCommits(repoPath, baseSHA, branch)
+		dirty := isDirty(worktreePath)
+		if len(commits) > 0 || dirty {
+			filesChanged = changedFiles(repoPath, baseSHA, branch)
+			stat = diffStat(repoPath, baseSHA, branch)
+			if commits == nil {
+				commits = []string{}
+			}
+			if filesChanged == nil {
+				filesChanged = []string{}
+			}
+			return map[string]any{
+				"success":           false,
+				"outcome":           "interrupted_with_progress",
+				"summary":           "Execution was interrupted after observable issue progress; resume the same build_id to continue verification.",
+				"build_id":          buildID,
+				"branch":            branch,
+				"base_branch":       baseRef,
+				"base_sha":          baseSHA,
+				"commits":           commits,
+				"files_changed":     filesChanged,
+				"diff_stat":         stat,
+				"iterations":        0,
+				"iteration_history": []map[string]any{},
+				"debt_items":        []map[string]any{},
+				"verification":      nil,
+				"pr_url":            "",
+				"error_message":     loopErr.Error(),
+				"effect_observed":   true,
+				"worktree_path":     worktreePath,
+			}, nil
+		}
+		// No observable effect: keep the previous cancellation semantics. A resumed
+		// build still preserves its existing worktree; a fresh untouched build can
+		// be removed safely.
 		if !resuming {
 			removeWorktree(repoPath, worktreePath)
 		}
