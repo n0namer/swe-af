@@ -511,6 +511,35 @@ func TestSplitGateCreatesSubIssuesRemovesParent(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Contract: replanner timeout is bounded and cannot hang the DAG
+// ---------------------------------------------------------------------------
+
+func TestReplannerTimeoutFailsNotHang(t *testing.T) {
+	m := newMock()
+	m.on("run_replanner", func(kwargs map[string]any) (map[string]any, error) {
+		time.Sleep(2 * time.Second)
+		return map[string]any{"action": "continue", "rationale": "late", "summary": "late"}, nil
+	})
+	cfg := testCfg(t, map[string]any{"agent_timeout_seconds": 1, "enable_replanning": true, "max_replans": 1})
+	dagState := initDAGState(makePlan([]map[string]any{issue("a")}, [][]string{{"a"}}), "/repo", nil, "")
+	failed := []schemas.IssueResult{{
+		IssueName:    "a",
+		Outcome:      schemas.IssueOutcomeFailedUnrecoverable,
+		ErrorMessage: "deterministic failure",
+	}}
+
+	started := time.Now()
+	_, err := invokeReplannerViaCall(context.Background(), dagState, failed, cfg, m.fn, "swe-planner", nil)
+	elapsed := time.Since(started)
+	if err == nil {
+		t.Fatal("expected bounded replanner timeout error")
+	}
+	if elapsed >= 1500*time.Millisecond {
+		t.Fatalf("replanner exceeded bounded timeout: %s", elapsed)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Contract: replan MODIFY_DAG resets to level 0
 // ---------------------------------------------------------------------------
 
