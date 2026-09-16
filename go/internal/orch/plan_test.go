@@ -175,6 +175,36 @@ func runPlan(t *testing.T, deps *Deps, repoPath string, extra map[string]any) (m
 	return m, nil
 }
 
+// --- Contract: planning role calls inherit the configured agent timeout ----
+
+func TestPlanRoleCallsUseAgentTimeout(t *testing.T) {
+	app := &mockApp{handler: func(ctx context.Context, target string, _ map[string]any) (map[string]any, error) {
+		name := target
+		if i := strings.LastIndex(target, "."); i >= 0 {
+			name = target[i+1:]
+		}
+		if _, ok := ctx.Deadline(); !ok {
+			return nil, errors.New(name + " missing deadline")
+		}
+		switch name {
+		case "run_product_manager":
+			return validPRD(), nil
+		case "run_architect":
+			return validArch(), nil
+		case "run_tech_lead":
+			return approvedReview(), nil
+		case "run_sprint_planner":
+			return sprintResult(), nil
+		default:
+			return map[string]any{}, nil
+		}
+	}}
+	deps := &Deps{App: app, NodeID: "swe-planner"}
+	if _, err := runPlan(t, deps, t.TempDir(), map[string]any{"agent_timeout_seconds": 1}); err != nil {
+		t.Fatalf("planning role timeout contract: %v", err)
+	}
+}
+
 // --- Contract: happy path returns the exact PlanResult key set ------------
 
 func TestPlanHappyPathKeySet(t *testing.T) {
