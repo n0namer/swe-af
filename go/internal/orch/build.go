@@ -171,6 +171,7 @@ func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 		"issue_writer_model":    resolved["issue_writer_model"],
 		"permission_mode":       cfg.PermissionMode,
 		"ai_provider":           cfg.AIProvider(),
+		"agent_timeout_seconds": cfg.AgentTimeoutSeconds,
 		"workspace_manifest":    manifestMap,
 	}
 
@@ -215,7 +216,7 @@ func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 			"build_id":        buildID,
 		}
 
-		rawGit, gerr := deps.CallRaw(ctx, "run_git_init", gitKwargs)
+		rawGit, gerr := deps.CallRawTimeout(ctx, cfg.AgentTimeoutSeconds, "run_git_init", gitKwargs)
 		if attempt == 1 {
 			rawPlan = <-planCh // gather: wait for both
 			planReceived = true
@@ -355,7 +356,7 @@ func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	var verification map[string]any
 	for cycle := 0; cycle <= cfg.MaxVerifyFixCycles; cycle++ {
 		deps.Note(ctx, fmt.Sprintf("Verification cycle %d", cycle), "build", "verify")
-		verification, err = deps.Call(ctx, "run_verifier", map[string]any{
+		verification, err = deps.CallTimeout(ctx, cfg.AgentTimeoutSeconds, "run_verifier", map[string]any{
 			"prd":                planResult["prd"],
 			"repo_path":          repoPath,
 			"artifacts_dir":      planArtifactsDir,
@@ -384,7 +385,7 @@ func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 		deps.Note(ctx, fmt.Sprintf("Verification failed (%d criteria), %d fix cycles remaining",
 			len(failedCriteria), cfg.MaxVerifyFixCycles-cycle), "build", "verify", "retry")
 
-		fixResult, ferr := deps.Call(ctx, "generate_fix_issues", map[string]any{
+		fixResult, ferr := deps.CallTimeout(ctx, cfg.AgentTimeoutSeconds, "generate_fix_issues", map[string]any{
 			"failed_criteria":    failedCriteria,
 			"dag_state":          dagResult,
 			"prd":                planResult["prd"],
@@ -584,7 +585,7 @@ func finalizeRepos(ctx context.Context, deps *Deps, cfg *config.BuildConfig,
 		if repoName != "" {
 			label = fmt.Sprintf("run_repo_finalize (%s)", repoName)
 		}
-		res, ferr := deps.Call(ctx, "run_repo_finalize", map[string]any{
+		res, ferr := deps.CallTimeout(ctx, cfg.AgentTimeoutSeconds, "run_repo_finalize", map[string]any{
 			"repo_path":       path,
 			"artifacts_dir":   artifactsDir,
 			"model":           resolved["git_model"],

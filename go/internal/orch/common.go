@@ -166,11 +166,33 @@ func (d *Deps) Call(ctx context.Context, name string, kwargs map[string]any, lab
 	return envelope.UnwrapCallResult(raw, label)
 }
 
+// CallTimeout is Call with an optional per-agent deadline. A non-positive
+// timeout preserves the historical unbounded behavior for callers that do not
+// declare an agent budget.
+func (d *Deps) CallTimeout(ctx context.Context, timeoutSeconds int, name string, kwargs map[string]any, label string) (map[string]any, error) {
+	if timeoutSeconds <= 0 {
+		return d.Call(ctx, name, kwargs, label)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
+	defer cancel()
+	return d.Call(callCtx, name, kwargs, label)
+}
+
 // CallRaw invokes the local reasoner name and returns the raw envelope WITHOUT
 // unwrapping — used by build's git-init loop, which unwraps separately so it can
 // treat an unwrap failure as a non-fatal git-init failure (app.py:701-704).
 func (d *Deps) CallRaw(ctx context.Context, name string, kwargs map[string]any) (map[string]any, error) {
 	return d.App.Call(ctx, d.target(name), kwargs)
+}
+
+// CallRawTimeout is the raw-envelope counterpart of CallTimeout.
+func (d *Deps) CallRawTimeout(ctx context.Context, timeoutSeconds int, name string, kwargs map[string]any) (map[string]any, error) {
+	if timeoutSeconds <= 0 {
+		return d.CallRaw(ctx, name, kwargs)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
+	defer cancel()
+	return d.CallRaw(callCtx, name, kwargs)
 }
 
 // target renders the fully-qualified "<NodeID>.<name>" call target. At runtime
