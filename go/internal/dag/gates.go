@@ -335,21 +335,25 @@ func runExecuteFn(
 		lastContext = err.Error()
 
 		if attempt <= cfg.MaxRetriesPerIssue && callFn != nil {
-			advice, aerr := callFn(ctx, nodeID+".run_retry_advisor", map[string]any{
-				"issue":                issueWithContext,
-				"error_message":        lastError,
-				"error_context":        lastContext,
-				"attempt_number":       attempt,
-				"repo_path":            dagState.RepoPath,
-				"prd_summary":          dagState.PRDSummary,
-				"architecture_summary": dagState.ArchitectureSummary,
-				"prd_path":             dagState.PRDPath,
-				"architecture_path":    dagState.ArchitecturePath,
-				"artifacts_dir":        dagState.ArtifactsDir,
-				"model":                cfg.RetryAdvisorModel(),
-				"ai_provider":          cfg.AIProvider(),
-				"workspace_manifest":   dagState.WorkspaceManifest,
-			})
+			advice, aerr := callWithTimeout(ctx, cfg.AgentTimeoutSeconds,
+				fmt.Sprintf("retry_advisor:%s:%d", issueName, attempt),
+				func(c context.Context) (map[string]any, error) {
+					return callFn(c, nodeID+".run_retry_advisor", map[string]any{
+						"issue":                issueWithContext,
+						"error_message":        lastError,
+						"error_context":        lastContext,
+						"attempt_number":       attempt,
+						"repo_path":            dagState.RepoPath,
+						"prd_summary":          dagState.PRDSummary,
+						"architecture_summary": dagState.ArchitectureSummary,
+						"prd_path":             dagState.PRDPath,
+						"architecture_path":    dagState.ArchitecturePath,
+						"artifacts_dir":        dagState.ArtifactsDir,
+						"model":                cfg.RetryAdvisorModel(),
+						"ai_provider":          cfg.AIProvider(),
+						"workspace_manifest":   dagState.WorkspaceManifest,
+					})
+				})
 			if aerr != nil {
 				var f *fatal.FatalHarnessError
 				if errors.As(aerr, &f) || errors.Is(aerr, context.Canceled) {
