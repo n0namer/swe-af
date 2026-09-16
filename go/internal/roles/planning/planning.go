@@ -41,6 +41,17 @@ import (
 // The node-wiring wave registers each by its exact Python name via Handlers().
 type Handler func(ctx context.Context, deps *Deps, input map[string]any) (any, error)
 
+// planningReadOnlyEnv enforces the planning/coding role boundary in OpenCode.
+// Planning roles may emit the structured-output file created by the harness,
+// but must not edit product source or mutate the repository through bash.
+// OpenCode permission rules are last-match-wins, so the narrow output allow
+// follows the catch-all edit deny.
+func planningReadOnlyEnv() map[string]string {
+	return map[string]string{
+		"OPENCODE_CONFIG_CONTENT": `{"permission":{"bash":"deny","edit":{"*":"deny",".agentfield-out-*/*":"allow"}}}`,
+	}
+}
+
 // Deps carries the collaborators a planning handler needs. The concrete
 // *agent.Agent satisfies Harness, App and Pauser; tests supply mocks.
 //
@@ -140,16 +151,31 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 			PermissionMode: permissionMode,
 			SystemPrompt:   systemPrompt,
 			Cwd:            repoPath,
+			Env:            planningReadOnlyEnv(),
 		}.ToOptions()
 		parsed, res, err := harnessx.Run[schemas.PRD](ctx, deps.Harness, taskPrompt, opts)
 		if err != nil {
 			return nil, err
 		}
 		if res == nil || res.Parsed == nil {
-			if res == nil {
-				return nil, errors.New("PM harness diagnostic: nil result")
+			var recoverErr error
+			recoveredOK := false
+			for _, candidate := range []string{paths["prd"], filepath.Join(repoPath, "prd.json")} {
+				recovered, err := harnessx.RecoverFile[schemas.PRD](candidate)
+				if err == nil {
+					parsed = recovered
+					recoverErr = nil
+					recoveredOK = true
+					break
+				}
+				recoverErr = err
 			}
-			return nil, fmt.Errorf("PM harness diagnostic: is_error=%v failure=%v err=%q result=%q turns=%d duration_ms=%d messages=%d", res.IsError, res.FailureType, res.ErrorMessage, res.Result, res.NumTurns, res.DurationMS, len(res.Messages))
+			if !recoveredOK {
+				if res == nil {
+					return nil, errors.New("PM harness diagnostic: nil result")
+				}
+				return nil, fmt.Errorf("PM harness diagnostic: is_error=%v failure=%v err=%q result=%q turns=%d duration_ms=%d messages=%d artifact_recovery=%q", res.IsError, res.FailureType, res.ErrorMessage, res.Result, res.NumTurns, res.DurationMS, len(res.Messages), recoverErr)
+			}
 		}
 		prdMap, err := toMap(parsed)
 		if err != nil {
@@ -369,6 +395,7 @@ func RunArchitect(ctx context.Context, deps *Deps, input map[string]any) (any, e
 		PermissionMode: permissionMode,
 		SystemPrompt:   systemPrompt,
 		Cwd:            repoPath,
+		Env:            planningReadOnlyEnv(),
 	}.ToOptions()
 	parsed, res, err := harnessx.Run[schemas.Architecture](ctx, deps.Harness, taskPrompt, opts)
 	if err != nil {
@@ -377,9 +404,20 @@ func RunArchitect(ctx context.Context, deps *Deps, input map[string]any) (any, e
 	if res == nil || res.Parsed == nil {
 		return nil, errors.New("Architect failed to produce a valid architecture")
 	}
+	archMap, err := toMap(parsed)
+	if err != nil {
+		return nil, err
+	}
+	blob, err := json.MarshalIndent(archMap, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(paths["architecture"], blob, 0o644); err != nil {
+		return nil, err
+	}
 
 	deps.App.Note(ctx, "Architect complete", "architect", "complete")
-	return toMap(parsed)
+	return archMap, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -433,6 +471,7 @@ func RunTechLead(ctx context.Context, deps *Deps, input map[string]any) (any, er
 		PermissionMode: permissionMode,
 		SystemPrompt:   systemPrompt,
 		Cwd:            repoPath,
+		Env:            planningReadOnlyEnv(),
 	}.ToOptions()
 	parsed, res, err := harnessx.Run[schemas.ReviewResult](ctx, deps.Harness, taskPrompt, opts)
 	if err != nil {
@@ -541,6 +580,7 @@ func RunSprintPlanner(ctx context.Context, deps *Deps, input map[string]any) (an
 		PermissionMode: permissionMode,
 		SystemPrompt:   systemPrompt,
 		Cwd:            repoPath,
+		Env:            planningReadOnlyEnv(),
 	}.ToOptions()
 	parsed, res, err := harnessx.Run[sprintPlanOutput](ctx, deps.Harness, taskPrompt, opts)
 	if err != nil {

@@ -180,6 +180,23 @@ func structuredResultCandidates(result *harness.Result) []string {
 // scanner, validates them against the exact generated schema, and only then
 // unmarshals into dest. It is intentionally strict: malformed or schema-invalid
 // text stays a failure and is handled by the normal retry/error path.
+// RecoverFile reads a role artifact and recovers the first balanced JSON object
+// that validates against the exact generated schema for T. It is intentionally
+// strict: malformed trailing bytes may be ignored, but missing required fields,
+// wrong types, and schema-invalid content still fail closed.
+func RecoverFile[T any](path string) (*T, error) {
+	blob, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out T
+	if err := recoverStructuredText(string(blob), schemaFor[T](), &out); err != nil {
+		return nil, err
+	}
+	schemas.EmptyForNilSlices(&out)
+	return &out, nil
+}
+
 func recoverStructuredText[T any](text string, schema map[string]any, dest *T) error {
 	schemaBytes, err := json.Marshal(schema)
 	if err != nil {

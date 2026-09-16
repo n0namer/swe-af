@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 )
 
 // harnessMetadataPatterns are the files and directories the build harness
@@ -128,6 +129,73 @@ func integrationBranchBase(
 		return runProc(ctx, repoPath, "git", "reset", "--hard", baseSHA).ExitCode == 0
 	}
 	return runProc(ctx, repoPath, "git", "branch", "-f", branch, baseSHA).ExitCode == 0
+}
+
+func goalSlug(goal string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(goal) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash && b.Len() > 0 {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	slug := strings.Trim(b.String(), "-")
+	if slug == "" {
+		slug = "work"
+	}
+	if len(slug) > 40 {
+		slug = strings.Trim(slug[:40], "-")
+	}
+	return slug
+}
+
+// deterministicExistingGitInit performs the mechanical existing-repository
+// setup without an LLM. It may create/switch the integration branch and the
+// harness worktree directory, but never edits tracked product files.
+func deterministicExistingGitInit(ctx context.Context, repoPath, goal, buildID string) (map[string]any, bool) {
+	inside := runProc(ctx, repoPath, "git", "rev-parse", "--is-inside-work-tree")
+	if inside.ExitCode != 0 || strings.TrimSpace(inside.Stdout) != "true" {
+		return nil, false
+	}
+	base := headSHA(ctx, repoPath)
+	if base == "" {
+		return nil, false
+	}
+	original := strings.TrimSpace(runProc(ctx, repoPath, "git", "rev-parse", "--abbrev-ref", "HEAD").Stdout)
+	slug := goalSlug(goal)
+	name := slug
+	if strings.TrimSpace(buildID) != "" {
+		name = strings.Trim(strings.TrimSpace(buildID), "-") + "-" + slug
+	}
+	branch := "feature/" + name
+	if runProc(ctx, repoPath, "git", "rev-parse", "--verify", "--quiet", branch+"^{commit}").ExitCode == 0 {
+		if runProc(ctx, repoPath, "git", "checkout", "-q", branch).ExitCode != 0 {
+			return map[string]any{"success": false, "error_message": "failed to checkout existing integration branch"}, true
+		}
+	} else if runProc(ctx, repoPath, "git", "checkout", "-q", "-b", branch, base).ExitCode != 0 {
+		return map[string]any{"success": false, "error_message": "failed to create integration branch"}, true
+	}
+	_ = os.MkdirAll(filepath.Join(repoPath, ".worktrees"), 0o755)
+	remoteURL := ""
+	if r := runProc(ctx, repoPath, "git", "remote", "get-url", "origin"); r.ExitCode == 0 {
+		remoteURL = strings.TrimSpace(r.Stdout)
+	}
+	remoteDefault := ""
+	if r := runProc(ctx, repoPath, "git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); r.ExitCode == 0 {
+		remoteDefault = strings.TrimPrefix(strings.TrimSpace(r.Stdout), "origin/")
+	}
+	return map[string]any{
+		"mode": "existing", "original_branch": original, "integration_branch": branch,
+		"initial_commit_sha": base, "success": true, "error_message": "",
+		"remote_url": remoteURL, "remote_default_branch": remoteDefault,
+		"repo_name": filepath.Base(repoPath),
+	}, true
 }
 
 // headSHA resolves repoPath's current commit, or "" when there is none (a fresh

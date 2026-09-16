@@ -49,6 +49,43 @@ func writeUnder(t *testing.T, repo, rel, body string) {
 // at several points. After the exclusion neither shows up in status, so an
 // acceptance criterion about repository cleanliness is satisfiable and the
 // user's repo stays unpolluted.
+func TestDeterministicExistingGitInitPreservesTrackedProductBytes(t *testing.T) {
+	ctx := context.Background()
+	repo := hygieneRepo(t)
+	writeUnder(t, repo, "go/internal/calc/calc.go", "package calc\n\nfunc Double(v int) int { return v * 3 }\n")
+	if res := runProc(ctx, repo, "git", "add", "-A"); res.ExitCode != 0 {
+		t.Fatal(res.Stderr)
+	}
+	if res := runProc(ctx, repo, "git", "commit", "-m", "bug"); res.ExitCode != 0 {
+		t.Fatal(res.Stderr)
+	}
+	before, err := os.ReadFile(filepath.Join(repo, "go/internal/calc/calc.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := headSHA(ctx, repo)
+	got, ok := deterministicExistingGitInit(ctx, repo, "Fix Double implementation", "b123")
+	if !ok || !asBool(got["success"]) {
+		t.Fatalf("deterministic git init failed: %#v", got)
+	}
+	if got["initial_commit_sha"] != base || got["original_branch"] != "main" {
+		t.Fatalf("wrong base/original branch: %#v", got)
+	}
+	if got["integration_branch"] != "feature/b123-fix-double-implementation" {
+		t.Fatalf("unexpected integration branch: %#v", got["integration_branch"])
+	}
+	after, err := os.ReadFile(filepath.Join(repo, "go/internal/calc/calc.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("git init changed product source:\nbefore=%q\nafter=%q", before, after)
+	}
+	if diff := strings.TrimSpace(runProc(ctx, repo, "git", "diff", "--", "go/internal/calc/calc.go").Stdout); diff != "" {
+		t.Fatalf("product source has diff after git init:\n%s", diff)
+	}
+}
+
 func TestExcludeHarnessMetadataKeepsGitViewClean(t *testing.T) {
 	ctx := context.Background()
 	repo := hygieneRepo(t)
