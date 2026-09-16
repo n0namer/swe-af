@@ -2,6 +2,11 @@
   "$schema": "https://opencode.ai/config.json",
   "model": "{env:HARNESS_MODEL}",
   "small_model": "{env:HARNESS_MODEL}",
+  "permission": {
+    "external_directory": {
+      "/dev/*": "allow"
+    }
+  },
   "provider": {
     "openrouter": {
       "options": {
