@@ -345,8 +345,8 @@ func TestRetryAdvisorTimeoutFailsNotHang(t *testing.T) {
 	cfg := testCfg(t, map[string]any{
 		"agent_timeout_seconds": 1,
 		"max_retries_per_issue": 1,
-		"enable_issue_advisor": false,
-		"enable_replanning": false,
+		"enable_issue_advisor":  false,
+		"enable_replanning":     false,
 	})
 	dagState := initDAGState(makePlan([]map[string]any{issue("a")}, [][]string{{"a"}}), "/repo", nil, "")
 	executeFn := func(ctx context.Context, issue map[string]any, state *schemas.DAGState) (map[string]any, error) {
