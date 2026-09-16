@@ -336,6 +336,37 @@ func TestAdvisorTimeoutFailsNotHang(t *testing.T) {
 	}
 }
 
+func TestRetryAdvisorTimeoutFailsNotHang(t *testing.T) {
+	m := newMock()
+	m.on("run_retry_advisor", func(kwargs map[string]any) (map[string]any, error) {
+		time.Sleep(2 * time.Second)
+		return map[string]any{"should_retry": false, "diagnosis": "late", "strategy": "none", "modified_context": ""}, nil
+	})
+	cfg := testCfg(t, map[string]any{
+		"agent_timeout_seconds": 1,
+		"max_retries_per_issue": 1,
+		"enable_issue_advisor": false,
+		"enable_replanning": false,
+	})
+	dagState := initDAGState(makePlan([]map[string]any{issue("a")}, [][]string{{"a"}}), "/repo", nil, "")
+	executeFn := func(ctx context.Context, issue map[string]any, state *schemas.DAGState) (map[string]any, error) {
+		return nil, errors.New("deterministic external executor failure")
+	}
+
+	started := time.Now()
+	result, err := runExecuteFn(context.Background(), executeFn, issue("a"), dagState, cfg, m.fn, "swe-planner", "a")
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("runExecuteFn: %v", err)
+	}
+	if result.Outcome != schemas.IssueOutcomeFailedUnrecoverable {
+		t.Fatalf("outcome=%s, want failed_unrecoverable", result.Outcome)
+	}
+	if elapsed >= 1500*time.Millisecond {
+		t.Fatalf("retry advisor exceeded bounded timeout: %s", elapsed)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Contract: checkpoints written at save points + round-trip a Python golden
 // ---------------------------------------------------------------------------
