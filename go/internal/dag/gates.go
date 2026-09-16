@@ -528,13 +528,17 @@ func invokeReplannerViaCall(
 		}
 	}
 
-	decisionDict, err := callFn(ctx, nodeID+".run_replanner", map[string]any{
-		"dag_state":        dumpToMap(dagState),
-		"failed_issues":    dumpToMaps(unrecoverable),
-		"replan_model":     cfg.ReplanModel(),
-		"ai_provider":      cfg.AIProvider(),
-		"escalation_notes": escalationNotes,
-	})
+	decisionDict, err := callWithTimeout(ctx, cfg.AgentTimeoutSeconds,
+		fmt.Sprintf("replanner:%d", dagState.ReplanCount+1),
+		func(c context.Context) (map[string]any, error) {
+			return callFn(c, nodeID+".run_replanner", map[string]any{
+				"dag_state":        dumpToMap(dagState),
+				"failed_issues":    dumpToMaps(unrecoverable),
+				"replan_model":     cfg.ReplanModel(),
+				"ai_provider":      cfg.AIProvider(),
+				"escalation_notes": escalationNotes,
+			})
+		})
 	if err != nil {
 		return schemas.ReplanDecision{}, err
 	}
