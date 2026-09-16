@@ -112,6 +112,32 @@ func TestBuildEmptyGuardReportsFailed(t *testing.T) {
 	}
 }
 
+func TestBuildGitInitCallUsesAgentTimeout(t *testing.T) {
+	defer withExecCtx("run-timeout", "exec-timeout")()
+	deadlineSeen := errors.New("git init deadline present")
+	app := &mockApp{handler: func(ctx context.Context, target string, input map[string]any) (map[string]any, error) {
+		switch {
+		case strings.HasSuffix(target, ".plan"):
+			return map[string]any{"prd": map[string]any{}, "issues": []any{}, "artifacts_dir": input["artifacts_dir"]}, nil
+		case strings.HasSuffix(target, ".run_git_init"):
+			if _, ok := ctx.Deadline(); !ok {
+				return nil, errors.New("git init missing deadline")
+			}
+			return nil, deadlineSeen
+		default:
+			return map[string]any{}, nil
+		}
+	}}
+	deps := &Deps{App: app, NodeID: "swe-planner"}
+	_, err := Build(context.Background(), deps, map[string]any{
+		"goal": "thing", "repo_path": t.TempDir(),
+		"config": map[string]any{"git_init_max_retries": 1, "agent_timeout_seconds": 1},
+	})
+	if !errors.Is(err, deadlineSeen) {
+		t.Fatalf("git init timeout contract: got %v, want deadline-aware call", err)
+	}
+}
+
 // TestBuildPartialNotEmpty: a build that completed an issue and merged a branch
 // is NOT empty even when verification fails — it returns normally (no error).
 func TestBuildPartialNotEmpty(t *testing.T) {
