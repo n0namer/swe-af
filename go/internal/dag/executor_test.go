@@ -560,7 +560,7 @@ func TestLevelFailureThresholdAborts(t *testing.T) {
 	m.on("run_code_reviewer", func(kwargs map[string]any) (map[string]any, error) {
 		return map[string]any{"approved": false, "blocking": true, "summary": "bad"}, nil
 	})
-	cfg := testCfg(t, map[string]any{"enable_issue_advisor": false, "enable_replanning": false})
+	cfg := testCfg(t, map[string]any{"enable_issue_advisor": false, "enable_replanning": false, "max_coding_iterations": 1})
 	plan := makePlan(
 		[]map[string]any{issue("a"), issue("b"), issue("c", "a")},
 		[][]string{{"a", "b"}, {"c"}},
