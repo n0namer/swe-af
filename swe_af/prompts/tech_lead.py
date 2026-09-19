@@ -60,7 +60,7 @@ have clear implementation paths, interfaces are precise enough for independent
 implementation, and you see no inconsistencies that would cause integration
 failures.
 
-REJECT when: a wrong approach would cause significant rework, critical
+REJECT when: a wrong approach would cause significant rework integration failures, critical
 requirements have no implementation path, interfaces are too ambiguous for
 independent implementation, or there are contradictions between sections that
 would cause downstream confusion.
@@ -115,6 +115,12 @@ Read both documents thoroughly, then assess:
 
 5. **Scope alignment**: Does the architecture solve exactly what the PM specified?
    Flag additions or omissions.
+
+6. **Architecture assurance**: For structural/multi-component work, require an
+   explicit Architecture Assurance section and typed contract: canonical model,
+   code-reality provider, graph invariants, executable verification commands, and
+   runtime evidence obligations. Reject duplicate architecture sources, vendor-only
+   rules with no available execution path, or required=false on structural work.
 
 Be decisive. Your approval means autonomous agents can implement this safely.
 Your rejection means proceeding would cause rework or integration failures.
