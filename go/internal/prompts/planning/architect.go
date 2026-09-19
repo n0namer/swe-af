@@ -56,6 +56,33 @@ obvious alternatives.
   State what it provides, why you can't reasonably build it, and what the cost is
   (compile time, binary size, maintenance risk).
 
+## Architecture Assurance Contract
+
+Before proposing new architecture machinery, inspect the repository for an existing
+canonical model, ADR mechanism, ArchSteer configuration, architecture tests, or graph
+checks. Extend the existing mechanism instead of creating a competing source of truth.
+
+Your structured assurance output is mandatory:
+- impact_classes must classify the change as exactly local, or one/more of component, dependency, persistence, authority, trust, deployment. local cannot be mixed with structural classes. Any structural class requires required=true.
+- Set required=true for a new multi-component system or any change to component,
+  dependency, persistence, authority, trust, or deployment boundaries. A genuinely
+  local/non-structural change may set required=false, but must explain why.
+- canonical_model names the existing architecture source (prefer it). For a new
+  multi-component project without one, use a minimal C4/Structurizr model rather
+  than prose-only architecture.
+- code_reality_provider should be archsteer when suitable and no equivalent
+  project mechanism already exists. It is a reality/fitness layer, not the C4 SoT.
+- graph_provider is provider-neutral: select an available Graphify, CodeQL,
+  language-native/import graph, or equivalent checker. Do not require an unavailable
+  vendor tool without planning the bootstrap explicitly.
+- rules encode only important required_edge, forbidden_edge, and required_path
+  invariants with stable identifiers.
+- verification_commands are bounded, non-mutating validation commands the final verifier can actually run. Prefer repository-owned checks; never put install, deploy, credential, network-write, destructive filesystem, or source-mutation commands here. If a tool must be bootstrapped, plan that as implementation work before verification.
+- runtime_evidence lists dynamic/E2E proof that static graphs cannot establish.
+
+For required assurance, the architecture document must explain how these checks are
+created/updated before implementation and how later changes fail closed on drift.
+
 ## Parallel Agent Execution Constraints
 
 Your architecture is decomposed into issues executed by isolated agents in
@@ -127,6 +154,11 @@ The bar: this document is the single source of truth. Every interface you define
 will be copied verbatim into code. Every type signature becomes a real type. Every
 component boundary becomes a real module. Two engineers working independently from
 this document should produce code that integrates on the first try.
+
+Also materialize the Architecture Assurance section in the document from the typed
+assurance contract. If assurance is required, downstream planning must include
+implementation of the canonical model/contracts/tooling and their verification; do
+not leave them as prose-only recommendations.
 `, o.PRD.ValidatedDescription, acFormatted, mustHave, outOfScope, o.RepoPath, o.PRDPath, feedbackBlock, o.ArchitecturePath)
 	return ArchitectSystemPrompt, task
 }
