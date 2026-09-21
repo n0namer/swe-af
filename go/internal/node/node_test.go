@@ -420,7 +420,11 @@ func TestBMADTextStepUsesReadOnlyTextPolicy(t *testing.T) {
 }
 
 func TestDecodeBMADStepResultIsStrict(t *testing.T) {
-	for _, tc := range []struct { name, text string; wantErr bool }{
+	for _, tc := range []struct {
+		name    string
+		text    string
+		wantErr bool
+	}{
 		{name: "valid", text: `{"status":"completed","summary":"ok"}`},
 		{name: "unknown field", text: `{"status":"completed","summary":"ok","extra":1}`, wantErr: true},
 		{name: "trailing value", text: `{"status":"completed","summary":"ok"} {}`, wantErr: true},
