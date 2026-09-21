@@ -369,43 +369,87 @@ func TestBMADMethodStopsAtBlockedStep(t *testing.T) {
 		{ID: "one", Text: "one"}, {ID: "two", Text: "two"}, {ID: "must-not-run", Text: "three"},
 	}}
 	seen := []string{}
-	exec := func(_ context.Context, _ bmadMethod, step bmadStep, _, _ map[string]any) (*bmadStepResult, error) { seen = append(seen, step.ID); if step.ID == "two" { return &bmadStepResult{Status: "blocked", Summary: "needs evidence"}, nil }; return &bmadStepResult{Status: "completed", Summary: "ok"}, nil }
+	exec := func(_ context.Context, _ bmadMethod, step bmadStep, _, _ map[string]any) (*bmadStepResult, error) {
+		seen = append(seen, step.ID)
+		if step.ID == "two" {
+			return &bmadStepResult{Status: "blocked", Summary: "needs evidence"}, nil
+		}
+		return &bmadStepResult{Status: "completed", Summary: "ok"}, nil
+	}
 
 	got, err := runBMADMethod(context.Background(), method, nil, exec)
-	if err != nil { t.Fatalf("runBMADMethod: %v", err) }
-	if got.Status != "blocked" || strings.Join(seen, ",") != "one,two" { t.Fatalf("blocked workflow continued: result=%#v seen=%v", got, seen) }
-	if strings.Join(got.CompletedSteps, ",") != "one" { t.Fatalf("blocked step counted as completed: %v", got.CompletedSteps) }
+	if err != nil {
+		t.Fatalf("runBMADMethod: %v", err)
+	}
+	if got.Status != "blocked" || strings.Join(seen, ",") != "one,two" {
+		t.Fatalf("blocked workflow continued: result=%#v seen=%v", got, seen)
+	}
+	if strings.Join(got.CompletedSteps, ",") != "one" {
+		t.Fatalf("blocked step counted as completed: %v", got.CompletedSteps)
+	}
 }
 
 func TestBMADAdversarialMethodPinnedAndOrdered(t *testing.T) {
-	if adversarialGeneralMethod.Source != bmadSourceCommit || len(adversarialGeneralMethod.Steps) != 3 { t.Fatalf("unexpected pinned method: %#v", adversarialGeneralMethod) }
+	if adversarialGeneralMethod.Source != bmadSourceCommit || len(adversarialGeneralMethod.Steps) != 3 {
+		t.Fatalf("unexpected pinned method: %#v", adversarialGeneralMethod)
+	}
 	want := "receive-content,adversarial-analysis,present-findings"
-	ids := make([]string, 0, len(adversarialGeneralMethod.Steps)); for _, step := range adversarialGeneralMethod.Steps { ids = append(ids, step.ID) }
-	if strings.Join(ids, ",") != want { t.Fatalf("step order = %v, want %s", ids, want) }
+	ids := make([]string, 0, len(adversarialGeneralMethod.Steps))
+	for _, step := range adversarialGeneralMethod.Steps {
+		ids = append(ids, step.ID)
+	}
+	if strings.Join(ids, ",") != want {
+		t.Fatalf("step order = %v, want %s", ids, want)
+	}
 }
 
 func TestBMADEdgeCaseMethodPinnedAndOrdered(t *testing.T) {
-	if edgeCaseHunterMethod.Source != bmadSourceCommit || len(edgeCaseHunterMethod.Steps) != 5 { t.Fatalf("unexpected pinned edge method: %#v", edgeCaseHunterMethod) }
+	if edgeCaseHunterMethod.Source != bmadSourceCommit || len(edgeCaseHunterMethod.Steps) != 5 {
+		t.Fatalf("unexpected pinned edge method: %#v", edgeCaseHunterMethod)
+	}
 	want := "receive-content,exhaustive-path-analysis,validate-completeness,deletion-check,present-findings"
-	ids := make([]string, 0, len(edgeCaseHunterMethod.Steps)); for _, step := range edgeCaseHunterMethod.Steps { ids = append(ids, step.ID) }
-	if strings.Join(ids, ",") != want { t.Fatalf("edge step order = %v, want %s", ids, want) }
+	ids := make([]string, 0, len(edgeCaseHunterMethod.Steps))
+	for _, step := range edgeCaseHunterMethod.Steps {
+		ids = append(ids, step.ID)
+	}
+	if strings.Join(ids, ",") != want {
+		t.Fatalf("edge step order = %v, want %s", ids, want)
+	}
 }
 
-type bmadHarnessStub struct { fn func(schema map[string]any, dest any, opts harness.Options) (*harness.Result, error) }
-func (b *bmadHarnessStub) Harness(_ context.Context, _ string, schema map[string]any, dest any, opts harness.Options) (*harness.Result, error) { return b.fn(schema, dest, opts) }
+type bmadHarnessStub struct {
+	fn func(schema map[string]any, dest any, opts harness.Options) (*harness.Result, error)
+}
+
+func (b *bmadHarnessStub) Harness(_ context.Context, _ string, schema map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
+	return b.fn(schema, dest, opts)
+}
 
 func TestBMADTextStepFailsClosedOnInvalidTextEnvelope(t *testing.T) {
-	t.Setenv("SWE_DEFAULT_RUNTIME", "claude_code"); t.Setenv("SWE_DEFAULT_MODEL", "sonnet")
-	h := &bmadHarnessStub{fn: func(schema map[string]any, dest any, _ harness.Options) (*harness.Result, error) { if schema != nil || dest != nil { t.Fatalf("BMAD text path unexpectedly requested schema output") }; return &harness.Result{Result: "not-json"}, nil }}
+	t.Setenv("SWE_DEFAULT_RUNTIME", "claude_code")
+	t.Setenv("SWE_DEFAULT_MODEL", "sonnet")
+	h := &bmadHarnessStub{fn: func(schema map[string]any, dest any, _ harness.Options) (*harness.Result, error) {
+		if schema != nil || dest != nil {
+			t.Fatalf("BMAD text path unexpectedly requested schema output")
+		}
+		return &harness.Result{Result: "not-json"}, nil
+	}}
 	_, err := runBMADTextStep(context.Background(), h, adversarialGeneralMethod, adversarialGeneralMethod.Steps[0], map[string]any{"content": "diff"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "decode BMAD step JSON") { t.Fatalf("error=%v, want strict JSON envelope failure", err) }
+	if err == nil || !strings.Contains(err.Error(), "decode BMAD step JSON") {
+		t.Fatalf("error=%v, want strict JSON envelope failure", err)
+	}
 }
 
 func TestBMADTextStepPropagatesProviderFailure(t *testing.T) {
-	t.Setenv("SWE_DEFAULT_RUNTIME", "claude_code"); t.Setenv("SWE_DEFAULT_MODEL", "sonnet")
-	h := &bmadHarnessStub{fn: func(_ map[string]any, _ any, _ harness.Options) (*harness.Result, error) { return &harness.Result{IsError: true, ErrorMessage: "provider failed"}, nil }}
+	t.Setenv("SWE_DEFAULT_RUNTIME", "claude_code")
+	t.Setenv("SWE_DEFAULT_MODEL", "sonnet")
+	h := &bmadHarnessStub{fn: func(_ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+		return &harness.Result{IsError: true, ErrorMessage: "provider failed"}, nil
+	}}
 	_, err := runBMADTextStep(context.Background(), h, adversarialGeneralMethod, adversarialGeneralMethod.Steps[0], map[string]any{"content": "diff"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "provider failed") { t.Fatalf("error=%v", err) }
+	if err == nil || !strings.Contains(err.Error(), "provider failed") {
+		t.Fatalf("error=%v", err)
+	}
 }
 
 func TestBMADTextStepUsesReadOnlyTextPolicy(t *testing.T) {
