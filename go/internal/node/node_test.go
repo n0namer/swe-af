@@ -132,6 +132,37 @@ func (s stubAttacher) Sweep(time.Duration, int64) (int, error)               { r
 // mirror. Mirroring is opt-in, so on a node that never makes a mirror the
 // reasoner must not be advertised at all — an entrypoint-tagged surface that
 // can only ever answer {"available": false} is an invitation to route to it.
+func TestBMADWorkflowReasonersAreOptIn(t *testing.T) {
+	names := []string{bmadReviewAdversarialGeneral, bmadReviewEdgeCaseHunter}
+	for _, tc := range []struct {
+		enabled string
+		want    bool
+	}{{enabled: "", want: false}, {enabled: "1", want: true}} {
+		t.Run("enabled="+tc.enabled, func(t *testing.T) {
+			t.Setenv("SWE_PRO_ENGINE", "")
+			t.Setenv("SWE_BMAD_ENABLED", tc.enabled)
+			t.Setenv(furrow.EnvEnabled, "")
+			t.Setenv(furrow.EnvPublicAddr, "")
+			n, err := BuildAgent("swe-planner", "8005", "Autonomous SWE planning pipeline")
+			if err != nil {
+				t.Fatalf("BuildAgent: %v", err)
+			}
+			n.RegisterPlanner()
+			for _, name := range names {
+				if got := toSet(n.RegisteredNames())[name]; got != tc.want {
+					t.Fatalf("BMAD workflow %s registered=%v, want %v", name, got, tc.want)
+				}
+				if tc.want {
+					meta := n.RegisteredMeta()[name]
+					if !toSet(meta.Tags)["bmad"] || !toSet(meta.Tags)[tagEntrypoint] {
+						t.Fatalf("BMAD workflow %s tags=%v", name, meta.Tags)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestWorkspaceHandleReasonerIsGatedOnFurrow(t *testing.T) {
 	const name = "get_workspace_handle"
 	for _, tc := range []struct {
