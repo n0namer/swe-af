@@ -358,6 +358,7 @@ func TestBMADMethodStopsAtBlockedStep(t *testing.T) {
 	}}
 	seen := []string{}
 	exec := func(_ context.Context, _ bmadMethod, step bmadStep, _, _ map[string]any) (*bmadStepResult, error) { seen = append(seen, step.ID); if step.ID == "two" { return &bmadStepResult{Status: "blocked", Summary: "needs evidence"}, nil }; return &bmadStepResult{Status: "completed", Summary: "ok"}, nil }
+
 	got, err := runBMADMethod(context.Background(), method, nil, exec)
 	if err != nil { t.Fatalf("runBMADMethod: %v", err) }
 	if got.Status != "blocked" || strings.Join(seen, ",") != "one,two" { t.Fatalf("blocked workflow continued: result=%#v seen=%v", got, seen) }
