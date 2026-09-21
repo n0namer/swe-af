@@ -457,22 +457,42 @@ func TestBMADTextStepUsesReadOnlyTextPolicy(t *testing.T) {
 	t.Setenv("SWE_DEFAULT_MODEL", "test-model")
 	var got harness.Options
 	h := &bmadHarnessStub{fn: func(schema map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
-		if schema != nil || dest != nil { t.Fatalf("schema=%v dest=%T, want nil/nil", schema, dest) }
+		if schema != nil || dest != nil {
+			t.Fatalf("schema=%v dest=%T, want nil/nil", schema, dest)
+		}
 		got = opts
 		return &harness.Result{Result: `{"status":"completed","summary":"loaded"}`}, nil
 	}}
-	if _, err := runBMADTextStep(context.Background(), h, adversarialGeneralMethod, adversarialGeneralMethod.Steps[0], map[string]any{"content": "diff"}, nil); err != nil { t.Fatalf("runBMADTextStep: %v", err) }
+	if _, err := runBMADTextStep(context.Background(), h, adversarialGeneralMethod, adversarialGeneralMethod.Steps[0], map[string]any{"content": "diff"}, nil); err != nil {
+		t.Fatalf("runBMADTextStep: %v", err)
+	}
 	var policy map[string]any
-	if err := json.Unmarshal([]byte(got.Env["OPENCODE_CONFIG_CONTENT"]), &policy); err != nil { t.Fatalf("invalid BMAD OpenCode policy: %v", err) }
+	if err := json.Unmarshal([]byte(got.Env["OPENCODE_CONFIG_CONTENT"]), &policy); err != nil {
+		t.Fatalf("invalid BMAD OpenCode policy: %v", err)
+	}
 	permission := policy["permission"].(map[string]any)
-	if permission["bash"] != "deny" { t.Fatalf("bash permission=%v", permission["bash"]) }
+	if permission["bash"] != "deny" {
+		t.Fatalf("bash permission=%v", permission["bash"])
+	}
 	edit := permission["edit"].(map[string]any)
-	if edit["*"] != "deny" { t.Fatalf("edit policy=%v", edit) }
-	if strings.Join(got.Tools, ",") != "Read" { t.Fatalf("tools=%v, want Read only", got.Tools) }
-	if got.PermissionMode != "plan" { t.Fatalf("permission_mode=%q, want plan", got.PermissionMode) }
-	if got.Timeout != 300 { t.Fatalf("timeout=%d, want 300", got.Timeout) }
-	if got.Cwd == "" || !strings.Contains(filepath.Base(got.Cwd), "swe-bmad-review-") { t.Fatalf("cwd=%q", got.Cwd) }
-	if _, err := os.Stat(got.Cwd); !os.IsNotExist(err) { t.Fatalf("BMAD temp cwd survived cleanup: stat err=%v", err) }
+	if edit["*"] != "deny" {
+		t.Fatalf("edit policy=%v", edit)
+	}
+	if strings.Join(got.Tools, ",") != "Read" {
+		t.Fatalf("tools=%v, want Read only", got.Tools)
+	}
+	if got.PermissionMode != "plan" {
+		t.Fatalf("permission_mode=%q, want plan", got.PermissionMode)
+	}
+	if got.Timeout != 300 {
+		t.Fatalf("timeout=%d, want 300", got.Timeout)
+	}
+	if got.Cwd == "" || !strings.Contains(filepath.Base(got.Cwd), "swe-bmad-review-") {
+		t.Fatalf("cwd=%q", got.Cwd)
+	}
+	if _, err := os.Stat(got.Cwd); !os.IsNotExist(err) {
+		t.Fatalf("BMAD temp cwd survived cleanup: stat err=%v", err)
+	}
 }
 
 func TestDecodeBMADStepResultIsStrict(t *testing.T) {
