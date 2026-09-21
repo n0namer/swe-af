@@ -760,6 +760,9 @@ func runBMADTextStep(ctx context.Context, app harnessx.HarnessCaller, method bma
 	if err != nil {
 		return nil, err
 	}
+	if provider == "codex" {
+		return nil, fmt.Errorf("BMAD reviewer does not support Codex: pinned AgentField Codex adapter cannot enforce the required read-only tool allowlist")
+	}
 	contextJSON, err := json.Marshal(map[string]any{"state": state, "artifacts": artifacts})
 	if err != nil {
 		return nil, fmt.Errorf("marshal BMAD step context: %w", err)
