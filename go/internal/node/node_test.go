@@ -353,7 +353,9 @@ func TestBMADMethodPreservesStepOrderAndState(t *testing.T) {
 }
 
 func TestBMADMethodStopsAtBlockedStep(t *testing.T) {
-	method := bmadMethod{ID: "test-method", Source: "deadbeef", Steps: []bmadStep{{ID: "one", Text: "one"}, {ID: "two", Text: "two"}, {ID: "must-not-run", Text: "three"}}}
+	method := bmadMethod{ID: "test-method", Source: "deadbeef", Steps: []bmadStep{
+		{ID: "one", Text: "one"}, {ID: "two", Text: "two"}, {ID: "must-not-run", Text: "three"},
+	}}
 	seen := []string{}
 	exec := func(_ context.Context, _ bmadMethod, step bmadStep, _, _ map[string]any) (*bmadStepResult, error) { seen = append(seen, step.ID); if step.ID == "two" { return &bmadStepResult{Status: "blocked", Summary: "needs evidence"}, nil }; return &bmadStepResult{Status: "completed", Summary: "ok"}, nil }
 	got, err := runBMADMethod(context.Background(), method, nil, exec)
