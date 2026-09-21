@@ -719,7 +719,13 @@ func validateBMADRunOutput(method bmadMethod, result *bmadRunResult) error {
 
 func bmadReadOnlyEnv() map[string]string {
 	return map[string]string{
-		"OPENCODE_CONFIG_CONTENT": `{"permission":{"bash":"deny","edit":{"*":"deny"}}}`,
+		// The pinned AgentField OpenCode adapter ignores RoleOptions.Tools and
+		// delegates tool authority to OPENCODE_CONFIG_CONTENT. OpenCode defaults
+		// permissions to allow, so deny every non-read capability explicitly and
+		// keep external paths closed. The reviewer receives its content inline and
+		// runs in an empty temporary cwd; read/glob/grep/list are sufficient for a
+		// provider that insists on discovery-oriented read tools.
+		"OPENCODE_CONFIG_CONTENT": `{"permission":{"read":"allow","glob":"allow","grep":"allow","list":"allow","external_directory":"deny","edit":"deny","bash":"deny","task":"deny","skill":"deny","webfetch":"deny","websearch":"deny","lsp":"deny","todowrite":"deny","question":"deny"}}`,
 	}
 }
 
