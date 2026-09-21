@@ -40,10 +40,17 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 
+	"github.com/Agent-Field/SWE-AF/go/internal/config"
 	"github.com/Agent-Field/SWE-AF/go/internal/furrow"
+	"github.com/Agent-Field/SWE-AF/go/internal/harnessx"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
 	"github.com/Agent-Field/SWE-AF/go/internal/orch"
 	"github.com/Agent-Field/SWE-AF/go/internal/roles/advisor"
@@ -51,6 +58,7 @@ import (
 	"github.com/Agent-Field/SWE-AF/go/internal/roles/coding"
 	"github.com/Agent-Field/SWE-AF/go/internal/roles/gitops"
 	"github.com/Agent-Field/SWE-AF/go/internal/roles/planning"
+	"github.com/Agent-Field/SWE-AF/go/internal/runtimex"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fast"
 	"github.com/Agent-Field/SWE-AF/go/internal/issue"
