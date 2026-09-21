@@ -495,6 +495,28 @@ func TestBMADTextStepUsesReadOnlyTextPolicy(t *testing.T) {
 	}
 }
 
+func TestBMADTextStepUsesCodexReadOnlySandbox(t *testing.T) {
+	t.Setenv("SWE_DEFAULT_RUNTIME", "codex")
+	t.Setenv("SWE_DEFAULT_MODEL", "test-model")
+	var got harness.Options
+	h := &bmadHarnessStub{fn: func(schema map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
+		if schema != nil || dest != nil {
+			t.Fatalf("schema=%v dest=%T, want nil/nil", schema, dest)
+		}
+		got = opts
+		return &harness.Result{Result: `{"status":"completed","summary":"loaded"}`}, nil
+	}}
+	if _, err := runBMADTextStep(context.Background(), h, adversarialGeneralMethod, adversarialGeneralMethod.Steps[0], map[string]any{"content": "diff"}, nil); err != nil {
+		t.Fatalf("runBMADTextStep: %v", err)
+	}
+	if got.PermissionMode != "read-only" {
+		t.Fatalf("permission_mode=%q, want read-only for Codex", got.PermissionMode)
+	}
+	if strings.Join(got.Tools, ",") != "Read" {
+		t.Fatalf("tools=%v, want Read only", got.Tools)
+	}
+}
+
 func TestDecodeBMADStepResultIsStrict(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
