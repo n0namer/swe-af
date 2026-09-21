@@ -426,6 +426,10 @@ func (n *Node) registerProReasoners() {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// BMAD method runtime
+// ---------------------------------------------------------------------------
+
 const (
 	bmadSourceCommit             = "635311f06afc5bd93cf2b09d3acd108f054427c7"
 	bmadReviewAdversarialGeneral = "bmad_review_adversarial_general"
