@@ -587,6 +587,51 @@ func registerBMADMethod(n *Node, name, description string, method bmadMethod, al
 	}, opts...)
 }
 
+func runBMADMethod(ctx context.Context, method bmadMethod, initial map[string]any, exec bmadStepExecutor) (*bmadRunResult, error) {
+	if method.ID == "" || method.Source == "" || len(method.Steps) == 0 || exec == nil { return nil, fmt.Errorf("invalid BMAD method definition") }
+	state := cloneAnyMap(initial); artifacts := map[string]any{}; completed := make([]string, 0, len(method.Steps)); output := ""; seenStepIDs := map[string]bool{}; immutableInputs := map[string]string{}
+	for _, key := range []string{"content", "also_consider"} { if value, ok := initial[key].(string); ok { immutableInputs[key] = value } }
+	for _, step := range method.Steps {
+		if err := ctx.Err(); err != nil { return nil, err }
+		if step.ID == "" || strings.TrimSpace(step.Text) == "" || seenStepIDs[step.ID] { return nil, fmt.Errorf("BMAD method %s has invalid or duplicate step %q", method.ID, step.ID) }
+		seenStepIDs[step.ID] = true
+		result, err := exec(ctx, method, step, cloneAnyMap(state), cloneAnyMap(artifacts)); if err != nil { return nil, fmt.Errorf("BMAD %s step %s: %w", method.ID, step.ID, err) }
+		if err := ctx.Err(); err != nil { return nil, err }
+		if result == nil || (result.Status != "completed" && result.Status != "blocked") || strings.TrimSpace(result.Summary) == "" { return nil, fmt.Errorf("BMAD %s step %s returned invalid envelope", method.ID, step.ID) }
+		encoded, err := json.Marshal(result); if err != nil { return nil, fmt.Errorf("BMAD %s step %s envelope is not JSON-safe: %w", method.ID, step.ID, err) }
+		if len(encoded) > bmadMaxStepEnvelopeBytes { return nil, fmt.Errorf("BMAD %s step %s envelope exceeds %d bytes", method.ID, step.ID, bmadMaxStepEnvelopeBytes) }
+		if result.Status == "blocked" { return &bmadRunResult{MethodID: method.ID, SourceCommit: method.Source, Status: "blocked", CompletedSteps: completed, State: state, Artifacts: artifacts, Output: result.Output}, nil }
+		for key, want := range immutableInputs { if got, exists := result.State[key]; exists { gotString, ok := got.(string); if !ok || gotString != want { return nil, fmt.Errorf("BMAD %s step %s attempted to mutate immutable input %s", method.ID, step.ID, key) } } }
+		mergeAnyMap(state, result.State); mergeAnyMap(artifacts, result.Artifacts); output = result.Output; completed = append(completed, step.ID)
+	}
+	return &bmadRunResult{MethodID: method.ID, SourceCommit: method.Source, Status: "completed", CompletedSteps: completed, State: state, Artifacts: artifacts, Output: output}, nil
+}
+
+func validateBMADRunOutput(method bmadMethod, result *bmadRunResult) error {
+	if result == nil || result.Status != "completed" { return nil }
+	output := strings.TrimSpace(result.Output)
+	switch method.ID {
+	case adversarialGeneralMethod.ID:
+		if output == "" { return fmt.Errorf("BMAD %s produced empty Markdown findings output", method.ID) }
+		bulletCount := 0; for _, line := range strings.Split(output, "\n") { trimmed := strings.TrimSpace(line); if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") { bulletCount++ } }
+		if bulletCount < 10 { return fmt.Errorf("BMAD %s produced %d findings; need at least 10", method.ID, bulletCount) }
+	case edgeCaseHunterMethod.ID:
+		if !strings.HasPrefix(output, "[") { return fmt.Errorf("BMAD %s produced non-array JSON output", method.ID) }
+		var findings []map[string]any; if err := json.Unmarshal([]byte(output), &findings); err != nil { return fmt.Errorf("BMAD %s produced invalid JSON findings output: %w", method.ID, err) }
+		for i, finding := range findings {
+			for _, key := range []string{"location", "trigger_condition", "guard_snippet", "potential_consequence"} { value, ok := finding[key].(string); if !ok || strings.TrimSpace(value) == "" { return fmt.Errorf("BMAD %s finding %d missing %s", method.ID, i, key) } }
+			trigger := finding["trigger_condition"].(string); consequence := finding["potential_consequence"].(string); guard := finding["guard_snippet"].(string)
+			if len(strings.Fields(trigger)) > 15 || len(strings.Fields(consequence)) > 15 { return fmt.Errorf("BMAD %s finding %d exceeds 15-word field limit", method.ID, i) }
+			if strings.ContainsAny(guard, "\r\n") { return fmt.Errorf("BMAD %s finding %d guard_snippet must be single-line", method.ID, i) }
+			allowed := map[string]bool{"location": true, "trigger_condition": true, "guard_snippet": true, "potential_consequence": true}
+			if kind, ok := finding["kind"]; ok { if kind != "deletion" { return fmt.Errorf("BMAD %s finding %d has invalid kind", method.ID, i) }; confidence, ok := finding["confidence"].(string); if !ok || (confidence != "high" && confidence != "medium" && confidence != "low") { return fmt.Errorf("BMAD %s finding %d has invalid deletion confidence", method.ID, i) }; allowed["kind"], allowed["confidence"] = true, true }
+			for key := range finding { if !allowed[key] { return fmt.Errorf("BMAD %s finding %d has unexpected field %s", method.ID, i, key) } }
+		}
+	default: return fmt.Errorf("BMAD method %s has no output validator", method.ID)
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Registration helper
 // ---------------------------------------------------------------------------
