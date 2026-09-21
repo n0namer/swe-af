@@ -721,10 +721,10 @@ func bmadReadOnlyEnv() map[string]string {
 	return map[string]string{
 		// The pinned AgentField OpenCode adapter ignores RoleOptions.Tools and
 		// delegates tool authority to OPENCODE_CONFIG_CONTENT. OpenCode defaults
-		// permissions to allow, so deny every non-read capability explicitly and
-		// keep external paths closed. The reviewer receives its content inline and
-		// runs in an empty temporary cwd; read/glob/grep/list are sufficient for a
-		// provider that insists on discovery-oriented read tools.
+		// permissions to allow, so deny the whole tool namespace first and then
+		// allow only read-oriented capabilities. The reviewer receives its content
+		// inline and runs in an empty temporary cwd; read/glob/grep/list are enough
+		// for a provider that insists on discovery-oriented read tools.
 		"OPENCODE_CONFIG_CONTENT": `{"permission":{"*":"deny","read":"allow","glob":"allow","grep":"allow","list":"allow"}}`,
 	}
 }
