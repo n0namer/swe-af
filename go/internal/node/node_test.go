@@ -471,12 +471,15 @@ func TestBMADTextStepUsesReadOnlyTextPolicy(t *testing.T) {
 		t.Fatalf("invalid BMAD OpenCode policy: %v", err)
 	}
 	permission := policy["permission"].(map[string]any)
-	if permission["bash"] != "deny" {
-		t.Fatalf("bash permission=%v", permission["bash"])
+	for _, key := range []string{"read", "glob", "grep", "list"} {
+		if permission[key] != "allow" {
+			t.Fatalf("%s permission=%v, want allow", key, permission[key])
+		}
 	}
-	edit := permission["edit"].(map[string]any)
-	if edit["*"] != "deny" {
-		t.Fatalf("edit policy=%v", edit)
+	for _, key := range []string{"external_directory", "edit", "bash", "task", "skill", "webfetch", "websearch", "lsp", "todowrite", "question"} {
+		if permission[key] != "deny" {
+			t.Fatalf("%s permission=%v, want deny", key, permission[key])
+		}
 	}
 	if strings.Join(got.Tools, ",") != "Read" {
 		t.Fatalf("tools=%v, want Read only", got.Tools)
