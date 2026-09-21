@@ -101,6 +101,7 @@ func TestRegisterPlannerExactSurface(t *testing.T) {
 	// when the enable flag is unconfigured) cannot widen the surface under
 	// test (each gated surface has its own test).
 	t.Setenv("SWE_PRO_ENGINE", "")
+	t.Setenv("SWE_BMAD_ENABLED", "")
 	t.Setenv(furrow.EnvEnabled, "")
 	t.Setenv(furrow.EnvPublicAddr, "")
 	n, err := BuildAgent("swe-planner", "8005", "Autonomous SWE planning pipeline")
