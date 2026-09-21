@@ -337,19 +337,31 @@ func TestBMADMethodPreservesStepOrderAndState(t *testing.T) {
 		case "one":
 			return &bmadStepResult{Status: "completed", Summary: "one", State: map[string]any{"from_one": true}, Artifacts: map[string]any{"artifact_one": "x"}}, nil
 		case "two":
-			if state["from_one"] != true || artifacts["artifact_one"] != "x" { t.Fatalf("step two did not receive prior state/artifacts: state=%v artifacts=%v", state, artifacts) }
+			if state["from_one"] != true || artifacts["artifact_one"] != "x" {
+				t.Fatalf("step two did not receive prior state/artifacts: state=%v artifacts=%v", state, artifacts)
+			}
 			return &bmadStepResult{Status: "completed", Summary: "two", State: map[string]any{"from_two": true}}, nil
 		default:
-			if state["from_two"] != true { t.Fatalf("step three did not receive step two state: %v", state) }
+			if state["from_two"] != true {
+				t.Fatalf("step three did not receive step two state: %v", state)
+			}
 			return &bmadStepResult{Status: "completed", Summary: "three", Output: "final"}, nil
 		}
 	}
 
 	got, err := runBMADMethod(context.Background(), method, map[string]any{"initial": 1}, exec)
-	if err != nil { t.Fatalf("runBMADMethod: %v", err) }
-	if strings.Join(seen, ",") != "one,two,three" { t.Fatalf("step order = %v", seen) }
-	if got.Status != "completed" || got.Output != "final" || got.SourceCommit != "deadbeef" { t.Fatalf("unexpected result: %#v", got) }
-	if strings.Join(got.CompletedSteps, ",") != "one,two,three" { t.Fatalf("completed steps = %v", got.CompletedSteps) }
+	if err != nil {
+		t.Fatalf("runBMADMethod: %v", err)
+	}
+	if strings.Join(seen, ",") != "one,two,three" {
+		t.Fatalf("step order = %v", seen)
+	}
+	if got.Status != "completed" || got.Output != "final" || got.SourceCommit != "deadbeef" {
+		t.Fatalf("unexpected result: %#v", got)
+	}
+	if strings.Join(got.CompletedSteps, ",") != "one,two,three" {
+		t.Fatalf("completed steps = %v", got.CompletedSteps)
+	}
 }
 
 func TestBMADMethodStopsAtBlockedStep(t *testing.T) {
