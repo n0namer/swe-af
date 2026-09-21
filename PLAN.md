@@ -45,6 +45,52 @@ AgentField, FCM, OpenCode, Coding Station, SourceLoop and contract completion ar
 - **Acceptance Runtime Equivalence Gate:** diagnostic/process-only runtimes may reproduce or isolate a fault, but they never count toward the North-Star full-Build streak unless they satisfy both (1) **dependency/bootstrap equivalence** — the same required OpenCode wrapper/binary, provider config, broker env contract, runtime defaults and filesystem/package assets as the native SWE runtime — and (2) **lifecycle equivalence** — the planner/control-plane process is owned by the normal durable runtime/package/service lifecycle, survives operator-session expiry, has stable reachable callback identity, and leaves independently readable terminal/effect state after the initiating operator session disappears. A managed terminal session, ad-hoc localhost control-plane, or binary launched in another service's container is diagnostic evidence only unless these equivalence criteria are explicitly proven before START.
 - **Preflight-before-Build rule:** before any run can count, executable preflight must prove exact source/binary identity, clean target worktree, zero pre-existing mutators, real OpenCode invocation through the native wrapper with the frozen model route, reachable control-plane callback, and durable post-session execution readback. If any of these are missing, stop with `RUNTIME_MATERIALIZATION_GAP`; do not start a Build and reinterpret the resulting failure as product/framework evidence.
 
+## Program G1 reviewer-runtime fix — 2026-09-21
+
+Status: **done**
+Quick Dev baseline: `fc3ea708aad4a4b478043f819bbccf0e9f6983ea`
+Program blocker: Universal Solver G1/Story 3.1 cannot leave `review` because the published native BMAD adversarial workflow fails at `receive-content` with `invalid envelope`, while Edge Case Hunter is not published.
+
+**Intent:** restore the existing opt-in BMAD review runtime so mandatory independent review can run through AgentField without bypassing BMad or creating another review subsystem.
+
+**Always:** preserve `SWE_BMAD_ENABLED` opt-in, pinned BMAD source identity, ordered step execution, read-only review behavior, fail-closed structured results, and AgentField tracing. Work only in this clean worktree; `/src/swe-af` dirty state is evidence/input only.
+
+**Never:** modify F16/product semantics, unrelated dirty runtime files, deploy/redeploy, publish/PR/CI, auto-fill missing review results, or weaken structured-output validation.
+
+**Code map:**
+- `go/internal/node/register.go` — BMAD workflow definitions, publication and text-step execution.
+- `go/internal/node/node_test.go` — reasoner surface, method ordering and fail-closed runtime contracts.
+
+**Execution tasks:**
+- [x] Port only the existing BMAD runtime/test hunks from the loaded dirty source into this clean baseline.
+- [x] Preserve adversarial workflow and publish pinned Edge Case Hunter on the same ordered method engine.
+- [x] Make BMAD text-step execution use the read-only OpenCode structured-output allowance and surface `Parsed==nil` harness failures instead of degrading to an invalid zero-value envelope.
+- [x] Add deterministic tests for opt-in publication, pinned method order, fail-closed parse handling, and read-only output policy.
+
+**Acceptance:**
+- Given `SWE_BMAD_ENABLED` is off/on, when planner surface registers, then neither/both review workflows are discoverable with BMAD+entrypoint tags.
+- Given a harness returns no parsed structured output, when a BMAD step runs, then the workflow returns the underlying structured-output failure and never treats a zero-value envelope as valid.
+- Given OpenCode is selected, when a BMAD text step runs, then product edits/bash are denied while `.agentfield-out-*/*` structured-output writes remain allowed.
+- Given Edge Case Hunter, when inspected/executed, then Receive → Exhaustive Path Analysis → Validate Completeness → Deletion Check → Present Findings is pinned to the same BMAD source commit.
+
+**Verification:** targeted `go test ./internal/node -run BMAD -count=1`, full `go test ./internal/node -count=1`, `go test ./... -count=1`, `go vet ./...`, and `git diff --check`; then BMad adversarial + edge review on final delta before local exact commit.
+
+**Review closure:**
+- BMad adversarial review found and closed: invalid escaped input schema; missing input/type bounds; stale intermediate-output acceptance; immutable caller-content mutation; duplicate step IDs; unknown-method output-validator bypass; missing minimum adversarial findings; weak Edge output validation; missing cancellation-after-exec guard; unbounded step envelope.
+- BMad edge-case review additionally closed: Edge empty-input halt; wrong direct-invocation types; deletion finding confidence contract; single-line guard rule; trigger/consequence word limits; isolated review cwd; read-only tool/permission surface; provider failure propagation; strict JSON envelope decoding.
+- No unresolved story-local review finding remains. Pre-existing Furrow nondeterministic transport failures were observed in earlier runs with zero Furrow diff; final full suite passed them.
+
+**Final evidence:**
+- `go test ./internal/node -run BMAD -count=1` PASS after final review fixes.
+- `go test ./internal/node -count=1` PASS.
+- `go test ./internal/node -run BMAD -count=3` PASS.
+- `go vet ./...` PASS.
+- final `go test ./... -count=1` PASS, including `cmd/furrowd`.
+- `git diff --check` PASS.
+- Runtime/deploy/PR/CI not changed; dirty `/src/swe-af` remained untouched.
+
+**DoD result:** reviewer-runtime source fix is functionally GREEN in the clean exact-source worktree. It restores a canonical, pinned, fail-closed adversarial workflow and publishes the pinned Edge Case Hunter without depending on dirty-only `Agent.Span`/`RoleOptions.Timeout` APIs. Next safe move is durable local commit/readback, then central BMad evidence update. G1 itself remains `review` until this exact fix is materialized into the existing reviewer runtime and the independent G1 review is rerun.
+
 ## CURRENT — 2026-09-13
 
 ### Source/runtime identity
