@@ -344,6 +344,7 @@ func TestBMADMethodPreservesStepOrderAndState(t *testing.T) {
 			return &bmadStepResult{Status: "completed", Summary: "three", Output: "final"}, nil
 		}
 	}
+
 	got, err := runBMADMethod(context.Background(), method, map[string]any{"initial": 1}, exec)
 	if err != nil { t.Fatalf("runBMADMethod: %v", err) }
 	if strings.Join(seen, ",") != "one,two,three" { t.Fatalf("step order = %v", seen) }
