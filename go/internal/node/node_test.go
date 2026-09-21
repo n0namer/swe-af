@@ -496,25 +496,16 @@ func TestBMADTextStepUsesReadOnlyTextPolicy(t *testing.T) {
 	}
 }
 
-func TestBMADTextStepUsesCodexReadOnlySandbox(t *testing.T) {
+func TestBMADTextStepRejectsCodexWithoutReadOnlyToolAllowlist(t *testing.T) {
 	t.Setenv("SWE_DEFAULT_RUNTIME", "codex")
 	t.Setenv("SWE_DEFAULT_MODEL", "test-model")
-	var got harness.Options
-	h := &bmadHarnessStub{fn: func(schema map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
-		if schema != nil || dest != nil {
-			t.Fatalf("schema=%v dest=%T, want nil/nil", schema, dest)
-		}
-		got = opts
-		return &harness.Result{Result: `{"status":"completed","summary":"loaded"}`}, nil
+	h := &bmadHarnessStub{fn: func(_ map[string]any, _ any, _ harness.Options) (*harness.Result, error) {
+		t.Fatal("Codex harness must not be invoked when read-only tool allowlist cannot be enforced")
+		return nil, nil
 	}}
-	if _, err := runBMADTextStep(context.Background(), h, adversarialGeneralMethod, adversarialGeneralMethod.Steps[0], map[string]any{"content": "diff"}, nil); err != nil {
-		t.Fatalf("runBMADTextStep: %v", err)
-	}
-	if got.PermissionMode != "read-only" {
-		t.Fatalf("permission_mode=%q, want read-only for Codex", got.PermissionMode)
-	}
-	if strings.Join(got.Tools, ",") != "Read" {
-		t.Fatalf("tools=%v, want Read only", got.Tools)
+	_, err := runBMADTextStep(context.Background(), h, adversarialGeneralMethod, adversarialGeneralMethod.Steps[0], map[string]any{"content": "diff"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "does not support Codex") {
+		t.Fatalf("error=%v, want fail-closed Codex rejection", err)
 	}
 }
 
