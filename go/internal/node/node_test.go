@@ -468,6 +468,88 @@ func TestBMADFinalOutputValidationFailsClosed(t *testing.T) {
 	}
 }
 
+func TestBMADMethodRejectsImmutableInputMutation(t *testing.T) {
+	method := bmadMethod{ID: "immut", Source: "deadbeef", Steps: []bmadStep{{ID: "one", Text: "one"}}}
+	_, err := runBMADMethod(context.Background(), method, map[string]any{"content": "original", "also_consider": "context"}, func(_ context.Context, _ bmadMethod, _ bmadStep, _, _ map[string]any) (*bmadStepResult, error) {
+		return &bmadStepResult{Status: "completed", Summary: "mutate", State: map[string]any{"content": "rewritten"}}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "attempted to mutate immutable input content") {
+		t.Fatalf("error=%v, want immutable input rejection", err)
+	}
+}
+
+func TestBMADMethodFinalOutputCannotReuseIntermediateOutput(t *testing.T) {
+	method := bmadMethod{ID: "fresh-output", Source: "deadbeef", Steps: []bmadStep{{ID: "one", Text: "one"}, {ID: "two", Text: "two"}}}
+	got, err := runBMADMethod(context.Background(), method, nil, func(_ context.Context, _ bmadMethod, step bmadStep, _, _ map[string]any) (*bmadStepResult, error) {
+		if step.ID == "one" {
+			return &bmadStepResult{Status: "completed", Summary: "one", Output: "stale"}, nil
+		}
+		return &bmadStepResult{Status: "completed", Summary: "two"}, nil
+	})
+	if err != nil {
+		t.Fatalf("runBMADMethod: %v", err)
+	}
+	if got.Output != "" {
+		t.Fatalf("final output=%q, want empty rather than stale intermediate output", got.Output)
+	}
+}
+
+func TestBMADMethodStopsOnCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	method := bmadMethod{ID: "cancel", Source: "deadbeef", Steps: []bmadStep{{ID: "one", Text: "one"}, {ID: "two", Text: "two"}}}
+	calls := 0
+	_, err := runBMADMethod(ctx, method, nil, func(_ context.Context, _ bmadMethod, _ bmadStep, _, _ map[string]any) (*bmadStepResult, error) {
+		calls++
+		cancel()
+		return &bmadStepResult{Status: "completed", Summary: "done"}, nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error=%v, want context.Canceled", err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls=%d, want exactly one step before cancellation", calls)
+	}
+}
+
+func TestBMADReasonerRejectsWrongInputTypes(t *testing.T) {
+	t.Setenv("SWE_PRO_ENGINE", "")
+	t.Setenv("SWE_BMAD_ENABLED", "1")
+	t.Setenv(furrow.EnvEnabled, "")
+	t.Setenv(furrow.EnvPublicAddr, "")
+	n, err := BuildAgent("swe-planner", "8005", "Autonomous SWE planning pipeline")
+	if err != nil {
+		t.Fatalf("BuildAgent: %v", err)
+	}
+	n.RegisterPlanner()
+	for _, tc := range []map[string]any{{"content": 42}, {"content": "diff", "also_consider": 42}} {
+		if _, err := n.App.Execute(context.Background(), bmadReviewEdgeCaseHunter, tc); err == nil {
+			t.Fatalf("input=%v unexpectedly accepted", tc)
+		}
+	}
+}
+
+func TestBMADMethodCancellationAfterFinalStepStillFails(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	method := bmadMethod{ID: "cancel-final", Source: "deadbeef", Steps: []bmadStep{{ID: "one", Text: "one"}}}
+	_, err := runBMADMethod(ctx, method, nil, func(_ context.Context, _ bmadMethod, _ bmadStep, _, _ map[string]any) (*bmadStepResult, error) {
+		cancel()
+		return &bmadStepResult{Status: "completed", Summary: "done"}, nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error=%v, want context.Canceled", err)
+	}
+}
+
+func TestBMADMethodRejectsOversizedStepEnvelope(t *testing.T) {
+	method := bmadMethod{ID: "oversized", Source: "deadbeef", Steps: []bmadStep{{ID: "one", Text: "one"}}}
+	_, err := runBMADMethod(context.Background(), method, nil, func(_ context.Context, _ bmadMethod, _ bmadStep, _, _ map[string]any) (*bmadStepResult, error) {
+		return &bmadStepResult{Status: "completed", Summary: "done", Output: strings.Repeat("x", bmadMaxStepEnvelopeBytes)}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "envelope exceeds") {
+		t.Fatalf("error=%v, want envelope size rejection", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
