@@ -581,7 +581,12 @@ func TestBMADMethodRejectsDuplicateStepIDs(t *testing.T) {
 }
 
 func TestBMADFinalOutputValidationFailsClosed(t *testing.T) {
-	for _, tc := range []struct { name string; method bmadMethod; output string; wantErr bool }{
+	for _, tc := range []struct {
+		name    string
+		method  bmadMethod
+		output  string
+		wantErr bool
+	}{
 		{name: "edge valid empty array", method: edgeCaseHunterMethod, output: `[]`, wantErr: false},
 		{name: "edge prose", method: edgeCaseHunterMethod, output: `looks fine`, wantErr: true},
 		{name: "edge missing field", method: edgeCaseHunterMethod, output: `[{"location":"x"}]`, wantErr: true},
@@ -592,7 +597,12 @@ func TestBMADFinalOutputValidationFailsClosed(t *testing.T) {
 		{name: "adversarial nine", method: adversarialGeneralMethod, output: "- f1\n- f2\n- f3\n- f4\n- f5\n- f6\n- f7\n- f8\n- f9", wantErr: true},
 		{name: "adversarial prose", method: adversarialGeneralMethod, output: `no problems`, wantErr: true},
 	} {
-		t.Run(tc.name, func(t *testing.T) { err := validateBMADRunOutput(tc.method, &bmadRunResult{Status: "completed", Output: tc.output}); if (err != nil) != tc.wantErr { t.Fatalf("error=%v, wantErr=%v", err, tc.wantErr) } })
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateBMADRunOutput(tc.method, &bmadRunResult{Status: "completed", Output: tc.output})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error=%v, wantErr=%v", err, tc.wantErr)
+			}
+		})
 	}
 }
 
