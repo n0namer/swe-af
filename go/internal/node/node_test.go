@@ -327,7 +327,9 @@ func TestRegHandlerRoutesToPackageHandler(t *testing.T) {
 }
 
 func TestBMADMethodPreservesStepOrderAndState(t *testing.T) {
-	method := bmadMethod{ID: "test-method", Source: "deadbeef", Steps: []bmadStep{{ID: "one", Text: "one"}, {ID: "two", Text: "two"}, {ID: "three", Text: "three"}}}
+	method := bmadMethod{ID: "test-method", Source: "deadbeef", Steps: []bmadStep{
+		{ID: "one", Text: "one"}, {ID: "two", Text: "two"}, {ID: "three", Text: "three"},
+	}}
 	seen := []string{}
 	exec := func(_ context.Context, _ bmadMethod, step bmadStep, state, artifacts map[string]any) (*bmadStepResult, error) {
 		seen = append(seen, step.ID)
