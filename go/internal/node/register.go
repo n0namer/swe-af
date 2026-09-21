@@ -79,6 +79,7 @@ const (
 // executor is added — see the body for why.
 func (n *Node) RegisterPlanner() {
 	n.registerRoles()
+	n.registerBMADWorkflows()
 	// Pro engine on (the af-install / desktop default): the bundled swe-pro
 	// sidecar is the coding surface and needs no opencode, so register only the
 	// pro executor and withhold the classic opencode-driven entry points. The
