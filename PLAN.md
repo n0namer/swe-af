@@ -75,6 +75,7 @@ Program blocker: Universal Solver G1/Story 3.1 cannot leave `review` because the
 
 **Verification:** targeted `go test ./internal/node -run BMAD -count=1`, full `go test ./internal/node -count=1`, `go test ./... -count=1`, `go vet ./...`, and `git diff --check`; then BMad adversarial + edge review on final delta before local exact commit.
 
+
 **Review closure:**
 - BMad adversarial review found and closed: invalid escaped input schema; missing input/type bounds; stale intermediate-output acceptance; immutable caller-content mutation; duplicate step IDs; unknown-method output-validator bypass; missing minimum adversarial findings; weak Edge output validation; missing cancellation-after-exec guard; unbounded step envelope.
 - BMad edge-case review additionally closed: Edge empty-input halt; wrong direct-invocation types; deletion finding confidence contract; single-line guard rule; trigger/consequence word limits; isolated review cwd; read-only tool/permission surface; provider failure propagation; strict JSON envelope decoding.
