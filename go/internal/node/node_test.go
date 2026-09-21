@@ -506,36 +506,78 @@ func TestDecodeBMADStepResultIsStrict(t *testing.T) {
 		{name: "trailing value", text: `{"status":"completed","summary":"ok"} {}`, wantErr: true},
 		{name: "empty", text: ``, wantErr: true},
 	} {
-		t.Run(tc.name, func(t *testing.T) { _, err := decodeBMADStepResult(tc.text); if (err != nil) != tc.wantErr { t.Fatalf("err=%v wantErr=%v", err, tc.wantErr) } })
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := decodeBMADStepResult(tc.text)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err=%v wantErr=%v", err, tc.wantErr)
+			}
+		})
 	}
 }
 
 func TestBMADEdgeEmptyInputReturnsCanonicalFinding(t *testing.T) {
-	t.Setenv("SWE_PRO_ENGINE", ""); t.Setenv("SWE_BMAD_ENABLED", "1"); t.Setenv(furrow.EnvEnabled, ""); t.Setenv(furrow.EnvPublicAddr, "")
-	n, err := BuildAgent("swe-planner", "8005", "Autonomous SWE planning pipeline"); if err != nil { t.Fatalf("BuildAgent: %v", err) }
+	t.Setenv("SWE_PRO_ENGINE", "")
+	t.Setenv("SWE_BMAD_ENABLED", "1")
+	t.Setenv(furrow.EnvEnabled, "")
+	t.Setenv(furrow.EnvPublicAddr, "")
+	n, err := BuildAgent("swe-planner", "8005", "Autonomous SWE planning pipeline")
+	if err != nil {
+		t.Fatalf("BuildAgent: %v", err)
+	}
 	n.RegisterPlanner()
-	out, err := n.App.Execute(context.Background(), bmadReviewEdgeCaseHunter, map[string]any{"content": ""}); if err != nil { t.Fatalf("edge empty input: %v", err) }
-	got, ok := out.(*bmadRunResult); if !ok { t.Fatalf("result type=%T", out) }
-	if got.Status != "completed" || strings.Join(got.CompletedSteps, ",") != "receive-content" { t.Fatalf("unexpected edge empty result: %#v", got) }
-	if err := validateBMADRunOutput(edgeCaseHunterMethod, got); err != nil { t.Fatalf("canonical edge empty output invalid: %v", err) }
+	out, err := n.App.Execute(context.Background(), bmadReviewEdgeCaseHunter, map[string]any{"content": ""})
+	if err != nil {
+		t.Fatalf("edge empty input: %v", err)
+	}
+	got, ok := out.(*bmadRunResult)
+	if !ok {
+		t.Fatalf("result type=%T", out)
+	}
+	if got.Status != "completed" || strings.Join(got.CompletedSteps, ",") != "receive-content" {
+		t.Fatalf("unexpected edge empty result: %#v", got)
+	}
+	if err := validateBMADRunOutput(edgeCaseHunterMethod, got); err != nil {
+		t.Fatalf("canonical edge empty output invalid: %v", err)
+	}
 }
 
 func TestBMADInputSchemaIsValidAndBounded(t *testing.T) {
 	for _, allowEmpty := range []bool{false, true} {
 		raw := bmadInputSchema(allowEmpty)
-		if !json.Valid(raw) { t.Fatalf("allowEmpty=%v invalid schema: %s", allowEmpty, raw) }
-		var doc map[string]any; if err := json.Unmarshal(raw, &doc); err != nil { t.Fatal(err) }
-		props := doc["properties"].(map[string]any); content := props["content"].(map[string]any)
-		if int(content["maxLength"].(float64)) != bmadMaxContentChars { t.Fatalf("content bound=%v", content) }
-		if allowEmpty { if _, ok := content["minLength"]; ok { t.Fatalf("edge content unexpectedly requires nonempty input: %v", content) } } else if int(content["minLength"].(float64)) != 1 { t.Fatalf("adversarial minLength=%v", content) }
-		also := props["also_consider"].(map[string]any); if int(also["maxLength"].(float64)) != bmadMaxAlsoConsiderChars { t.Fatalf("also bound=%v", also) }
+		if !json.Valid(raw) {
+			t.Fatalf("allowEmpty=%v invalid schema: %s", allowEmpty, raw)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatal(err)
+		}
+		props := doc["properties"].(map[string]any)
+		content := props["content"].(map[string]any)
+		if int(content["maxLength"].(float64)) != bmadMaxContentChars {
+			t.Fatalf("content bound=%v", content)
+		}
+		if allowEmpty {
+			if _, ok := content["minLength"]; ok {
+				t.Fatalf("edge content unexpectedly requires nonempty input: %v", content)
+			}
+		} else if int(content["minLength"].(float64)) != 1 {
+			t.Fatalf("adversarial minLength=%v", content)
+		}
+		also := props["also_consider"].(map[string]any)
+		if int(also["maxLength"].(float64)) != bmadMaxAlsoConsiderChars {
+			t.Fatalf("also bound=%v", also)
+		}
 	}
 }
 
 func TestBMADMethodRejectsDuplicateStepIDs(t *testing.T) {
 	method := bmadMethod{ID: "dup", Source: "deadbeef", Steps: []bmadStep{{ID: "same", Text: "one"}, {ID: "same", Text: "two"}}}
-	_, err := runBMADMethod(context.Background(), method, nil, func(_ context.Context, _ bmadMethod, _ bmadStep, _, _ map[string]any) (*bmadStepResult, error) { return &bmadStepResult{Status: "completed", Summary: "ok"}, nil })
-	if err == nil || !strings.Contains(err.Error(), "duplicate step") { t.Fatalf("error=%v, want duplicate step rejection", err) }
+	_, err := runBMADMethod(context.Background(), method, nil, func(_ context.Context, _ bmadMethod, _ bmadStep, _, _ map[string]any) (*bmadStepResult, error) {
+		return &bmadStepResult{Status: "completed", Summary: "ok"}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "duplicate step") {
+		t.Fatalf("error=%v, want duplicate step rejection", err)
+	}
 }
 
 func TestBMADFinalOutputValidationFailsClosed(t *testing.T) {
