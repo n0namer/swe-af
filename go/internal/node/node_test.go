@@ -468,6 +468,65 @@ func TestBMADFinalOutputValidationFailsClosed(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
+// assertSurface fails if got (the registered names) does not equal want as a
+// set, or if got contains duplicates. Reporting missing and extra names
+// separately makes a parity drift immediately diagnosable.
+func assertSurface(t *testing.T, node string, got, want []string) {
+	t.Helper()
+
+	// Duplicate guard: RegisterReasoner dedupes by name in its map, so a
+	// duplicate in the recorded slice means two registrations collided on one
+	// name (a silent surface bug the set comparison would otherwise hide).
+	seen := map[string]int{}
+	for _, name := range got {
+		seen[name]++
+	}
+	for name, c := range seen {
+		if c > 1 {
+			t.Errorf("[%s] reasoner %q registered %d times (collision)", node, name, c)
+		}
+	}
+
+	gotSet := toSet(got)
+	wantSet := toSet(want)
+
+	var missing, extra []string
+	for name := range wantSet {
+		if !gotSet[name] {
+			missing = append(missing, name)
+		}
+	}
+	for name := range gotSet {
+		if !wantSet[name] {
+			extra = append(extra, name)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(extra)
+
+	if len(missing) > 0 {
+		t.Errorf("[%s] missing reasoners (in Python, not registered): %v", node, missing)
+	}
+	if len(extra) > 0 {
+		t.Errorf("[%s] extra reasoners (registered, not in Python): %v", node, extra)
+	}
+	if len(gotSet) != len(wantSet) {
+		t.Errorf("[%s] surface size = %d, want %d", node, len(gotSet), len(wantSet))
+	}
+}
+
+func toSet(names []string) map[string]bool {
+	s := make(map[string]bool, len(names))
+	for _, n := range names {
+		s[n] = true
+	}
+	return s
+}
+
 func TestBMADMethodRejectsImmutableInputMutation(t *testing.T) {
 	method := bmadMethod{ID: "immut", Source: "deadbeef", Steps: []bmadStep{{ID: "one", Text: "one"}}}
 	_, err := runBMADMethod(context.Background(), method, map[string]any{"content": "original", "also_consider": "context"}, func(_ context.Context, _ bmadMethod, _ bmadStep, _, _ map[string]any) (*bmadStepResult, error) {
@@ -548,63 +607,4 @@ func TestBMADMethodRejectsOversizedStepEnvelope(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "envelope exceeds") {
 		t.Fatalf("error=%v, want envelope size rejection", err)
 	}
-}
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-// assertSurface fails if got (the registered names) does not equal want as a
-// set, or if got contains duplicates. Reporting missing and extra names
-// separately makes a parity drift immediately diagnosable.
-func assertSurface(t *testing.T, node string, got, want []string) {
-	t.Helper()
-
-	// Duplicate guard: RegisterReasoner dedupes by name in its map, so a
-	// duplicate in the recorded slice means two registrations collided on one
-	// name (a silent surface bug the set comparison would otherwise hide).
-	seen := map[string]int{}
-	for _, name := range got {
-		seen[name]++
-	}
-	for name, c := range seen {
-		if c > 1 {
-			t.Errorf("[%s] reasoner %q registered %d times (collision)", node, name, c)
-		}
-	}
-
-	gotSet := toSet(got)
-	wantSet := toSet(want)
-
-	var missing, extra []string
-	for name := range wantSet {
-		if !gotSet[name] {
-			missing = append(missing, name)
-		}
-	}
-	for name := range gotSet {
-		if !wantSet[name] {
-			extra = append(extra, name)
-		}
-	}
-	sort.Strings(missing)
-	sort.Strings(extra)
-
-	if len(missing) > 0 {
-		t.Errorf("[%s] missing reasoners (in Python, not registered): %v", node, missing)
-	}
-	if len(extra) > 0 {
-		t.Errorf("[%s] extra reasoners (registered, not in Python): %v", node, extra)
-	}
-	if len(gotSet) != len(wantSet) {
-		t.Errorf("[%s] surface size = %d, want %d", node, len(gotSet), len(wantSet))
-	}
-}
-
-func toSet(names []string) map[string]bool {
-	s := make(map[string]bool, len(names))
-	for _, n := range names {
-		s[n] = true
-	}
-	return s
 }
