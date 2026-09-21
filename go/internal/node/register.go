@@ -725,7 +725,7 @@ func bmadReadOnlyEnv() map[string]string {
 		// keep external paths closed. The reviewer receives its content inline and
 		// runs in an empty temporary cwd; read/glob/grep/list are sufficient for a
 		// provider that insists on discovery-oriented read tools.
-		"OPENCODE_CONFIG_CONTENT": `{"permission":{"read":"allow","glob":"allow","grep":"allow","list":"allow","external_directory":"deny","edit":"deny","bash":"deny","task":"deny","skill":"deny","webfetch":"deny","websearch":"deny","lsp":"deny","todowrite":"deny","question":"deny"}}`,
+		"OPENCODE_CONFIG_CONTENT": `{"permission":{"*":"deny","read":"allow","glob":"allow","grep":"allow","list":"allow"}}`,
 	}
 }
 
