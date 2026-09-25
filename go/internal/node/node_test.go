@@ -429,14 +429,14 @@ func TestBMADTextStepFailsClosedOnInvalidTextEnvelope(t *testing.T) {
 	t.Setenv("SWE_DEFAULT_RUNTIME", "claude_code")
 	t.Setenv("SWE_DEFAULT_MODEL", "sonnet")
 	h := &bmadHarnessStub{fn: func(schema map[string]any, dest any, _ harness.Options) (*harness.Result, error) {
-		if schema != nil || dest != nil {
-			t.Fatalf("BMAD text path unexpectedly requested schema output")
+		if schema == nil || dest == nil {
+			t.Fatalf("BMAD structured path requires schema and destination")
 		}
 		return &harness.Result{Result: "not-json"}, nil
 	}}
 	_, err := runBMADTextStep(context.Background(), h, adversarialGeneralMethod, adversarialGeneralMethod.Steps[0], map[string]any{"content": "diff"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "decode BMAD step JSON") {
-		t.Fatalf("error=%v, want strict JSON envelope failure", err)
+	if err == nil || !strings.Contains(err.Error(), "structured output was not produced") {
+		t.Fatalf("error=%v, want fail-closed missing structured output", err)
 	}
 }
 
@@ -457,11 +457,16 @@ func TestBMADTextStepUsesReadOnlyTextPolicy(t *testing.T) {
 	t.Setenv("SWE_DEFAULT_MODEL", "test-model")
 	var got harness.Options
 	h := &bmadHarnessStub{fn: func(schema map[string]any, dest any, opts harness.Options) (*harness.Result, error) {
-		if schema != nil || dest != nil {
-			t.Fatalf("schema=%v dest=%T, want nil/nil", schema, dest)
+		if schema == nil || dest == nil {
+			t.Fatalf("schema=%v dest=%T, want structured schema/destination", schema, dest)
 		}
+		parsed, ok := dest.(*bmadStepResult)
+		if !ok {
+			t.Fatalf("dest=%T, want *bmadStepResult", dest)
+		}
+		*parsed = bmadStepResult{Status: "completed", Summary: "loaded"}
 		got = opts
-		return &harness.Result{Result: `{"status":"completed","summary":"loaded"}`}, nil
+		return &harness.Result{Parsed: parsed}, nil
 	}}
 	if _, err := runBMADTextStep(context.Background(), h, adversarialGeneralMethod, adversarialGeneralMethod.Steps[0], map[string]any{"content": "diff"}, nil); err != nil {
 		t.Fatalf("runBMADTextStep: %v", err)
@@ -478,6 +483,10 @@ func TestBMADTextStepUsesReadOnlyTextPolicy(t *testing.T) {
 		if permission[key] != "allow" {
 			t.Fatalf("%s permission=%v, want allow", key, permission[key])
 		}
+	}
+	edit, ok := permission["edit"].(map[string]any)
+	if !ok || edit["*"] != "deny" || edit["*.agentfield_output.json"] != "allow" {
+		t.Fatalf("edit permission=%v, want deny-all plus AgentField output allow", permission["edit"])
 	}
 	if strings.Join(got.Tools, ",") != "Read" {
 		t.Fatalf("tools=%v, want Read only", got.Tools)

@@ -722,10 +722,10 @@ func bmadReadOnlyEnv() map[string]string {
 		// The pinned AgentField OpenCode adapter ignores RoleOptions.Tools and
 		// delegates tool authority to OPENCODE_CONFIG_CONTENT. OpenCode defaults
 		// permissions to allow, so deny the whole tool namespace first and then
-		// allow only read-oriented capabilities. The reviewer receives its content
-		// inline and runs in an empty temporary cwd; read/glob/grep/list are enough
-		// for a provider that insists on discovery-oriented read tools.
-		"OPENCODE_CONFIG_CONTENT": `{"permission":{"*":"deny","read":"allow","glob":"allow","grep":"allow","list":"allow"}}`,
+		// allow read-oriented capabilities plus the single AgentField structured-output
+		// file. The reviewer receives its content inline and runs in an empty temporary
+		// cwd; project writes and shell execution remain denied.
+		"OPENCODE_CONFIG_CONTENT": `{"permission":{"*":"deny","read":"allow","glob":"allow","grep":"allow","list":"allow","edit":{"*":"deny","*.agentfield_output.json":"allow"}}}`,
 	}
 }
 
@@ -793,15 +793,12 @@ func runBMADTextStep(ctx context.Context, app harnessx.HarnessCaller, method bma
 	}
 	harnessOpts := opts.ToOptions()
 	harnessOpts.Timeout = 300
-	result, err := app.Harness(ctx, prompt, nil, nil, harnessOpts)
+	parsed, result, err := harnessx.Run[bmadStepResult](ctx, app, prompt, harnessOpts)
 	if err != nil {
 		return nil, err
 	}
 	if result == nil {
 		return nil, fmt.Errorf("BMAD step produced no harness result")
-	}
-	if len(result.Result) > bmadMaxStepEnvelopeBytes {
-		return nil, fmt.Errorf("BMAD step text result exceeds %d bytes", bmadMaxStepEnvelopeBytes)
 	}
 	if result.IsError {
 		detail := strings.TrimSpace(result.ErrorMessage)
@@ -810,7 +807,17 @@ func runBMADTextStep(ctx context.Context, app harnessx.HarnessCaller, method bma
 		}
 		return nil, fmt.Errorf("BMAD step provider failure: %s", detail)
 	}
-	return decodeBMADStepResult(result.Result)
+	if result.Parsed == nil || parsed == nil {
+		return nil, fmt.Errorf("BMAD step structured output was not produced")
+	}
+	encoded, err := json.Marshal(parsed)
+	if err != nil {
+		return nil, fmt.Errorf("marshal BMAD structured step result: %w", err)
+	}
+	if len(encoded) > bmadMaxStepEnvelopeBytes {
+		return nil, fmt.Errorf("BMAD step structured result exceeds %d bytes", bmadMaxStepEnvelopeBytes)
+	}
+	return parsed, nil
 }
 
 func cloneAnyMap(in map[string]any) map[string]any {
