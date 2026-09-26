@@ -379,15 +379,15 @@ func TestDeclaredFileScopeRejectsOutOfScopeMutation(t *testing.T) {
 	}
 }
 
-func TestUncommittedCoderWorkGetsCheckpointCommit(t *testing.T) {
+func TestUncommittedCoderWorkIsCheckpointedButFailsClosed(t *testing.T) {
 	repo := initRepo(t)
 	rec := &recorder{}
 	result := runImplement(t, repo,
 		scriptedCallFn(t, rec, scriptOpts{coderCommits: false, coderWrites: true}),
 		map[string]any{"config": map[string]any{"verify": false}})
 
-	if result["success"] != true {
-		t.Fatalf("success = %v", result["success"])
+	if result["success"] != false || result["outcome"] != "failed_unrecoverable" {
+		t.Fatalf("uncommitted coder work must fail closed: success=%v outcome=%v", result["success"], result["outcome"])
 	}
 	branch := result["branch"].(string)
 	msg := gitT(t, repo, "log", "-1", "--format=%s", branch)
@@ -396,7 +396,7 @@ func TestUncommittedCoderWorkGetsCheckpointCommit(t *testing.T) {
 	}
 }
 
-func TestBytecodeJunkNeverLandsOnBranch(t *testing.T) {
+func TestBytecodeJunkNeverLandsOnCheckpointedFailedBranch(t *testing.T) {
 	// The real coder runs tests in the worktree, generating __pycache__, and
 	// a sloppy model may even commit it. Neither may reach the branch.
 	repo := initRepo(t)
@@ -418,8 +418,8 @@ func TestBytecodeJunkNeverLandsOnBranch(t *testing.T) {
 	result := runImplement(t, repo, callFn,
 		map[string]any{"config": map[string]any{"verify": false}})
 
-	if result["success"] != true {
-		t.Fatalf("success = %v", result["success"])
+	if result["success"] != false || result["outcome"] != "failed_unrecoverable" {
+		t.Fatalf("dirty coder work must fail closed after safe checkpoint: success=%v outcome=%v", result["success"], result["outcome"])
 	}
 	for _, f := range result["files_changed"].([]string) {
 		if strings.Contains(f, "__pycache__") || strings.HasSuffix(f, ".pyc") {
