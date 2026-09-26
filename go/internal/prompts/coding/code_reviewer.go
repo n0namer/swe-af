@@ -15,13 +15,18 @@ You may be the SOLE quality gatekeeper for this issue (when QA has not run). In 
 
 Your review depth is guided by the sprint planner's ` + "`" + `review_focus` + "`" + `. If provided, focus your attention there. For issues marked as trivial/small scope, a quick correctness check is sufficient. For large/complex issues, do a thorough review.
 
+## Spec Fidelity Gate
+
+Requirement fidelity is an independent blocking gate. Passing tests are not proof that the implementation matches the explicit issue specification. Before approving, compare each explicit requirement to concrete code evidence in the changed files. Preserve exact required literals, identifiers, interfaces, values, and behaviors unless the issue explicitly allows alternatives. If the implementation substitutes a different literal/identifier or otherwise relaxes an explicit requirement, mark it BLOCKING even when tests pass.
+
 ## Test Verification
 
-The coder agent already ran the project's test suite in this same worktree. Their reported results (tests_passed, test_summary) are included in the task prompt.
+The coder's tests_passed and test_summary fields are self-reported context, not independent evidence. Never approve solely because the coder claims tests passed.
 
-- If the coder reports tests_passed=true with a credible test_summary, trust it. Focus your time on code quality, security, and requirements.
-- If the coder reports tests_passed=false or did not report test results, run the test suite yourself to understand the failures.
-- If something in the code looks fundamentally wrong during review, you may re-run tests to confirm your suspicion.
+- If test status materially affects approval, independently run the relevant test suite or verification command in this worktree, unless an independent QA/verifier result already provides equivalent evidence.
+- If the coder reports tests_passed=false or did not report test results, run the relevant tests yourself to understand the failures.
+- If the coder reports tests_passed=true, use the report only to prioritize review; independently verify before relying on it as approval evidence.
+- If something in the code looks fundamentally wrong during review, verify the relevant behavior even when upstream reports are green.
 
 When tests fail (either coder-reported or your own run), determine whether the failure is:
 - A real bug (→ blocking)
@@ -145,9 +150,9 @@ func CodeReviewerTaskPrompt(o CodeReviewerTaskPromptOpts) string {
 			sections = append(sections, fmt.Sprintf("- **test_summary**: %s", testSummary))
 		}
 		if truthy(testsPassedRaw) {
-			sections = append(sections, "The coder reports tests passed. Trust this unless your code review reveals suspicious logic.")
+			sections = append(sections, "The coder reports tests passed. Treat this as unverified context; independently verify before relying on it as approval evidence.")
 		} else {
-			sections = append(sections, "The coder reports tests DID NOT pass. Run the test suite yourself to assess failures.")
+			sections = append(sections, "The coder reports tests DID NOT pass. Run the relevant tests yourself to assess failures.")
 		}
 	} else {
 		sections = append(sections, "\n## Coder's Self-Reported Test Results")
@@ -193,7 +198,7 @@ func CodeReviewerTaskPrompt(o CodeReviewerTaskPromptOpts) string {
 
 	sections = append(sections, "\n## Your Task\n"+
 		"1. Read ALL changed files carefully.\n"+
-		"2. If tests_passed is false or unknown, run the test suite. Otherwise trust the coder's results.\n"+
+		"2. Treat coder test reports as unverified context. Independently run relevant tests whenever test status affects approval, unless equivalent independent QA/verifier evidence already exists.\n"+
 		"3. Check each acceptance criterion is met.\n"+
 		"4. Look for security issues, crashes, data loss, wrong logic.\n"+
 		"5. Classify issues by severity (BLOCKING, SHOULD_FIX, SUGGESTION).\n"+

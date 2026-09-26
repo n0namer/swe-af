@@ -349,6 +349,9 @@ func CoderTaskPrompt(o CoderTaskPromptOpts) string {
 	sections = append(sections, "## Issue to Implement")
 	sections = append(sections, fmt.Sprintf("- **Name**: %s", mStr(issue, "name", "(unknown)")))
 	sections = append(sections, fmt.Sprintf("- **Title**: %s", mStr(issue, "title", "(unknown)")))
+	if description := mStr(issue, "description", ""); description != "" {
+		sections = append(sections, fmt.Sprintf("- **Description**: %s", description))
+	}
 
 	if ac := mList(issue, "acceptance_criteria"); len(ac) > 0 {
 		sections = append(sections, "- **Acceptance Criteria**:")

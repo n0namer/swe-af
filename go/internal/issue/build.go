@@ -337,7 +337,7 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		codingOK := completedOutcomes[outcomeValue]
 		if cfg.Verify && codingOK && len(commits) > 0 {
 			verification = runVerification(ctx, deps, cfg, execCfg, spec, planned,
-				worktreePath, absArtifacts, loopSummary)
+				worktreePath, absArtifacts, loopSummary, filesChanged)
 		}
 		if cfg.EnableGithubPR && codingOK && len(commits) > 0 {
 			prURL = maybeCreatePR(ctx, deps, cfg, execCfg, spec, planned,
@@ -434,6 +434,7 @@ func runVerification(
 	spec *Spec,
 	planned map[string]any,
 	worktreePath, artifactsDir, loopSummary string,
+	filesChanged []string,
 ) map[string]any {
 	callCtx, cancel := context.WithTimeout(ctx, time.Duration(cfg.AgentTimeoutSeconds)*time.Second)
 	defer cancel()
@@ -452,6 +453,7 @@ func runVerification(
 		"completed_issues": []any{map[string]any{
 			"issue_name":     planned["name"],
 			"result_summary": loopSummary,
+			"files_changed":  toAnySlice(filesChanged),
 		}},
 		"failed_issues":   []any{},
 		"skipped_issues":  []any{},

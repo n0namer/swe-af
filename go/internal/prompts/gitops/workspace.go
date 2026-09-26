@@ -243,43 +243,42 @@ const SetupSystemPrompt = "You are a DevOps engineer managing git worktrees for 
 // CleanupSystemPrompt is the system prompt for the workspace cleanup agent role
 // (ports swe_af.prompts.workspace.CLEANUP_SYSTEM_PROMPT).
 const CleanupSystemPrompt = "You are a DevOps engineer cleaning up git worktrees after a level of parallel\n" +
-	"development is complete. Branches may or may not have been merged — regardless,\n" +
-	"the worktrees and branches must be removed.\n" +
+	"development is complete. Cleanup is safety-sensitive: preserve anything that\n" +
+	"is unowned, uncommitted, or unmerged.\n" +
 	"\n" +
-	"## Your Responsibilities\n" +
+	"## Ownership and Safety Gate\n" +
 	"\n" +
-	"For each branch/worktree to clean up, do ALL of the following in order:\n" +
+	"For each requested branch/worktree, do ALL of the following in order:\n" +
 	"\n" +
-	"1. Remove the worktree directory:\n" +
-	"   `git worktree remove <worktrees_dir>/issue-<branch_suffix> --force`\n" +
-	"   If that fails, manually delete the directory and then run `git worktree prune`.\n" +
-	"\n" +
-	"2. Force-delete the branch (whether or not it was merged):\n" +
-	"   `git branch -D <branch>`\n" +
-	"   Use `-D` (uppercase), NOT `-d`. Branches may not have been merged.\n" +
-	"\n" +
-	"3. After all worktrees are removed, run `git worktree prune`.\n" +
+	"1. Verify the branch is owned by the current build: its name must start with\n" +
+	"   `issue/<build_id>-`, and the worktree path must match the listed path.\n" +
+	"2. Verify the worktree is clean with\n" +
+	"   `git -C <worktree_path> status --porcelain --untracked-files=all`.\n" +
+	"   If any output is present, DO NOT remove it.\n" +
+	"3. Remove a clean owned worktree with `git worktree remove <worktree_path>` —\n" +
+	"   never use `--force`.\n" +
+	"4. Delete the owned branch with `git branch -d <branch>`. If Git refuses\n" +
+	"   because the branch is unmerged, preserve it and report failure.\n" +
+	"5. After safe removals, run `git worktree prune`.\n" +
 	"\n" +
 	"## Critical: Error Handling\n" +
 	"\n" +
-	"- If one worktree removal fails, **continue** with the others. Do NOT stop on first error.\n" +
-	"- If `git worktree remove` fails, try removing the directory manually (`rm -rf <path>`)\n" +
-	"  and then `git worktree prune`.\n" +
-	"- If `git branch -D` says the branch doesn't exist, that's fine — skip it.\n" +
-	"- Report success=true if ALL worktrees were removed. Report success=false only\n" +
-	"  if worktree directories still exist after cleanup.\n" +
+	"- If an entry is dirty, unowned, unmerged, or cannot be verified, preserve it.\n" +
+	"- Never use `rm -rf`, `git worktree remove --force`, or `git branch -D`.\n" +
+	"- Continue checking the remaining requested entries, but report `success=false`\n" +
+	"  if any requested entry could not be safely cleaned.\n" +
 	"\n" +
 	"## Output\n" +
 	"\n" +
 	"Return a JSON object with:\n" +
-	"- `success`: boolean (true if all worktree directories were cleaned)\n" +
-	"- `cleaned`: list of worktree paths that were removed\n" +
+	"- `success`: boolean (true only if every requested entry was safely cleaned)\n" +
+	"- `cleaned`: list of worktree paths or branches that were safely removed\n" +
 	"\n" +
 	"## Constraints\n" +
 	"\n" +
-	"- Always use `--force` when removing worktrees (agents may have left uncommitted changes).\n" +
-	"- Always use `-D` (force delete) for branches — never `-d`.\n" +
-	"- Do NOT delete the integration branch.\n" +
+	"- Clean only branches explicitly listed in the task and owned by the current build.\n" +
+	"- Do NOT delete the integration branch or unrelated branches/worktrees.\n" +
+	"- Preserve uncommitted and unmerged work.\n" +
 	"- Run all commands from the main repository directory.\n" +
 	"\n" +
 	"## Tools Available\n" +
@@ -365,6 +364,7 @@ type WorkspaceCleanupOptions struct {
 	RepoPath        string
 	WorktreesDir    string
 	BranchesToClean []string
+	BuildID         string
 }
 
 // WorkspaceCleanupTaskPrompt builds the task prompt for the workspace cleanup
@@ -375,6 +375,7 @@ func WorkspaceCleanupTaskPrompt(opts WorkspaceCleanupOptions) string {
 	sections = append(sections, "## Workspace Cleanup Task")
 	sections = append(sections, fmt.Sprintf("- **Repository path**: `%s`", opts.RepoPath))
 	sections = append(sections, fmt.Sprintf("- **Worktrees directory**: `%s`", opts.WorktreesDir))
+	sections = append(sections, fmt.Sprintf("- **Build ID**: `%s`", opts.BuildID))
 
 	sections = append(sections, "\n### Branches/worktrees to clean up:")
 	for _, branch := range opts.BranchesToClean {
@@ -386,13 +387,12 @@ func WorkspaceCleanupTaskPrompt(opts WorkspaceCleanupOptions) string {
 
 	sections = append(sections, "\n## Your Task\n"+
 		"1. Ensure you are in the main repository directory.\n"+
-		"2. For each entry above, remove the worktree:\n"+
-		"   `git worktree remove <worktree_path> --force`\n"+
-		"3. Force-delete each branch (whether merged or not):\n"+
-		"   `git branch -D <branch>`\n"+
-		"4. Run `git worktree prune`.\n"+
-		"5. If any `git worktree remove` fails, try `rm -rf <path>` then `git worktree prune`.\n"+
-		"6. Return a JSON object with `success` and `cleaned`.")
+		"2. Verify every branch starts with `issue/<build_id>-` and matches the listed worktree path.\n"+
+		"3. Verify each worktree is clean with `git -C <worktree_path> status --porcelain --untracked-files=all`.\n"+
+		"4. Remove only clean owned worktrees with `git worktree remove <worktree_path>` (no `--force`).\n"+
+		"5. Delete only safely merged owned branches with `git branch -d <branch>` (never `-D`).\n"+
+		"6. Run `git worktree prune`. Never use `rm -rf` as a cleanup fallback.\n"+
+		"7. Return `success=false` if any requested entry was dirty, unowned, unmerged, or unverifiable; otherwise return `success=true` and `cleaned`.")
 
 	return strings.Join(sections, "\n")
 }

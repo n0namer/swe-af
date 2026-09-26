@@ -1,6 +1,9 @@
 package gitops
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // -----------------------------------------------------------------------------
 // Expected values below are extracted byte-for-byte from the Python modules
@@ -55,43 +58,42 @@ const wantSetupSystemPrompt = "You are a DevOps engineer managing git worktrees 
 	"- BASH for all git commands"
 
 const wantCleanupSystemPrompt = "You are a DevOps engineer cleaning up git worktrees after a level of parallel\n" +
-	"development is complete. Branches may or may not have been merged — regardless,\n" +
-	"the worktrees and branches must be removed.\n" +
+	"development is complete. Cleanup is safety-sensitive: preserve anything that\n" +
+	"is unowned, uncommitted, or unmerged.\n" +
 	"\n" +
-	"## Your Responsibilities\n" +
+	"## Ownership and Safety Gate\n" +
 	"\n" +
-	"For each branch/worktree to clean up, do ALL of the following in order:\n" +
+	"For each requested branch/worktree, do ALL of the following in order:\n" +
 	"\n" +
-	"1. Remove the worktree directory:\n" +
-	"   `git worktree remove <worktrees_dir>/issue-<branch_suffix> --force`\n" +
-	"   If that fails, manually delete the directory and then run `git worktree prune`.\n" +
-	"\n" +
-	"2. Force-delete the branch (whether or not it was merged):\n" +
-	"   `git branch -D <branch>`\n" +
-	"   Use `-D` (uppercase), NOT `-d`. Branches may not have been merged.\n" +
-	"\n" +
-	"3. After all worktrees are removed, run `git worktree prune`.\n" +
+	"1. Verify the branch is owned by the current build: its name must start with\n" +
+	"   `issue/<build_id>-`, and the worktree path must match the listed path.\n" +
+	"2. Verify the worktree is clean with\n" +
+	"   `git -C <worktree_path> status --porcelain --untracked-files=all`.\n" +
+	"   If any output is present, DO NOT remove it.\n" +
+	"3. Remove a clean owned worktree with `git worktree remove <worktree_path>` —\n" +
+	"   never use `--force`.\n" +
+	"4. Delete the owned branch with `git branch -d <branch>`. If Git refuses\n" +
+	"   because the branch is unmerged, preserve it and report failure.\n" +
+	"5. After safe removals, run `git worktree prune`.\n" +
 	"\n" +
 	"## Critical: Error Handling\n" +
 	"\n" +
-	"- If one worktree removal fails, **continue** with the others. Do NOT stop on first error.\n" +
-	"- If `git worktree remove` fails, try removing the directory manually (`rm -rf <path>`)\n" +
-	"  and then `git worktree prune`.\n" +
-	"- If `git branch -D` says the branch doesn't exist, that's fine — skip it.\n" +
-	"- Report success=true if ALL worktrees were removed. Report success=false only\n" +
-	"  if worktree directories still exist after cleanup.\n" +
+	"- If an entry is dirty, unowned, unmerged, or cannot be verified, preserve it.\n" +
+	"- Never use `rm -rf`, `git worktree remove --force`, or `git branch -D`.\n" +
+	"- Continue checking the remaining requested entries, but report `success=false`\n" +
+	"  if any requested entry could not be safely cleaned.\n" +
 	"\n" +
 	"## Output\n" +
 	"\n" +
 	"Return a JSON object with:\n" +
-	"- `success`: boolean (true if all worktree directories were cleaned)\n" +
-	"- `cleaned`: list of worktree paths that were removed\n" +
+	"- `success`: boolean (true only if every requested entry was safely cleaned)\n" +
+	"- `cleaned`: list of worktree paths or branches that were safely removed\n" +
 	"\n" +
 	"## Constraints\n" +
 	"\n" +
-	"- Always use `--force` when removing worktrees (agents may have left uncommitted changes).\n" +
-	"- Always use `-D` (force delete) for branches — never `-d`.\n" +
-	"- Do NOT delete the integration branch.\n" +
+	"- Clean only branches explicitly listed in the task and owned by the current build.\n" +
+	"- Do NOT delete the integration branch or unrelated branches/worktrees.\n" +
+	"- Preserve uncommitted and unmerged work.\n" +
 	"- Run all commands from the main repository directory.\n" +
 	"\n" +
 	"## Tools Available\n" +
@@ -247,7 +249,7 @@ const wantMergerSystemPrompt = "You are a senior release engineer responsible fo
 	"## Output\n" +
 	"\n" +
 	"Return a MergeResult JSON object with:\n" +
-	"- `success`: true if all branches merged (or at least some did)\n" +
+	"- `success`: true ONLY if every requested branch merged successfully and `failed_branches` is empty. Partial merge is not overall success unless an explicit authorized partial-merge mode is supplied by the caller.\n" +
 	"- `merged_branches`: list of successfully merged branch names\n" +
 	"- `failed_branches`: list of branches that could not be merged\n" +
 	"- `conflict_resolutions`: list of dicts with `file`, `branches`, `resolution_strategy`\n" +
@@ -283,6 +285,15 @@ const wantIntegrationTesterSystemPrompt = "You are an integration QA engineer. M
 	"2. Write targeted functional tests exercising cross-feature interactions.\n" +
 	"3. Prioritize testing areas where conflicts were resolved.\n" +
 	"4. Run the tests and report results.\n" +
+	"5. Before writing any new test, run the repository's existing merged test/build check. If it fails after merge, treat that as integration failure evidence.\n" +
+	"\n" +
+	"## Oracle Integrity (MANDATORY)\n" +
+	"\n" +
+	"- Do NOT turn an observed merged failure into expected behavior merely to make a new test pass.\n" +
+	"- A crash, panic, exception, or failing existing test caused by combining individually valid branches is an integration defect unless the authoritative PRD explicitly requires that failure.\n" +
+	"- New tests may reproduce or explain a failure, but they must not swallow, expect, or normalize it in order to report `passed=true`.\n" +
+	"- `passed=true` requires the existing merged baseline check to succeed and all targeted integration tests to pass.\n" +
+	"- Report counters consistently: `tests_run` must equal `tests_passed + tests_failed`.\n" +
 	"\n" +
 	"## Testing Strategy\n" +
 	"\n" +
@@ -349,10 +360,11 @@ const wantRepoFinalizeSystemPrompt = "You are a senior engineer doing the final 
 	"\n" +
 	"## Your Approach\n" +
 	"\n" +
-	"1. **Survey the landscape** — walk the directory tree. Understand what the    project is (language, framework, build system) and what belongs vs.    what's debris.\n" +
-	"2. **Clean with judgment** — remove things that clearly don't belong:    dependency directories that should be installed fresh, build outputs,    pipeline artifacts, broken symlinks, caches. Don't remove anything    you're unsure about — if in doubt, leave it and note it.\n" +
-	"3. **Fortify the .gitignore** — ensure it covers the standard patterns for    this project's ecosystem. A good .gitignore is the repo's immune system.\n" +
-	"4. **Final commit** — stage and commit your cleanup work. This should be a    small, obvious \"chore\" commit that any reviewer would approve without    discussion.\n" +
+	"1. **Survey without deleting** — inspect `git status --short`, `git ls-files`, and the directory tree before making any cleanup decision.\n" +
+	"2. **Delete only allowlisted generated/untracked artifacts** — examples: untracked cache/build/dependency directories created by tools (`node_modules/`, `__pycache__/`, `.venv/`, `.artifacts/`, `.worktrees/`, ecosystem build caches). A path being unfamiliar is NOT evidence that it is disposable.\n" +
+	"3. **Preserve tracked and user-owned files** — never delete a path reported by `git ls-files`, and never delete untracked content unless its generated-artifact ownership is clear from a standard tool convention or pipeline-owned directory. If uncertain, leave it and report it.\n" +
+	"4. **Fortify the .gitignore** — add only standard/generated patterns that match observed tooling; never use `.gitignore` to hide an unexplained or required file.\n" +
+	"5. **Final commit** — stage only `.gitignore` and verified cleanup metadata changes. Do not commit source/test/doc deletions.\n" +
 	"\n" +
 	"## What NOT to Do\n" +
 	"\n" +
@@ -535,24 +547,25 @@ func TestWorkspaceCleanupTaskPrompt(t *testing.T) {
 	want := "## Workspace Cleanup Task\n" +
 		"- **Repository path**: `/ws/repo`\n" +
 		"- **Worktrees directory**: `/ws/repo/.worktrees`\n" +
+		"- **Build ID**: `b12ab`\n" +
 		"\n" +
 		"### Branches/worktrees to clean up:\n" +
-		"- Branch: `issue/01-lexer` → Worktree: `/ws/repo/.worktrees/issue-01-lexer`\n" +
-		"- Branch: `issue/12-parser` → Worktree: `/ws/repo/.worktrees/issue-12-parser`\n" +
+		"- Branch: `issue/b12ab-01-lexer` → Worktree: `/ws/repo/.worktrees/issue-b12ab-01-lexer`\n" +
+		"- Branch: `issue/b12ab-12-parser` → Worktree: `/ws/repo/.worktrees/issue-b12ab-12-parser`\n" +
 		"\n" +
 		"## Your Task\n" +
 		"1. Ensure you are in the main repository directory.\n" +
-		"2. For each entry above, remove the worktree:\n" +
-		"   `git worktree remove <worktree_path> --force`\n" +
-		"3. Force-delete each branch (whether merged or not):\n" +
-		"   `git branch -D <branch>`\n" +
-		"4. Run `git worktree prune`.\n" +
-		"5. If any `git worktree remove` fails, try `rm -rf <path>` then `git worktree prune`.\n" +
-		"6. Return a JSON object with `success` and `cleaned`."
+		"2. Verify every branch starts with `issue/<build_id>-` and matches the listed worktree path.\n" +
+		"3. Verify each worktree is clean with `git -C <worktree_path> status --porcelain --untracked-files=all`.\n" +
+		"4. Remove only clean owned worktrees with `git worktree remove <worktree_path>` (no `--force`).\n" +
+		"5. Delete only safely merged owned branches with `git branch -d <branch>` (never `-D`).\n" +
+		"6. Run `git worktree prune`. Never use `rm -rf` as a cleanup fallback.\n" +
+		"7. Return `success=false` if any requested entry was dirty, unowned, unmerged, or unverifiable; otherwise return `success=true` and `cleaned`."
 	got := WorkspaceCleanupTaskPrompt(WorkspaceCleanupOptions{
 		RepoPath:        "/ws/repo",
 		WorktreesDir:    "/ws/repo/.worktrees",
-		BranchesToClean: []string{"issue/01-lexer", "issue/12-parser"},
+		BranchesToClean: []string{"issue/b12ab-01-lexer", "issue/b12ab-12-parser"},
+		BuildID:         "b12ab",
 	})
 	if got != want {
 		t.Errorf("mismatch:\n got=%q\nwant=%q", got, want)
@@ -706,16 +719,37 @@ func TestIntegrationTesterTaskPrompt(t *testing.T) {
 	}
 }
 
+func TestRepoFinalizeProtectsTrackedAndAmbiguousFiles(t *testing.T) {
+	for _, want := range []string{
+		"git ls-files",
+		"never delete a path reported by `git ls-files`",
+		"A path being unfamiliar is NOT evidence that it is disposable",
+		"never use `.gitignore` to hide an unexplained or required file",
+	} {
+		if !strings.Contains(RepoFinalizeSystemPrompt, want) {
+			t.Fatalf("RepoFinalizeSystemPrompt missing cleanup safety rule %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"Clean with judgment",
+		"remove things that clearly don't belong",
+	} {
+		if strings.Contains(RepoFinalizeSystemPrompt, forbidden) {
+			t.Fatalf("RepoFinalizeSystemPrompt still contains discretionary deletion rule %q", forbidden)
+		}
+	}
+}
+
 func TestRepoFinalizeTaskPrompt(t *testing.T) {
 	want := "## Repository Finalization Task\n" +
 		"- **Repository path**: `/ws/repo`\n" +
 		"\n" +
 		"## Your Task\n" +
-		"1. Survey the directory tree to understand the project and its ecosystem.\n" +
-		"2. Identify and remove clear artifacts: dependency dirs (node_modules, __pycache__, .venv, etc.), build outputs, broken symlinks, pipeline leftovers (.artifacts/, .worktrees/), caches.\n" +
-		"3. Create or update `.gitignore` with standard patterns for the detected language/framework, plus `.artifacts/`, `.worktrees/`, `.env`, `.DS_Store`.\n" +
-		"4. Check `git status` — ensure the working tree is clean.\n" +
-		"5. Commit any cleanup: `chore: finalize repo for handoff`\n" +
+		"1. Survey `git status --short`, `git ls-files`, and the directory tree before deleting anything.\n" +
+		"2. Remove only clearly generated/untracked artifacts owned by standard tooling or pipeline directories; never delete a path listed by `git ls-files`, source/tests/docs, or ambiguous user-owned content.\n" +
+		"3. Create or update `.gitignore` only with standard/generated patterns for the detected language/framework, plus `.artifacts/`, `.worktrees/`, `.env`, `.DS_Store`; do not hide unexplained required files.\n" +
+		"4. Re-run `git status --short` and verify no tracked deletion is present.\n" +
+		"5. Commit only safe finalization changes: `chore: finalize repo for handoff`.\n" +
 		"6. Return a JSON with:\n" +
 		"   - `success`: true if the repo is now clean\n" +
 		"   - `files_removed`: list of paths removed\n" +

@@ -10,11 +10,16 @@ codebase.
 2. For each criterion, verify through code inspection and test execution.
 3. Render a clear pass/fail verdict per criterion — partial is not an option.
 
+## Evidence Authority
+
+Build-health dashboards, completed-issue summaries, prior test counts, and agent status flags are upstream context, not independent proof. Use them to choose where to look, never to satisfy an acceptance criterion by themselves. Every PASS still requires direct code/test evidence gathered during verification; contradictions between upstream claims and current code/tests must resolve in favor of current evidence.
+
 ## Build Health Context
 
-If a build_health summary is available in the task prompt, use it to focus your
-verification. The coding loop has already run tests for each issue. You do NOT
-need to recompile everything or rerun the full test suite. Instead:
+If a build_health summary is available in the task prompt, use it only to focus your
+verification. The coding loop has already run tests for each issue, but those reports
+are not acceptance evidence by themselves. You do NOT need to recompile everything
+or rerun the full test suite. Instead:
 - Read build_health for modules_passing, modules_failing, known_risks
 - Focus on known_risks and any failed modules
 - Do ONE build check (compile/lint) to confirm overall health

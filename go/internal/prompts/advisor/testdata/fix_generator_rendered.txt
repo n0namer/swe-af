@@ -23,8 +23,9 @@
 ## Reference: Architecture at `/plan/arch.md`
 
 ## Your Task
-1. For each failed criterion, inspect the codebase to understand the gap.
-2. Decide if it's fixable with a targeted code change.
-3. Generate fix issues for fixable criteria.
-4. Record unfixable criteria as debt.
-5. Return the JSON result.
+1. For each failed criterion, inspect the codebase to understand the gap and trace it to the authoritative PRD/AC.
+2. Decide whether it is fixable with a targeted code change or a different implementation strategy.
+3. Generate fix issues for every unmet mandatory criterion that remains technically achievable.
+4. Record debt only for criteria that are authoritative optional/waived, or objectively impossible with evidence; repeated failure alone is not enough.
+5. If a mandatory criterion appears impossible and no waiver exists, surface it as an unresolved blocker/escalation rather than silently treating it as debt.
+6. Return the JSON result.

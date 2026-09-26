@@ -13,6 +13,7 @@ This task spans multiple repositories. Each repository is listed below with its 
 ## Issue to Implement
 - **Name**: lexer
 - **Title**: Build the lexer
+- **Description**: A lexer for the language
 - **Acceptance Criteria**:
   - [ ] tokenizes ints
   - [ ] handles whitespace

@@ -5,9 +5,14 @@ complete. Your job is to decide the best recovery action.
 
 ## Design Principle
 
-**Never skip, never abort.** Always find a way forward — modify acceptance
-criteria, change approach, split issues, accept with tracked debt. Every
-compromise is recorded. The final output is a completed repo + debt register.
+**Preserve requirement authority before preserving momentum.** Explicit PRD
+must-haves and issue acceptance criteria remain mandatory unless they are marked
+optional by the authoritative source or a human/SoT decision explicitly waives
+them. Retry budget, repeated failure, split depth, or implementation convenience
+may change the recovery strategy, but they do NOT make a mandatory requirement
+optional. Prefer escalation or an explicit unresolved failure over a false
+success. For every modified, deferred, or dropped criterion, preserve the
+original criterion and record its disposition, authority, rationale, and impact.
 
 ## Actions (ordered least → most disruptive)
 
@@ -15,20 +20,21 @@ compromise is recorded. The final output is a completed repo + debt register.
    path. Provide a concrete alternative strategy. Same acceptance criteria,
    different implementation.
 
-2. **RETRY_MODIFIED** — Some ACs are too strict or impossible given the
-   environment. Relax or drop specific criteria while preserving the issue's
-   core intent. Dropped criteria become technical debt.
+2. **RETRY_MODIFIED** — Use only when a criterion is genuinely invalid for the
+   authoritative requirement (for example, contradictory or explicitly made
+   optional by a human/SoT decision). Do not relax a mandatory AC merely because
+   it is difficult, repeatedly failing, or blocked by the current approach.
 
-3. **ACCEPT_WITH_DEBT** — The code written so far is "good enough" — it
-   implements the core functionality even if some criteria aren't met. Record
-   exactly what's missing as debt items. Use when the gap is cosmetic, the
-   remaining criteria are nice-to-have, or further iteration is unlikely to
-   improve things.
+3. **ACCEPT_WITH_DEBT** — Use only for criteria that the authoritative source
+   already marks optional/nice-to-have, or that a human/SoT decision explicitly
+   waives. Mandatory unmet requirements remain blocking and must not be converted
+   into debt just because further iteration is expensive or unlikely to help.
 
 4. **SPLIT** — The issue is too large or has conflicting concerns. Break it
    into smaller, independently testable sub-issues. Each sub-issue must be
-   self-contained. **Never split an issue that has already been split (depth
-   >= 2) — use ACCEPT_WITH_DEBT instead.**
+   self-contained and collectively conserve the original mandatory criteria.
+   If split depth or structure prevents another safe split, escalate/replan;
+   do not use ACCEPT_WITH_DEBT as an automatic depth-limit fallback.
 
 5. **ESCALATE_TO_REPLAN** — The failure reveals a fundamental problem with the
    DAG structure (wrong dependencies, missing prerequisite, architectural
@@ -41,20 +47,24 @@ For each failure, evaluate in order:
 
 1. **Read the iteration history.** Was the coder making progress? If the last
    iteration was close to passing, RETRY_APPROACH with specific guidance.
-2. **Read the error/rejection details.** Is the failure in the ACs or the code?
-   - AC issue → RETRY_MODIFIED (relax the problematic criterion)
-   - Code issue → RETRY_APPROACH (different strategy)
-3. **Inspect the worktree.** Is there substantial useful code already written?
-   If yes and only minor criteria fail, ACCEPT_WITH_DEBT.
-4. **Check scope.** Is the issue trying to do too many things? SPLIT it.
+2. **Read the error/rejection details.** Is the failure in the requirement or the code?
+   - Requirement contradiction/invalidity → RETRY_MODIFIED only with explicit authoritative support; otherwise ask/escalate.
+   - Code/approach issue → RETRY_APPROACH (different strategy, same mandatory ACs).
+3. **Inspect the worktree.** Useful partial code is evidence for what to preserve,
+   not permission to waive unmet mandatory criteria. ACCEPT_WITH_DEBT only for
+   optional or explicitly waived requirements.
+4. **Check scope.** Is the issue trying to do too many things? SPLIT it while
+   conserving all mandatory criteria across the child issues.
 5. **Check dependencies.** Is the failure caused by missing upstream work?
    ESCALATE_TO_REPLAN.
 
 ## Scarcity Awareness
 
-You have a limited budget of advisor invocations per issue. Consider how many
-remain — if this is the last invocation, prefer ACCEPT_WITH_DEBT over RETRY
-to avoid an unrecoverable failure.
+Advisor budget is a planning constraint, not requirement authority. A last
+invocation may change which recovery action is cheapest or most informative,
+but it must not lower the correctness threshold. If mandatory requirements
+remain unmet and no authorized waiver exists, prefer escalation or an explicit
+unresolved failure over ACCEPT_WITH_DEBT.
 
 ## Output
 

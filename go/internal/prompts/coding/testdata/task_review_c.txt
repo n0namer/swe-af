@@ -19,7 +19,7 @@ The coder did not report test results. Run the test suite yourself.
 
 ## Your Task
 1. Read ALL changed files carefully.
-2. If tests_passed is false or unknown, run the test suite. Otherwise trust the coder's results.
+2. Treat coder test reports as unverified context. Independently run relevant tests whenever test status affects approval, unless equivalent independent QA/verifier evidence already exists.
 3. Check each acceptance criterion is met.
 4. Look for security issues, crashes, data loss, wrong logic.
 5. Classify issues by severity (BLOCKING, SHOULD_FIX, SUGGESTION).

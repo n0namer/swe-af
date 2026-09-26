@@ -15,6 +15,7 @@ import (
 	"github.com/Agent-Field/agentfield/sdk/go/harness"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
+	"github.com/Agent-Field/SWE-AF/go/internal/harnessx"
 	"github.com/Agent-Field/SWE-AF/go/internal/hitl"
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
 )
@@ -550,6 +551,95 @@ func TestSprintPlannerSuccess(t *testing.T) {
 	assertKeys(t, first, "name", "title", "description", "acceptance_criteria",
 		"depends_on", "provides", "estimated_complexity", "files_to_create",
 		"files_to_modify", "testing_strategy", "sequence_number", "guidance", "target_repo")
+}
+
+func TestSprintPlannerSchemaRejectsMissingOrEmptyIssues(t *testing.T) {
+	for name, body := range map[string]string{
+		"missing": `{"rationale":""}`,
+		"empty":   `{"issues":[],"rationale":""}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "sprint.json")
+			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := harnessx.RecoverFile[sprintPlanOutput](path); err == nil {
+				t.Fatalf("expected sprint planner schema to reject %s issues", name)
+			}
+		})
+	}
+}
+
+func TestSprintPlannerRetriesEmptyDAGOnce(t *testing.T) {
+	h := &fakeHarness{fn: func(call int, _ string, dest any, _ harness.Options) (*harness.Result, error) {
+		s := dest.(*sprintPlanOutput)
+		if call == 1 {
+			s.Issues = nil
+			s.Rationale = ""
+		} else {
+			s.Issues = []schemas.PlannedIssue{{Name: "issue-a", Title: "A", AcceptanceCriteria: []string{"must"}}}
+			s.Rationale = "recovered"
+		}
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	deps, notes := newDeps(h)
+	out, err := RunSprintPlanner(context.Background(), deps, map[string]any{
+		"prd": map[string]any{
+			"validated_description": "x",
+			"must_have":             []any{"must"},
+			"acceptance_criteria":   []any{"must"},
+		},
+		"architecture": map[string]any{"summary": "y"},
+		"repo_path":    t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if h.calls != 2 {
+		t.Fatalf("harness calls=%d, want 2", h.calls)
+	}
+	if !strings.Contains(h.prompts[1], "## Required Correction") || !strings.Contains(h.prompts[1], "must never produce an empty issue DAG") {
+		t.Fatalf("retry prompt missing empty-DAG correction: %q", h.prompts[1])
+	}
+	m := out.(map[string]any)
+	if got := len(m["issues"].([]any)); got != 1 {
+		t.Fatalf("issues=%d, want 1", got)
+	}
+	foundRetryNote := false
+	for _, tags := range notes.tags {
+		for _, tag := range tags {
+			if tag == "empty_dag" {
+				foundRetryNote = true
+			}
+		}
+	}
+	if !foundRetryNote {
+		t.Fatalf("missing empty_dag retry note: %v", notes.tags)
+	}
+}
+
+func TestSprintPlannerRejectsEmptyDAGAfterRetry(t *testing.T) {
+	h := &fakeHarness{fn: func(_ int, _ string, dest any, _ harness.Options) (*harness.Result, error) {
+		s := dest.(*sprintPlanOutput)
+		s.Issues = nil
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	deps, _ := newDeps(h)
+	_, err := RunSprintPlanner(context.Background(), deps, map[string]any{
+		"prd": map[string]any{
+			"validated_description": "x",
+			"must_have":             []any{"must"},
+			"acceptance_criteria":   []any{"must"},
+		},
+		"architecture": map[string]any{"summary": "y"},
+		"repo_path":    t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "empty issue DAG after bounded retry") {
+		t.Fatalf("expected bounded empty-DAG failure, got %v", err)
+	}
+	if h.calls != 2 {
+		t.Fatalf("harness calls=%d, want 2", h.calls)
+	}
 }
 
 // Contract: parse failure raises.

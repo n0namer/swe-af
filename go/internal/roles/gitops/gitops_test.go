@@ -183,8 +183,8 @@ func TestRoles_SuccessKeySetAndNotes(t *testing.T) {
 		{
 			name:        "workspace_cleanup",
 			handler:     RunWorkspaceCleanup,
-			input:       map[string]any{"repo_path": "/repo", "worktrees_dir": "/wt", "branches_to_clean": []any{"b1"}},
-			body:        `{"success":true,"cleaned":["b1"]}`,
+			input:       map[string]any{"repo_path": "/repo", "worktrees_dir": "/wt", "branches_to_clean": []any{"issue/build1-01-a"}, "build_id": "build1"},
+			body:        `{"success":true,"cleaned":["issue/build1-01-a"]}`,
 			wantKeys:    []string{"cleaned", "success"},
 			startTags:   []string{"workspace_cleanup", "start"},
 			completeTag: []string{"workspace_cleanup", "complete"},
@@ -246,6 +246,80 @@ func TestRoles_SuccessKeySetAndNotes(t *testing.T) {
 				t.Errorf("missing complete note with tags %v; notes=%v", tt.completeTag, app.notes)
 			}
 		})
+	}
+}
+
+func TestRunMergerRejectsPartialSuccess(t *testing.T) {
+	deps, app := newDeps(successHarness(`{"success":true,"merged_branches":["b1"],"failed_branches":["b2"],"conflict_resolutions":[],"needs_integration_test":true,"summary":"partial"}`))
+	out, err := RunMerger(context.Background(), deps, map[string]any{
+		"repo_path": "/repo", "integration_branch": "int",
+		"branches_to_merge": []any{
+			map[string]any{"branch_name": "b1", "issue_name": "i1"},
+			map[string]any{"branch_name": "b2", "issue_name": "i2"},
+		},
+		"file_conflicts": []any{}, "prd_summary": "p", "architecture_summary": "a",
+	})
+	if err != nil {
+		t.Fatalf("RunMerger returned error: %v", err)
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal output: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("unmarshal output: %v", err)
+	}
+	if success, _ := got["success"].(bool); success {
+		t.Fatalf("partial merge incorrectly preserved success=true; output=%v", got)
+	}
+	if summary, _ := got["summary"].(string); !strings.Contains(summary, "partial merge is not overall success") {
+		t.Fatalf("summary=%q, want partial-merge invariant failure", summary)
+	}
+	if !hasNoteWithTags(app, "merger", "invalid_result") {
+		t.Fatalf("missing merger invalid_result note; notes=%v", app.notes)
+	}
+}
+
+func TestRunIntegrationTesterSetsBoundedTimeout(t *testing.T) {
+	deps, app := newDeps(successHarness(`{"passed":false,"tests_run":1,"tests_passed":0,"tests_failed":1,"tests_written":[],"summary":"failed as expected"}`))
+	_, err := RunIntegrationTester(context.Background(), deps, map[string]any{
+		"repo_path": "/repo", "integration_branch": "b", "merged_branches": []any{},
+		"prd_summary": "p", "architecture_summary": "a", "conflict_resolutions": []any{},
+	})
+	if err != nil {
+		t.Fatalf("RunIntegrationTester returned error: %v", err)
+	}
+	if app.lastOpts.Timeout != 300 {
+		t.Fatalf("integration tester timeout=%d, want 300", app.lastOpts.Timeout)
+	}
+}
+
+func TestRunIntegrationTesterRejectsInconsistentPassCounters(t *testing.T) {
+	deps, app := newDeps(successHarness(`{"passed":true,"tests_run":3,"tests_passed":2,"tests_failed":0,"tests_written":["integration_test.go"],"summary":"looks green"}`))
+	out, err := RunIntegrationTester(context.Background(), deps, map[string]any{
+		"repo_path": "/repo", "integration_branch": "b", "merged_branches": []any{},
+		"prd_summary": "p", "architecture_summary": "a", "conflict_resolutions": []any{},
+	})
+	if err != nil {
+		t.Fatalf("RunIntegrationTester returned error: %v", err)
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal output: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("unmarshal output: %v", err)
+	}
+	if passed, _ := got["passed"].(bool); passed {
+		t.Fatalf("passed = true for inconsistent counters; output=%v", got)
+	}
+	if summary, _ := got["summary"].(string); !strings.Contains(summary, "semantically inconsistent") {
+		t.Fatalf("summary = %q, want semantic-invariant failure", summary)
+	}
+	if !hasNoteWithTags(app, "integration_tester", "invalid_result") {
+		t.Fatalf("missing integration_tester invalid_result note; notes=%v", app.notes)
 	}
 }
 

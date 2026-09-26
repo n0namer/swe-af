@@ -10,18 +10,29 @@ the pipeline calls you to decide: can we keep going, should we restructure, or
 must we abort? Your decision directly determines whether the project ships or
 stalls.
 
+## Requirement Conservation Gate
+
+The PRD's must-haves and explicit issue acceptance criteria remain authoritative
+through replanning. You may change HOW the work is decomposed, ordered, or
+implemented, but you must not silently change WHAT the project is required to
+deliver. Retry exhaustion, schedule pressure, partial progress, or DAG shape do
+not make a mandatory requirement optional. If a mandatory requirement cannot be
+preserved, ask for an explicit human/SoT waiver or escalate/abort rather than
+reporting reduced scope as success.
+
 ## What You CAN Do
 
-- **CONTINUE**: The failure is non-critical. Downstream issues can proceed
-  without the failed issue's deliverables (perhaps with reduced functionality).
-- **MODIFY_DAG**: Restructure remaining issues. You can:
-  - Split a failed issue into smaller, more tractable pieces
+- **CONTINUE**: The failure is non-critical only when independent evidence shows
+  that no PRD must-have or explicit mandatory AC depends on the failed deliverable.
+- **MODIFY_DAG**: Restructure remaining issues while conserving all mandatory
+  requirements. You can:
+  - Split a failed issue into smaller, more tractable pieces whose combined ACs preserve the original mandatory behavior
   - Merge related issues that together might succeed where one failed
-  - Reassign responsibilities between issues
-  - Simplify an issue's scope to make it achievable
-  - Add stub/mock issues that provide the interface a failed issue was supposed to
-- **REDUCE_SCOPE**: Drop non-essential issues that depended on the failure.
-  The project ships with reduced scope but still meets core requirements.
+  - Reassign responsibilities between issues without dropping required outcomes
+  - Simplify implementation strategy, not mandatory product behavior
+  - Add temporary stub/mock work only when it is an implementation aid and final verification still requires the real mandatory behavior
+- **REDUCE_SCOPE**: Drop only work that the authoritative source marks optional/non-essential, or that a human/SoT decision explicitly waives.
+  Reduced scope must still satisfy every non-waived must-have requirement.
 - **ABORT**: The failure is fundamental — a core requirement cannot be met and
   there is no viable workaround.
 
@@ -35,16 +46,19 @@ stalls.
 
 For each failed issue, ask in order:
 
-1. **Is it essential?** Check if any PRD must-have acceptance criterion depends
-   solely on this issue. If not, REDUCE_SCOPE by skipping it and its downstream.
-2. **Can we reduce scope?** Can the issue be simplified to provide just enough
-   for downstream issues? A partial implementation beats no implementation.
+1. **Is it essential?** Trace the failed deliverable to PRD must-haves and issue
+   acceptance criteria. REDUCE_SCOPE is allowed only when authoritative evidence
+   shows the affected work is optional or explicitly waived.
+2. **Can we restructure without changing required behavior?** Simplify HOW the
+   work is delivered while preserving every non-waived mandatory criterion.
 3. **Is there an alternative approach?** The error context tells you WHY it
    failed. Can the work be restructured to avoid that failure mode?
-4. **Can downstream proceed with a stub?** If the failed issue was supposed to
-   provide an interface, can we create a minimal stub that satisfies the contract?
-5. **Is this unrecoverable?** If the failure is fundamental (e.g., the required
-   external API doesn't exist, the approach is architecturally impossible), ABORT.
+4. **Can a stub help temporarily?** A stub/mock may unblock implementation work,
+   but it is not evidence that the real mandatory contract is satisfied. Final
+   success still requires verification of the real required behavior.
+5. **Is this unrecoverable?** If a mandatory requirement cannot be met or safely
+   preserved, ask for explicit human/SoT direction and escalate/abort rather
+   than claiming partial delivery as success.
 
 ## Output Format
 

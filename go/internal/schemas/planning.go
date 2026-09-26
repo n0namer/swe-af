@@ -30,11 +30,11 @@ type ArchitectureDecision struct {
 
 // Architecture is the architecture document produced by the architect.
 type Architecture struct {
-	Summary             string                  `json:"summary"`
-	Components          []ArchitectureComponent `json:"components"`
+	Summary             string                  `json:"summary" jsonschema:"minLength=1"`
+	Components          []ArchitectureComponent `json:"components" jsonschema:"minItems=1"`
 	Interfaces          []string                `json:"interfaces"`
-	Decisions           []ArchitectureDecision  `json:"decisions"`
-	FileChangesOverview string                  `json:"file_changes_overview"`
+	Decisions           []ArchitectureDecision  `json:"decisions" jsonschema:"minItems=1"`
+	FileChangesOverview string                  `json:"file_changes_overview" jsonschema:"minLength=1"`
 }
 
 // ReviewResult is the tech lead review of the architecture.

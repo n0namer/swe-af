@@ -212,12 +212,22 @@ func recoverStructuredText[T any](text string, schema map[string]any, dest *T) e
 	}
 
 	for _, candidate := range extractJSONObjectCandidates(text) {
+		parsedCandidate := candidate
 		var data any
-		if err := json.Unmarshal([]byte(candidate), &data); err != nil {
-			continue
+		if err := json.Unmarshal([]byte(parsedCandidate), &data); err != nil {
+			// Weak providers sometimes copy command output (for example `go test`)
+			// into a JSON string with literal tab/newline/carriage-return bytes.
+			// JSON requires those characters to be escaped. Repair only these
+			// unambiguous control characters inside quoted strings, then still
+			// require exact schema validation below. Other malformed JSON remains
+			// fail-closed.
+			parsedCandidate = escapeRawJSONWhitespaceInStrings(candidate)
+			if parsedCandidate == candidate || json.Unmarshal([]byte(parsedCandidate), &data) != nil {
+				continue
+			}
 		}
 		if err := compiled.Validate(data); err == nil {
-			if err := json.Unmarshal([]byte(candidate), dest); err == nil {
+			if err := json.Unmarshal([]byte(parsedCandidate), dest); err == nil {
 				return nil
 			}
 		}
@@ -249,6 +259,56 @@ func recoverStructuredText[T any](text string, schema map[string]any, dest *T) e
 		}
 	}
 	return fmt.Errorf("no schema-valid JSON object found in final text")
+}
+
+func escapeRawJSONWhitespaceInStrings(text string) string {
+	var b strings.Builder
+	b.Grow(len(text) + 8)
+	inString := false
+	escaped := false
+	changed := false
+	for i := 0; i < len(text); i++ {
+		ch := text[i]
+		if inString {
+			if escaped {
+				b.WriteByte(ch)
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				b.WriteByte(ch)
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				b.WriteByte(ch)
+				inString = false
+				continue
+			}
+			switch ch {
+			case '\t':
+				b.WriteString(`\t`)
+				changed = true
+			case '\n':
+				b.WriteString(`\n`)
+				changed = true
+			case '\r':
+				b.WriteString(`\r`)
+				changed = true
+			default:
+				b.WriteByte(ch)
+			}
+			continue
+		}
+		b.WriteByte(ch)
+		if ch == '"' {
+			inString = true
+		}
+	}
+	if !changed {
+		return text
+	}
+	return b.String()
 }
 
 // extractJSONObjectCandidates finds balanced top-level JSON objects while
@@ -346,6 +406,12 @@ type RoleOptions struct {
 	// Cwd is the working directory for the subprocess (repo path / worktree).
 	Cwd string
 
+	// Timeout bounds the provider subprocess in seconds. Zero preserves the
+	// provider default. Roles with known long-running tool loops should set an
+	// explicit bound so a dead CLI cannot leave the AgentField execution running
+	// indefinitely.
+	Timeout int
+
 	// Env is the base environment for the subprocess. Run overlays the build's
 	// scoped credentials on top of this before invoking the harness.
 	Env map[string]string
@@ -380,6 +446,7 @@ func (r RoleOptions) ToOptions() harness.Options {
 		SystemPrompt:   r.SystemPrompt,
 		Cwd:            r.Cwd,
 		ProjectDir:     r.Cwd,
+		Timeout:        r.Timeout,
 		Env:            r.Env,
 		SchemaMode:     schemaMode,
 	}

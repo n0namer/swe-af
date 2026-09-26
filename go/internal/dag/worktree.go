@@ -550,7 +550,7 @@ func cleanupWorktrees(
 			}
 			repoWorktreesDir := filepath.Join(wsRepo.AbsolutePath, ".worktrees")
 			if err := cleanupSingleRepo(ctx, callFn, nodeID, wsRepo.AbsolutePath, repoWorktreesDir,
-				byRepo[repoName], dagState.ArtifactsDir, level, model, aiProvider, deterministicGit, note); err != nil {
+				byRepo[repoName], dagState.BuildID, dagState.ArtifactsDir, level, model, aiProvider, deterministicGit, note); err != nil {
 				return err
 			}
 		}
@@ -559,7 +559,7 @@ func cleanupWorktrees(
 
 	// --- Single-repo path ---
 	return cleanupSingleRepo(ctx, callFn, nodeID, dagState.RepoPath, dagState.WorktreesDir,
-		branchesToClean, dagState.ArtifactsDir, level, model, aiProvider, deterministicGit, note)
+		branchesToClean, dagState.BuildID, dagState.ArtifactsDir, level, model, aiProvider, deterministicGit, note)
 }
 
 // cleanupSingleRepo cleans up worktrees for a single repo, retrying once on
@@ -570,14 +570,14 @@ func cleanupSingleRepo(
 	callFn coding.CallFn,
 	nodeID, repoPath, worktreesDir string,
 	branchesToClean []string,
-	artifactsDir string,
+	buildID, artifactsDir string,
 	level int,
 	model, aiProvider string,
 	deterministicGit bool,
 	note noteFunc,
 ) error {
 	if deterministicGit {
-		result, err := fastCleanupWorktrees(repoPath, worktreesDir, branchesToClean)
+		result, err := fastCleanupWorktrees(repoPath, worktreesDir, branchesToClean, buildID)
 		if err == nil {
 			if note != nil {
 				note(fmt.Sprintf("Worktree cleanup complete (deterministic): %s",
@@ -585,6 +585,14 @@ func cleanupSingleRepo(
 					[]string{"execution", "worktree_cleanup", "fast_path"})
 			}
 			return nil
+		}
+		var unsafeErr *unsafeCleanupError
+		if errors.As(err, &unsafeErr) {
+			if note != nil {
+				note(fmt.Sprintf("Worktree cleanup blocked by safety gate: %v", err),
+					[]string{"execution", "worktree_cleanup", "blocked"})
+			}
+			return err
 		}
 		if note != nil {
 			note(fmt.Sprintf("Deterministic cleanup failed (%v) — falling back to the cleanup agent", err),
@@ -597,6 +605,7 @@ func cleanupSingleRepo(
 			"repo_path":         repoPath,
 			"worktrees_dir":     worktreesDir,
 			"branches_to_clean": branchesToClean,
+			"build_id":          buildID,
 			"artifacts_dir":     artifactsDir,
 			"level":             level,
 			"model":             model,

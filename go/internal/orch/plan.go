@@ -202,6 +202,11 @@ func Plan(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	}
 	issues := asMapList(sprintResult["issues"])
 	rationale := mapStr(sprintResult, "rationale", "")
+	mustHave := asStrList(prd["must_have"])
+	acceptanceCriteria := asStrList(prd["acceptance_criteria"])
+	if len(issues) == 0 && (len(mustHave) > 0 || len(acceptanceCriteria) > 0) {
+		return nil, fmt.Errorf("plan: sprint planner returned empty issue DAG for non-empty requirements (must_have=%d acceptance_criteria=%d)", len(mustHave), len(acceptanceCriteria))
+	}
 
 	// 5. Compute parallel execution levels & assign sequence numbers BEFORE
 	// issue writing. A dependency cycle propagates as an error.

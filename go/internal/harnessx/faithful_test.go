@@ -134,6 +134,28 @@ func TestRecoverFileAcceptsValidObjectWithTrailingGarbage(t *testing.T) {
 	}
 }
 
+func TestRecoverStructuredTextEscapesRawTabInsideJSONString(t *testing.T) {
+	text := "{\"validated_description\":\"go\\ttest\",\"acceptance_criteria\":[\"passes\"],\"must_have\":[\"fix\"],\"nice_to_have\":[],\"out_of_scope\":[],\"ask_user_form\":null,\"risks\":[]}"
+	var got schemas.PRD
+	if err := recoverStructuredText(text, schemaFor[schemas.PRD](), &got); err != nil {
+		t.Fatalf("recover raw-tab JSON string: %v", err)
+	}
+	if got.ValidatedDescription != "go\ttest" {
+		t.Fatalf("validated_description=%q", got.ValidatedDescription)
+	}
+}
+
+func TestArchitectureSchemaRejectsSemanticallyEmptyRequiredContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "architecture.json")
+	content := `{"summary":"","components":[],"interfaces":[],"decisions":[],"file_changes_overview":""}`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RecoverFile[schemas.Architecture](path); err == nil {
+		t.Fatal("expected semantically empty architecture to fail schema recovery")
+	}
+}
+
 func TestRecoverFileRejectsMissingRequiredPRDField(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "prd.json")
 	content := `{"validated_description":"fix Double","acceptance_criteria":["passes"],"nice_to_have":[],"out_of_scope":[]}`

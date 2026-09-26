@@ -2,6 +2,7 @@ package advisor
 
 import (
 	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -221,6 +222,68 @@ func issueAdvisorInputMap() map[string]any {
 		"failure_result":    map[string]any{},
 		"iteration_history": []any{},
 		"dag_state_summary": map[string]any{"repo_path": "/repo"},
+	}
+}
+
+func TestRunIssueAdvisorUsesArtifactsRuntimeCwd(t *testing.T) {
+	artifactsDir := t.TempDir()
+	worktreePath := filepath.Join(t.TempDir(), "issue-worktree")
+	mh := &mockHarness{fn: func(_ int, dest any) (*harness.Result, error) {
+		d := dest.(*schemas.IssueAdvisorDecision)
+		d.Action = schemas.AdvisorActionRetryApproach
+		d.Summary = "retry"
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	deps := &Deps{Harness: mh, App: &captureApp{}, BuildHaxClient: func() *hitl.HaxClient { return nil }}
+	input := issueAdvisorInputMap()
+	input["worktree_path"] = worktreePath
+	input["dag_state_summary"] = map[string]any{
+		"repo_path":     filepath.Dir(worktreePath),
+		"artifacts_dir": artifactsDir,
+	}
+
+	if _, err := RunIssueAdvisor(context.Background(), deps, input); err != nil {
+		t.Fatalf("RunIssueAdvisor: %v", err)
+	}
+	issueSegment := base64.RawURLEncoding.EncodeToString([]byte("issue-7"))
+	wantCwd := filepath.Join(artifactsDir, "runtime", "issue-advisor", issueSegment, "1")
+	if mh.lastOpts.Cwd != wantCwd {
+		t.Fatalf("advisor cwd=%q, want %q", mh.lastOpts.Cwd, wantCwd)
+	}
+	if fi, err := os.Stat(wantCwd); err != nil || !fi.IsDir() {
+		t.Fatalf("advisor runtime cwd missing: %v", err)
+	}
+	if !strings.Contains(mh.lastPrompt, worktreePath) {
+		t.Fatalf("advisor prompt lost worktree path: %q", mh.lastPrompt)
+	}
+}
+
+func TestRunIssueAdvisorRuntimeCwdDoesNotTraverseIssueName(t *testing.T) {
+	artifactsDir := t.TempDir()
+	mh := &mockHarness{fn: func(_ int, dest any) (*harness.Result, error) {
+		d := dest.(*schemas.IssueAdvisorDecision)
+		d.Action = schemas.AdvisorActionRetryApproach
+		return &harness.Result{Parsed: dest}, nil
+	}}
+	deps := &Deps{Harness: mh, App: &captureApp{}, BuildHaxClient: func() *hitl.HaxClient { return nil }}
+	input := issueAdvisorInputMap()
+	input["issue"] = map[string]any{"name": "../escape"}
+	input["original_issue"] = map[string]any{"name": "../escape"}
+	input["dag_state_summary"] = map[string]any{"artifacts_dir": artifactsDir, "repo_path": "/repo"}
+
+	if _, err := RunIssueAdvisor(context.Background(), deps, input); err != nil {
+		t.Fatalf("RunIssueAdvisor: %v", err)
+	}
+	base := filepath.Join(artifactsDir, "runtime", "issue-advisor")
+	rel, err := filepath.Rel(base, mh.lastOpts.Cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		t.Fatalf("advisor cwd escaped runtime root: base=%q cwd=%q", base, mh.lastOpts.Cwd)
+	}
+	if strings.Contains(rel, "../") || strings.Contains(rel, `..\\`) {
+		t.Fatalf("advisor cwd retained traversal segment: %q", rel)
 	}
 }
 

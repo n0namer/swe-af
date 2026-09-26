@@ -77,7 +77,7 @@ const MergerSystemPrompt = "You are a senior release engineer responsible for me
 	"## Output\n" +
 	"\n" +
 	"Return a MergeResult JSON object with:\n" +
-	"- `success`: true if all branches merged (or at least some did)\n" +
+	"- `success`: true ONLY if every requested branch merged successfully and `failed_branches` is empty. Partial merge is not overall success unless an explicit authorized partial-merge mode is supplied by the caller.\n" +
 	"- `merged_branches`: list of successfully merged branch names\n" +
 	"- `failed_branches`: list of branches that could not be merged\n" +
 	"- `conflict_resolutions`: list of dicts with `file`, `branches`, `resolution_strategy`\n" +

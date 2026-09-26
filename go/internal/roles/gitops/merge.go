@@ -69,6 +69,26 @@ func RunMerger(ctx context.Context, deps *Deps, input map[string]any) (any, erro
 		return nil, err
 	}
 	if ok {
+		if val.Success {
+			merged := make(map[string]struct{}, len(val.MergedBranches))
+			for _, branch := range val.MergedBranches {
+				merged[branch] = struct{}{}
+			}
+			complete := len(val.FailedBranches) == 0
+			for _, branch := range branchNames {
+				if _, exists := merged[branch]; !exists {
+					complete = false
+					break
+				}
+			}
+			if !complete {
+				val.Success = false
+				val.Summary = "Merger returned success=true without merging every requested branch; partial merge is not overall success. " + val.Summary
+				deps.App.Note(ctx, fmt.Sprintf("Merger invalid result: requested=%s merged=%s failed=%s",
+					pyListReprStrs(branchNames), pyListReprStrs(val.MergedBranches), pyListReprStrs(val.FailedBranches)),
+					"merger", "invalid_result")
+			}
+		}
 		deps.App.Note(ctx, fmt.Sprintf("Merger complete: merged=%s, failed=%s, needs_test=%s",
 			pyListReprStrs(val.MergedBranches), pyListReprStrs(val.FailedBranches),
 			pyBool(val.NeedsIntegrationTest)), "merger", "complete")
@@ -138,12 +158,28 @@ func RunIntegrationTester(ctx context.Context, deps *Deps, input map[string]any)
 	}
 	opts := roleOptions(provider, model, gitprompts.IntegrationTesterSystemPrompt, in.RepoPath,
 		[]string{"Bash", "Read", "Write", "Glob", "Grep"}, in.PermissionMode)
+	opts.Timeout = 300
 
 	val, ok, err := runRole[schemas.IntegrationTestResult](ctx, deps, taskPrompt, opts, "integration_tester", "Integration tester agent failed")
 	if err != nil {
 		return nil, err
 	}
 	if ok {
+		countersConsistent := val.TestsRun == val.TestsPassed+val.TestsFailed
+		passConsistent := !val.Passed || (val.TestsFailed == 0 && val.TestsPassed == val.TestsRun)
+		if !countersConsistent || !passConsistent {
+			deps.App.Note(ctx, fmt.Sprintf("Integration tester invalid result: passed=%s run=%d passed_count=%d failed=%d",
+				pyBool(val.Passed), val.TestsRun, val.TestsPassed, val.TestsFailed), "integration_tester", "invalid_result")
+			return schemas.IntegrationTestResult{
+				Passed:         false,
+				TestsRun:       val.TestsRun,
+				TestsPassed:    val.TestsPassed,
+				TestsFailed:    val.TestsFailed,
+				TestsWritten:   val.TestsWritten,
+				FailureDetails: val.FailureDetails,
+				Summary:        "Integration tester returned semantically inconsistent counters/status.",
+			}, nil
+		}
 		deps.App.Note(ctx, fmt.Sprintf("Integration tester complete: passed=%s, %d/%d tests passed",
 			pyBool(val.Passed), val.TestsPassed, val.TestsRun), "integration_tester", "complete")
 		return *val, nil

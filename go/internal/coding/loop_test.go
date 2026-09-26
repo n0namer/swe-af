@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -212,6 +213,91 @@ func TestDetectStuckLoop(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Integration tests (port of TestCodingLoopIntegration)
 // ---------------------------------------------------------------------------
+
+func TestDefaultPathReviewerFailureFailsClosed(t *testing.T) {
+	cfg, err := config.LoadExecutionConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewerCalls := 0
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		if strings.HasSuffix(target, ".run_code_reviewer") {
+			reviewerCalls++
+			return nil, errors.New("schema output missing")
+		}
+		return map[string]any{}, nil
+	}
+	action, summary, review, err := runDefaultPath(
+		context.Background(), callFn, "swe-planner", t.TempDir(),
+		map[string]any{"summary": "implemented"}, map[string]any{"name": "x"}, "iter-1",
+		nil, nil, cfg, 5, "x", func(string, []string) {}, nil, "",
+	)
+	if err != nil {
+		t.Fatalf("runDefaultPath: %v", err)
+	}
+	if reviewerCalls != 1 {
+		t.Fatalf("reviewer calls=%d, want 1", reviewerCalls)
+	}
+	if action != "block" {
+		t.Fatalf("action=%q, want block", action)
+	}
+	if !strings.Contains(summary, "Review unavailable") {
+		t.Fatalf("summary=%q", summary)
+	}
+	if mapGetBool(review, "approved", true) || !mapGetBool(review, "blocking", false) {
+		t.Fatalf("review failure must be blocking and unapproved: %+v", review)
+	}
+}
+
+func TestApprovalRejectsDirtyWorktree(t *testing.T) {
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "-C", repo, "init").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "required.go"), []byte("package fixture\n"), 0o644); err != nil {
+		t.Fatalf("write required.go: %v", err)
+	}
+
+	b := newBuilder()
+	b.onCoder(1, []string{"required.go"}, "implemented but forgot to commit").onReviewer(1, true, false, "LGTM")
+	issue := makeIssue("ISSUE-DIRTY", false)
+	issue["worktree_path"] = repo
+	ds := makeDAGState(t.TempDir())
+	ds.RepoPath = repo
+	notes := &noteCapture{}
+
+	res := run(t, issue, ds, b.build(), makeConfig(t, map[string]any{"max_coding_iterations": 1}), notes.fn())
+	if res.Outcome == schemas.IssueOutcomeCompleted || res.Outcome == schemas.IssueOutcomeCompletedWithDebt {
+		t.Fatalf("dirty worktree incorrectly completed with outcome=%s", res.Outcome)
+	}
+	if res.Outcome != schemas.IssueOutcomeFailedUnrecoverable {
+		t.Fatalf("outcome=%s, want failed_unrecoverable", res.Outcome)
+	}
+	if len(res.IterationHistory) != 1 {
+		t.Fatalf("iteration_history len=%d, want 1", len(res.IterationHistory))
+	}
+	last := res.IterationHistory[0]
+	if got, _ := last["action"].(string); got != "fix" {
+		t.Fatalf("history action=%q, want fix", got)
+	}
+	if approved, _ := last["review_approved"].(bool); approved {
+		t.Fatalf("review_approved remained true for dirty worktree")
+	}
+	if blocking, _ := last["review_blocking"].(bool); !blocking {
+		t.Fatalf("review_blocking=false, want true for dirty-worktree gate")
+	}
+	foundGateNote := false
+	for _, tags := range notes.tags {
+		for _, tag := range tags {
+			if tag == "git_commit_gate" {
+				foundGateNote = true
+			}
+		}
+	}
+	if !foundGateNote {
+		t.Fatalf("missing git_commit_gate note: %v", notes.tags)
+	}
+}
 
 func TestApprovedFirstIteration(t *testing.T) {
 	b := newBuilder()

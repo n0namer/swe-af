@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -248,6 +249,24 @@ func RunCodingLoop(
 			stuck = false
 		}
 
+		// Reviewer approval is not sufficient when the real git worktree still
+		// contains uncommitted or untracked changes. Such changes are invisible
+		// to branch-based merge and would be silently lost even though review saw
+		// the working-tree bytes. Fail closed and send the coder back to commit.
+		if action == "approve" {
+			dirty, gitStatus, gitErr := worktreeHasUncommittedChanges(worktreePath)
+			if gitErr == nil && dirty {
+				action = "fix"
+				summary = "Approval rejected: worktree has uncommitted changes that must be committed before completion: " + truncate(gitStatus, 300)
+				if reviewResult == nil {
+					reviewResult = map[string]any{}
+				}
+				reviewResult["approved"] = false
+				reviewResult["blocking"] = true
+				note(summary, []string{"coding_loop", "git_commit_gate", "blocking", issueName})
+			}
+		}
+
 		// Record iteration for history.
 		var qaPassed any
 		if isTruthy(qaResult) {
@@ -446,6 +465,15 @@ func RunCodingLoop(
 	}, nil
 }
 
+func worktreeHasUncommittedChanges(worktreePath string) (bool, string, error) {
+	out, err := exec.Command("git", "-C", worktreePath, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
+	if err != nil {
+		return false, "", fmt.Errorf("git status failed: %w", err)
+	}
+	status := strings.TrimSpace(string(out))
+	return status != "", status, nil
+}
+
 // runDefaultPath ports _run_default_path: reviewer only (2 role calls including
 // the coder). Returns (action, summary, review_result). A fatal harness error is
 // returned as err (propagated); any other reviewer failure degrades to an
@@ -488,11 +516,17 @@ func runDefaultPath(
 		if errors.As(rerr, &fhe) || errors.Is(rerr, context.Canceled) {
 			return "", "", nil, rerr // raise
 		}
+		summary := fmt.Sprintf("Review unavailable: %v", rerr)
 		note(
-			fmt.Sprintf("Reviewer failed: %s: %v", issueName, rerr),
-			[]string{"coding_loop", "review_error", issueName},
+			fmt.Sprintf("Reviewer failed closed: %s: %v", issueName, rerr),
+			[]string{"coding_loop", "review_error", "blocking", issueName},
 		)
-		reviewResult = map[string]any{"approved": true, "blocking": false, "summary": fmt.Sprintf("Review unavailable: %v", rerr)}
+		// Reviewer evidence is mandatory on the default path. A transport or
+		// structured-output failure is neither approval nor a code defect, so do
+		// not send the coder back to rewrite already-produced code. Fail closed
+		// and let the outer issue/replan recovery policy decide whether to retry.
+		reviewResult = map[string]any{"approved": false, "blocking": true, "summary": summary}
+		return "block", summary, reviewResult, nil
 	}
 
 	note(

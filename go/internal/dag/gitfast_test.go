@@ -136,25 +136,85 @@ func TestFastMergeSingleBranchSkipsIntegrationTest(t *testing.T) {
 	}
 }
 
-func TestFastCleanupWorktrees(t *testing.T) {
+func TestFastCleanupWorktreesRemovesCleanOwnedMergedBranch(t *testing.T) {
 	repo := initFastRepo(t)
 	wtDir := filepath.Join(repo, ".worktrees")
 	if _, err := fastSetupWorktrees(repo, "integration",
-		[]map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, ""); err != nil {
+		[]map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, "b1"); err != nil {
 		t.Fatal(err)
 	}
-	result, err := fastCleanupWorktrees(repo, wtDir, []string{"issue/01-a"})
+	result, err := fastCleanupWorktrees(repo, wtDir, []string{"issue/b1-01-a"}, "b1")
 	if err != nil {
 		t.Fatalf("fastCleanupWorktrees: %v", err)
 	}
-	if got := asStringSlice(result["cleaned"]); len(got) != 1 {
+	if got := asStringSlice(result["cleaned"]); len(got) != 1 || got[0] != "issue/b1-01-a" {
 		t.Errorf("cleaned = %v", got)
 	}
-	if got := gitfastT(t, repo, "branch", "--list", "issue/01-a"); got != "" {
+	if got := gitfastT(t, repo, "branch", "--list", "issue/b1-01-a"); got != "" {
 		t.Errorf("branch survived cleanup: %q", got)
 	}
-	// Non-repo path errors so the caller can fall back to the agent.
-	if _, err := fastCleanupWorktrees(t.TempDir(), wtDir, []string{"x"}); err == nil {
+}
+
+func TestFastCleanupWorktreesPreservesDirtyOwnedBranch(t *testing.T) {
+	repo := initFastRepo(t)
+	wtDir := filepath.Join(repo, ".worktrees")
+	if _, err := fastSetupWorktrees(repo, "integration",
+		[]map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, "b1"); err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(wtDir, "issue-b1-01-a")
+	if err := os.WriteFile(filepath.Join(wt, "uncommitted.txt"), []byte("keep me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fastCleanupWorktrees(repo, wtDir, []string{"issue/b1-01-a"}, "b1"); err == nil {
+		t.Fatal("expected dirty worktree cleanup to fail closed")
+	}
+	if _, err := os.Stat(filepath.Join(wt, "uncommitted.txt")); err != nil {
+		t.Fatalf("dirty work was not preserved: %v", err)
+	}
+	if got := gitfastT(t, repo, "branch", "--list", "issue/b1-01-a"); got == "" {
+		t.Fatal("dirty owned branch was deleted")
+	}
+}
+
+func TestFastCleanupWorktreesPreservesCleanUnmergedOwnedBranch(t *testing.T) {
+	repo := initFastRepo(t)
+	wtDir := filepath.Join(repo, ".worktrees")
+	if _, err := fastSetupWorktrees(repo, "integration",
+		[]map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, "b1"); err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(wtDir, "issue-b1-01-a")
+	if err := os.WriteFile(filepath.Join(wt, "committed.txt"), []byte("keep branch\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitfastT(t, wt, "add", "committed.txt")
+	gitfastT(t, wt, "commit", "-q", "-m", "unmerged work")
+	if _, err := fastCleanupWorktrees(repo, wtDir, []string{"issue/b1-01-a"}, "b1"); err == nil {
+		t.Fatal("expected clean unmerged branch cleanup to fail closed")
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Fatalf("unmerged worktree was removed: %v", err)
+	}
+	if got := gitfastT(t, repo, "branch", "--list", "issue/b1-01-a"); got == "" {
+		t.Fatal("unmerged owned branch was deleted")
+	}
+}
+
+func TestFastCleanupWorktreesPreservesForeignBranch(t *testing.T) {
+	repo := initFastRepo(t)
+	wtDir := filepath.Join(repo, ".worktrees")
+	gitfastT(t, repo, "branch", "issue/foreign-01-a", "integration")
+	if _, err := fastCleanupWorktrees(repo, wtDir, []string{"issue/foreign-01-a"}, "b1"); err == nil {
+		t.Fatal("expected foreign branch cleanup to fail closed")
+	}
+	if got := gitfastT(t, repo, "branch", "--list", "issue/foreign-01-a"); got == "" {
+		t.Fatal("foreign branch was deleted")
+	}
+}
+
+func TestFastCleanupWorktreesNonRepoFallsBack(t *testing.T) {
+	if _, err := fastCleanupWorktrees(t.TempDir(), t.TempDir(), []string{"issue/b1-01-a"}, "b1"); err == nil {
 		t.Error("expected error for non-repo path")
 	}
 }

@@ -3,6 +3,7 @@ package gitops
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/afx"
 	gitprompts "github.com/Agent-Field/SWE-AF/go/internal/prompts/gitops"
@@ -173,6 +174,7 @@ type workspaceCleanupInput struct {
 	RepoPath        string   `json:"repo_path"`
 	WorktreesDir    string   `json:"worktrees_dir"`
 	BranchesToClean []string `json:"branches_to_clean"`
+	BuildID         string   `json:"build_id"`
 	ArtifactsDir    string   `json:"artifacts_dir"`
 	Level           int      `json:"level"`
 	Model           string   `json:"model"`
@@ -195,6 +197,19 @@ func RunWorkspaceCleanup(ctx context.Context, deps *Deps, input map[string]any) 
 		return nil, err
 	}
 
+	buildID := strings.TrimSpace(in.BuildID)
+	if buildID == "" {
+		deps.App.Note(ctx, "Workspace cleanup blocked: missing build_id ownership binding", "workspace_cleanup", "blocked")
+		return workspaceCleanupResult{Success: false, Cleaned: []string{}}, nil
+	}
+	ownedPrefix := "issue/" + buildID + "-"
+	for _, branch := range in.BranchesToClean {
+		if !strings.HasPrefix(branch, ownedPrefix) {
+			deps.App.Note(ctx, fmt.Sprintf("Workspace cleanup blocked: branch %s is not owned by build %s", branch, buildID), "workspace_cleanup", "blocked")
+			return workspaceCleanupResult{Success: false, Cleaned: []string{}}, nil
+		}
+	}
+
 	deps.App.Note(ctx, fmt.Sprintf("Workspace cleanup: %d branches to clean",
 		len(in.BranchesToClean)), "workspace_cleanup", "start")
 
@@ -202,6 +217,7 @@ func RunWorkspaceCleanup(ctx context.Context, deps *Deps, input map[string]any) 
 		RepoPath:        in.RepoPath,
 		WorktreesDir:    in.WorktreesDir,
 		BranchesToClean: in.BranchesToClean,
+		BuildID:         in.BuildID,
 	})
 
 	provider, err := resolveProvider(in.AIProvider)

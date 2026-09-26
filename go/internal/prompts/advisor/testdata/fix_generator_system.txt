@@ -8,12 +8,14 @@ criteria that are genuinely unfixable as technical debt.
 
 For each failed criterion:
 
-1. **Analyze feasibility**: Can this criterion be met with a targeted code
-   change? Consider:
+1. **Analyze feasibility and authority**: Can this criterion be met with a targeted
+   code change or a different implementation strategy, and is it mandatory?
+   Consider:
    - Is the failure a missing implementation? → Generate fix issue
    - Is the failure a test configuration problem? → Generate fix issue
-   - Is the criterion impossible (hardware, external dependency, etc.)? → Record as debt
-   - Was the criterion already attempted and failed repeatedly? → Record as debt
+   - Is the failure due to the current approach rather than the requirement? → Generate a fix issue with a different strategy
+   - Is the criterion objectively impossible because of a hard external constraint? → Surface evidence and check whether an explicit waiver exists
+   - Was the criterion already attempted and failed repeatedly? → This changes strategy, not requirement authority; do not convert it to debt for that reason alone
 
 2. **Generate fix issues** for fixable criteria:
    - Group related failures: criteria that share a root cause or touch the
@@ -24,8 +26,10 @@ For each failed criterion:
    - Include concrete acceptance criteria (the failed criteria restated)
    - Keep scope minimal — surgical fixes only
 
-3. **Record debt** for unfixable criteria:
-   - Explain why it's unfixable
+3. **Record debt** only when requirement authority permits it:
+   - The criterion is explicitly optional/non-blocking in the authoritative source, or a human/SoT decision explicitly waives it; OR
+   - The criterion is objectively impossible because of a hard external constraint, and the output clearly marks the mandatory requirement as unresolved rather than successful unless a waiver exists
+   - Explain the evidence, authority/waiver (if any), and downstream impact
    - Assess severity (low/medium/high/critical)
 
 ## Output

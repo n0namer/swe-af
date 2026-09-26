@@ -3,6 +3,7 @@ package coding
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
@@ -164,6 +165,71 @@ func TestCoderTaskPrompt(t *testing.T) {
 		WorkspaceManifest: manifestSingle(),
 	})
 	eq(t, "coder B", gotB, golden(t, "task_coder_b.txt"))
+}
+
+func TestCoderTaskPromptIncludesIssueDescription(t *testing.T) {
+	description := `Create internal/registry/plugin_a.go; init calls Register("shared").`
+	got := CoderTaskPrompt(CoderTaskPromptOpts{
+		Issue: map[string]any{
+			"name":                "a",
+			"title":               "Plugin A",
+			"description":         description,
+			"acceptance_criteria": []any{"go test ./... passes"},
+		},
+		WorktreePath: "/tmp/wt",
+	})
+	if !strings.Contains(got, description) {
+		t.Fatalf("coder prompt dropped issue description: %q", got)
+	}
+}
+
+func TestCodeReviewerSystemPromptRequiresSpecEvidence(t *testing.T) {
+	for _, want := range []string{
+		"Spec Fidelity Gate",
+		"Passing tests are not proof that the implementation matches the explicit issue specification",
+		"compare each explicit requirement to concrete code evidence",
+		"self-reported context, not independent evidence",
+		"Never approve solely because the coder claims tests passed",
+		"independently verify before relying on it as approval evidence",
+	} {
+		if !strings.Contains(CodeReviewerSystemPrompt, want) {
+			t.Fatalf("reviewer prompt missing spec/evidence contract %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"trust it. Focus your time on code quality",
+		"Otherwise trust the coder's results",
+	} {
+		if strings.Contains(CodeReviewerSystemPrompt, forbidden) {
+			t.Fatalf("reviewer prompt still contains unsafe self-report trust rule %q", forbidden)
+		}
+	}
+}
+
+func TestQASynthesizerRequiresEvidenceIntegrity(t *testing.T) {
+	for _, want := range []string{
+		"Evidence Integrity Gate",
+		"upstream claims, not independent proof",
+		"never APPROVE",
+		"concrete passing test evidence",
+	} {
+		if !strings.Contains(strings.ToLower(QASynthesizerSystemPrompt), strings.ToLower(want)) {
+			t.Fatalf("QASynthesizerSystemPrompt missing evidence-integrity rule %q", want)
+		}
+	}
+}
+
+func TestVerifierRequiresIndependentEvidence(t *testing.T) {
+	for _, want := range []string{
+		"Evidence Authority",
+		"upstream context, not independent proof",
+		"Every PASS still requires direct code/test evidence",
+		"resolve in favor of current evidence",
+	} {
+		if !strings.Contains(VerifierSystemPrompt, want) {
+			t.Fatalf("VerifierSystemPrompt missing evidence-authority rule %q", want)
+		}
+	}
 }
 
 func TestQATaskPrompt(t *testing.T) {

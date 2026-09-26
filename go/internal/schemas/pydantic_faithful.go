@@ -70,6 +70,7 @@ var pydanticRequired = map[string][]string{
 	"ReviewResult":          {"approved", "feedback", "summary"},
 	"IssueGuidance":         {},
 	"PlannedIssue":          {"name", "title", "description", "acceptance_criteria"},
+	"sprintPlanOutput":      {"issues", "rationale"}, // inline BaseModel in reasoners/pipeline.py
 	"PlanResult":            {"prd", "architecture", "review", "issues", "levels", "artifacts_dir", "rationale"},
 	// fast.go (fast/schemas.py)
 	"FastTask":               {"name", "title", "description", "acceptance_criteria"},

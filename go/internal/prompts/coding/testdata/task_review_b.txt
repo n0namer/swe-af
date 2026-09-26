@@ -10,7 +10,7 @@
 ## Coder's Self-Reported Test Results
 - **tests_passed**: True
 - **test_summary**: ok
-The coder reports tests passed. Trust this unless your code review reveals suspicious logic.
+The coder reports tests passed. Treat this as unverified context; independently verify before relying on it as approval evidence.
 
 ## Coder's Changes
 - **Summary**: s
@@ -20,7 +20,7 @@ The coder reports tests passed. Trust this unless your code review reveals suspi
 
 ## Your Task
 1. Read ALL changed files carefully.
-2. If tests_passed is false or unknown, run the test suite. Otherwise trust the coder's results.
+2. Treat coder test reports as unverified context. Independently run relevant tests whenever test status affects approval, unless equivalent independent QA/verifier evidence already exists.
 3. Check each acceptance criterion is met.
 4. Look for security issues, crashes, data loss, wrong logic.
 5. Classify issues by severity (BLOCKING, SHOULD_FIX, SUGGESTION).

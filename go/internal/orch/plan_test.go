@@ -194,7 +194,7 @@ func TestPlanRoleCallsUseAgentTimeout(t *testing.T) {
 		case "run_tech_lead":
 			return approvedReview(), nil
 		case "run_sprint_planner":
-			return sprintResult(), nil
+			return sprintResult(issue("timeout-check", nil, []any{"thing.py"})), nil
 		default:
 			return map[string]any{}, nil
 		}
@@ -206,6 +206,21 @@ func TestPlanRoleCallsUseAgentTimeout(t *testing.T) {
 }
 
 // --- Contract: happy path returns the exact PlanResult key set ------------
+
+func TestPlanRejectsEmptyIssueDAGForNonEmptyRequirements(t *testing.T) {
+	deps, m := planApp(sprintResult())
+	m.responses["run_sprint_planner"] = constResp(map[string]any{"issues": []any{}, "rationale": ""})
+	_, err := runPlan(t, deps, t.TempDir(), nil)
+	if err == nil {
+		t.Fatal("expected empty issue DAG to fail for non-empty PRD requirements")
+	}
+	if !strings.Contains(err.Error(), "sprint planner returned empty issue DAG") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := len(m.callsFor("run_issue_writer")); got != 0 {
+		t.Fatalf("issue writer called %d times after empty DAG failure", got)
+	}
+}
 
 func TestPlanHappyPathKeySet(t *testing.T) {
 	deps, _ := planApp(sprintResult(issue("my-issue", nil, []any{"thing.py"})))

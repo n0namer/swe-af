@@ -31,6 +31,17 @@ func gitFastErrf(format string, args ...any) *gitFastPathError {
 	return &gitFastPathError{msg: fmt.Sprintf(format, args...)}
 }
 
+// unsafeCleanupError is intentionally NOT a fallback signal. It means the
+// requested cleanup could destroy unowned or uncommitted work, so callers must
+// stop rather than delegating the same destructive action to an agent.
+type unsafeCleanupError struct{ msg string }
+
+func (e *unsafeCleanupError) Error() string { return e.msg }
+
+func unsafeCleanupErrf(format string, args ...any) *unsafeCleanupError {
+	return &unsafeCleanupError{msg: fmt.Sprintf(format, args...)}
+}
+
 func runGitCmd(repoPath string, args ...string) (string, string, int) {
 	cmd := exec.Command("git", append([]string{"-C", repoPath}, args...)...)
 	var stdout, stderr bytes.Buffer
@@ -178,23 +189,55 @@ func fastMergeBranches(
 	}, nil
 }
 
-// fastCleanupWorktrees ports git_fast_path.cleanup_worktrees. Best-effort per
-// entry; worktree dir is the branch name with "/" -> "-". Errors when repoPath
-// is not a git repository at all — the caller falls back to the agent path
-// rather than reporting a silent no-op success.
-func fastCleanupWorktrees(repoPath, worktreesDir string, branches []string) (map[string]any, error) {
+// fastCleanupWorktrees removes only worktrees/branches that are provably owned
+// by the current build. It deliberately avoids --force, branch -D and filesystem
+// deletion fallbacks: dirty or unmerged state is evidence to preserve, not
+// detritus to erase.
+func fastCleanupWorktrees(repoPath, worktreesDir string, branches []string, buildID string) (map[string]any, error) {
 	if _, _, code := runGitCmd(repoPath, "rev-parse", "--git-dir"); code != 0 {
 		return nil, gitFastErrf("not a git repository: %s", repoPath)
 	}
+	if strings.TrimSpace(buildID) == "" {
+		return nil, unsafeCleanupErrf("workspace cleanup requires a non-empty build id")
+	}
+	ownedPrefix := "issue/" + buildID + "-"
 	cleaned := make([]string, 0, len(branches))
 	for _, branch := range branches {
-		worktreePath := filepath.Join(worktreesDir, strings.ReplaceAll(branch, "/", "-"))
-		if _, _, code := runGitCmd(repoPath, "worktree", "remove", "--force", worktreePath); code != 0 {
-			if _, err := os.Stat(worktreePath); err == nil {
-				_ = os.RemoveAll(worktreePath)
+		if !strings.HasPrefix(branch, ownedPrefix) {
+			return nil, unsafeCleanupErrf("branch %q is not owned by build %q", branch, buildID)
+		}
+		listed, _, code := runGitCmd(repoPath, "branch", "--list", branch)
+		if code != 0 {
+			return nil, unsafeCleanupErrf("cannot verify branch %q before cleanup", branch)
+		}
+		if strings.TrimSpace(listed) != "" {
+			if _, _, code := runGitCmd(repoPath, "merge-base", "--is-ancestor", branch, "HEAD"); code != 0 {
+				return nil, unsafeCleanupErrf("branch %q is not merged into the current integration HEAD", branch)
 			}
 		}
-		runGitCmd(repoPath, "branch", "-D", branch)
+		worktreePath := filepath.Join(worktreesDir, strings.ReplaceAll(branch, "/", "-"))
+		if _, err := os.Stat(worktreePath); err == nil {
+			head, stderr, code := runGitCmd(worktreePath, "rev-parse", "--abbrev-ref", "HEAD")
+			if code != 0 || strings.TrimSpace(head) != branch {
+				return nil, unsafeCleanupErrf("worktree %q is not registered to branch %q: %s", worktreePath, branch, strings.TrimSpace(stderr))
+			}
+			status, stderr, code := runGitCmd(worktreePath, "status", "--porcelain", "--untracked-files=all")
+			if code != 0 {
+				return nil, unsafeCleanupErrf("cannot verify worktree %q cleanliness: %s", worktreePath, strings.TrimSpace(stderr))
+			}
+			if strings.TrimSpace(status) != "" {
+				return nil, unsafeCleanupErrf("worktree %q has uncommitted/untracked changes", worktreePath)
+			}
+			if _, stderr, code := runGitCmd(repoPath, "worktree", "remove", worktreePath); code != 0 {
+				return nil, unsafeCleanupErrf("safe worktree removal failed for %q: %s", worktreePath, strings.TrimSpace(stderr))
+			}
+		}
+
+		if strings.TrimSpace(listed) != "" {
+			if _, stderr, code := runGitCmd(repoPath, "branch", "-d", branch); code != 0 {
+				return nil, unsafeCleanupErrf("branch %q is not safely deletable: %s", branch, strings.TrimSpace(stderr))
+			}
+		}
 		cleaned = append(cleaned, branch)
 	}
 	runGitCmd(repoPath, "worktree", "prune")

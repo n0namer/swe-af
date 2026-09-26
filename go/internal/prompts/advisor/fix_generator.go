@@ -60,11 +60,12 @@ func FixGeneratorTaskPrompt(opts FixGeneratorTaskOptions) string {
 
 	sections = append(sections,
 		"\n## Your Task\n"+
-			"1. For each failed criterion, inspect the codebase to understand the gap.\n"+
-			"2. Decide if it's fixable with a targeted code change.\n"+
-			"3. Generate fix issues for fixable criteria.\n"+
-			"4. Record unfixable criteria as debt.\n"+
-			"5. Return the JSON result.")
+			"1. For each failed criterion, inspect the codebase to understand the gap and trace it to the authoritative PRD/AC.\n"+
+			"2. Decide whether it is fixable with a targeted code change or a different implementation strategy.\n"+
+			"3. Generate fix issues for every unmet mandatory criterion that remains technically achievable.\n"+
+			"4. Record debt only for criteria that are authoritative optional/waived, or objectively impossible with evidence; repeated failure alone is not enough.\n"+
+			"5. If a mandatory criterion appears impossible and no waiver exists, surface it as an unresolved blocker/escalation rather than silently treating it as debt.\n"+
+			"6. Return the JSON result.")
 
 	return strings.Join(sections, "\n")
 }
@@ -79,12 +80,14 @@ criteria that are genuinely unfixable as technical debt.
 
 For each failed criterion:
 
-1. **Analyze feasibility**: Can this criterion be met with a targeted code
-   change? Consider:
+1. **Analyze feasibility and authority**: Can this criterion be met with a targeted
+   code change or a different implementation strategy, and is it mandatory?
+   Consider:
    - Is the failure a missing implementation? → Generate fix issue
    - Is the failure a test configuration problem? → Generate fix issue
-   - Is the criterion impossible (hardware, external dependency, etc.)? → Record as debt
-   - Was the criterion already attempted and failed repeatedly? → Record as debt
+   - Is the failure due to the current approach rather than the requirement? → Generate a fix issue with a different strategy
+   - Is the criterion objectively impossible because of a hard external constraint? → Surface evidence and check whether an explicit waiver exists
+   - Was the criterion already attempted and failed repeatedly? → This changes strategy, not requirement authority; do not convert it to debt for that reason alone
 
 2. **Generate fix issues** for fixable criteria:
    - Group related failures: criteria that share a root cause or touch the
@@ -95,8 +98,10 @@ For each failed criterion:
    - Include concrete acceptance criteria (the failed criteria restated)
    - Keep scope minimal — surgical fixes only
 
-3. **Record debt** for unfixable criteria:
-   - Explain why it's unfixable
+3. **Record debt** only when requirement authority permits it:
+   - The criterion is explicitly optional/non-blocking in the authoritative source, or a human/SoT decision explicitly waives it; OR
+   - The criterion is objectively impossible because of a hard external constraint, and the output clearly marks the mandatory requirement as unresolved rather than successful unless a waiver exists
+   - Explain the evidence, authority/waiver (if any), and downstream impact
    - Assess severity (low/medium/high/critical)
 
 ## Output

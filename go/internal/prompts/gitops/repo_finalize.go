@@ -20,10 +20,11 @@ const RepoFinalizeSystemPrompt = "You are a senior engineer doing the final revi
 	"\n" +
 	"## Your Approach\n" +
 	"\n" +
-	"1. **Survey the landscape** — walk the directory tree. Understand what the    project is (language, framework, build system) and what belongs vs.    what's debris.\n" +
-	"2. **Clean with judgment** — remove things that clearly don't belong:    dependency directories that should be installed fresh, build outputs,    pipeline artifacts, broken symlinks, caches. Don't remove anything    you're unsure about — if in doubt, leave it and note it.\n" +
-	"3. **Fortify the .gitignore** — ensure it covers the standard patterns for    this project's ecosystem. A good .gitignore is the repo's immune system.\n" +
-	"4. **Final commit** — stage and commit your cleanup work. This should be a    small, obvious \"chore\" commit that any reviewer would approve without    discussion.\n" +
+	"1. **Survey without deleting** — inspect `git status --short`, `git ls-files`, and the directory tree before making any cleanup decision.\n" +
+	"2. **Delete only allowlisted generated/untracked artifacts** — examples: untracked cache/build/dependency directories created by tools (`node_modules/`, `__pycache__/`, `.venv/`, `.artifacts/`, `.worktrees/`, ecosystem build caches). A path being unfamiliar is NOT evidence that it is disposable.\n" +
+	"3. **Preserve tracked and user-owned files** — never delete a path reported by `git ls-files`, and never delete untracked content unless its generated-artifact ownership is clear from a standard tool convention or pipeline-owned directory. If uncertain, leave it and report it.\n" +
+	"4. **Fortify the .gitignore** — add only standard/generated patterns that match observed tooling; never use `.gitignore` to hide an unexplained or required file.\n" +
+	"5. **Final commit** — stage only `.gitignore` and verified cleanup metadata changes. Do not commit source/test/doc deletions.\n" +
 	"\n" +
 	"## What NOT to Do\n" +
 	"\n" +
@@ -48,14 +49,11 @@ func RepoFinalizeTaskPrompt(repoPath string) string {
 	sections = append(sections, fmt.Sprintf("- **Repository path**: `%s`", repoPath))
 
 	sections = append(sections, "\n## Your Task\n"+
-		"1. Survey the directory tree to understand the project and its ecosystem.\n"+
-		"2. Identify and remove clear artifacts: dependency dirs (node_modules, "+
-		"__pycache__, .venv, etc.), build outputs, broken symlinks, pipeline "+
-		"leftovers (.artifacts/, .worktrees/), caches.\n"+
-		"3. Create or update `.gitignore` with standard patterns for the detected "+
-		"language/framework, plus `.artifacts/`, `.worktrees/`, `.env`, `.DS_Store`.\n"+
-		"4. Check `git status` — ensure the working tree is clean.\n"+
-		"5. Commit any cleanup: `chore: finalize repo for handoff`\n"+
+		"1. Survey `git status --short`, `git ls-files`, and the directory tree before deleting anything.\n"+
+		"2. Remove only clearly generated/untracked artifacts owned by standard tooling or pipeline directories; never delete a path listed by `git ls-files`, source/tests/docs, or ambiguous user-owned content.\n"+
+		"3. Create or update `.gitignore` only with standard/generated patterns for the detected language/framework, plus `.artifacts/`, `.worktrees/`, `.env`, `.DS_Store`; do not hide unexplained required files.\n"+
+		"4. Re-run `git status --short` and verify no tracked deletion is present.\n"+
+		"5. Commit only safe finalization changes: `chore: finalize repo for handoff`.\n"+
 		"6. Return a JSON with:\n"+
 		"   - `success`: true if the repo is now clean\n"+
 		"   - `files_removed`: list of paths removed\n"+
