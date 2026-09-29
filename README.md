@@ -1020,3 +1020,9 @@ and the full env surface are documented in
 SWE-AF is built on [AgentField](https://github.com/Agent-Field/agentfield) as a first step from single-agent harnesses to autonomous software engineering factories. [See what else we're building →](https://github.com/Agent-Field)
 
 <!-- agentfield-runtime-capture-canary: 2026-08-26 -->
+
+<!-- shared-ruflo-factory-readme:start -->
+## AI development workflow
+
+Fresh AI sessions should start with the [Ruflo Factory Operator skill](https://github.com/n0namer/BMAD-MNNZ/blob/main/.agents/skills/ruflo-factory-operator/SKILL.md). On A55/shared Factory hosts, also read D:\Users\NIKITA\Documents\DEV\ruflo\docs\RUFLO_FACTORY_OPERATOR.md and D:\Users\NIKITA\Documents\DEV\ruflo\docs\AI_FACTORY_BOOTSTRAP.md. The shared Factory defines the planning/orchestration/readiness/acceptance workflow; this repository's AGENTS/BMad/Git/tests/runtime evidence remains authoritative for project facts and constraints.
+<!-- shared-ruflo-factory-readme:end -->
