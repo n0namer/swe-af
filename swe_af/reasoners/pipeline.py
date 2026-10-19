@@ -26,6 +26,7 @@ from swe_af.reasoners.schemas import (
     ReviewResult,
 )
 from swe_af.runtime.providers import runtime_to_harness_adapter
+from swe_af.harness_activity import run_with_activity_heartbeat
 from swe_af.surface import internal_role
 
 from . import router
@@ -209,7 +210,7 @@ async def run_product_manager(
             workspace_manifest=ws_manifest,
             prior_user_responses=prior_user_responses,
         )
-        result = await router.harness(
+        result = await run_with_activity_heartbeat(router.harness(
             prompt=task_prompt,
             schema=PRD,
             provider=provider,
@@ -219,7 +220,7 @@ async def run_product_manager(
             permission_mode=permission_mode or None,
             system_prompt=system_prompt,
             cwd=repo_path,
-        )
+        ), router.note, label="product_manager")
         check_fatal_harness_error(result)
         # An empty completion here (no parsed output, no text) is a
         # provider/model mismatch, not a schema-quality problem — surface it

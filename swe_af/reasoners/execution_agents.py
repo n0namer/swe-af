@@ -11,6 +11,7 @@ import os
 from pydantic import BaseModel
 
 from swe_af.execution.fatal_error import FatalHarnessError, check_fatal_harness_error
+from swe_af.harness_activity import run_with_activity_heartbeat
 from swe_af.execution.ci_gate import watch_pr_checks
 from swe_af.execution.dag_utils import normalize_issue_dict
 from swe_af.execution.schemas import (
@@ -1018,7 +1019,7 @@ async def run_coder(
 
     harness_error = ""
     try:
-        result = await router.harness(
+        result = await run_with_activity_heartbeat(router.harness(
             task_prompt,
             system_prompt=maybe_apply_coder_guardrail(CODER_SYSTEM_PROMPT),
             schema=CoderResult,
@@ -1028,7 +1029,7 @@ async def run_coder(
             cwd=worktree_path,
             max_turns=DEFAULT_AGENT_MAX_TURNS,
             permission_mode=permission_mode or None,
-        )
+        ), router.note, label="coder")
         check_fatal_harness_error(result)
         if result.parsed is not None:
             router.note(
