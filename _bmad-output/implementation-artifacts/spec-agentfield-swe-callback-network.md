@@ -131,3 +131,19 @@ context:
 - Minimal fix: use router.harness for ai_provider=codex with QASynthesisResult schema, existing LiteLLM path for other models; preserve BLOCK/FIX/APPROVE and fatal-error behavior.
 - Regression tests in tests/test_qa_synthesizer_direct_schema.py plus coding-loop tests: 30/30 PASS, with AGENTFIELD_SERVER=http://localhost:9999 safety fixture. Existing full-suite baseline before this patch: 1235 PASS, 1 SKIP.
 - QA gate remains OPEN until Fast and Full produce terminal success with independent code/test/Git evidence, and Full L repair is accepted. No CrewSync SERVER_DONE claims.
+
+## Golden Fast terminal acceptance — 2026-10-19
+- Fast run exec_20261019_183248_9eawc29q (run_20261019_183248_04m5qi40) reached AgentField terminal status=succeeded with result.success=true, execution_result.completed_count=1, failed_count=0, verification.passed=true.
+- Actual Codex coder independently committed calculator.py and test_calculator.py as 9ef33078d932b7c167549c7de62b8534eb490439; run_repo_finalize then committed .gitignore as 6d4b5a8. Independent unittest discover: 5/5 PASS after finalization; clean Git worktree.
+- Acceptance: Golden Fast S = GREEN, with both business result and source/test/commit evidence. Do not use prior exec_20261019_165548_pygl1ny6 (false business success) as passing evidence.
+- Full current live run exec_20261019_174256_v7bjqcip remains OPEN: main worktree merged level 0 at c28b71c, integration issue commit 2919882 created, 4/4 unittest and 1200 randomized arithmetic checks PASS; top-level terminal status not yet accepted.
+- Native CP log for Full documented Codex QA synthesizer failure from LiteLLM unqualified model gpt-6.1-sol. Fix and regression test committed as 802dbc87746fda39b4ab8b2ab23ed50b7ea407cf, profile 30/30 PASS. Runtime process must be restarted after existing Full run finishes to load the corrected module.
+- Remaining gates: Full terminal GREEN and independent QA; Full L multi-file SQLite repair; fresh broad regression verification after latest patch.
+
+## Completed Full DAG and post-fix suite — 2026-10-19
+- Full native execution exec_20261019_174256_v7bjqcip completed its issue DAG including independent code and test worktrees, level-0 merges, an integration commit 2919882e68a6ba600888db0ad8ee1d2f97206779, and cleanup of temporary worktrees. Now in Verification cycle 0; terminal AgentField acceptance remains OPEN.
+- Full working repo master at c28b71c contains calculator.py and test_calculator.py and independent unittest 4/4 PASS. Independent Python QA: 1000 integer pairs, 200 float pairs, quiet imports, syntax and whitespace PASS.
+- New Fast Golden exec_20261019_183248_9eawc29q reached terminal AgentField succeeded with result.success=true, task completed_count=1, failed_count=0, timed_out=false, verification.passed=true; code commit 9ef33078d932b7c167549c7de62b8534eb490439, finalizer commit 6d4b5a8 and independent 5/5 unittest PASS; working repo clean.
+- Provider repair commit 802dbc87746fda39b4ab8b2ab23ed50b7ea407cf: QA synthesizer chooses structured Codex harness rather than unqualified LiteLLM model, 30/30 targeted PASS.
+- Full post-fix unit regression: 1236 PASS, 1 SKIP, 1 RuntimeWarning (AsyncMock not awaited), exit 0 in 330.36s.
+- Still OPEN: independent terminal Golden Full S, larger Full L+repair, real provider QA synthesizer in fresh process after code reload, CrewSync confirmed DONE.
