@@ -570,7 +570,7 @@ async def run_verifier(
     provider = runtime_to_harness_adapter(ai_provider)
 
     try:
-        result = await router.harness(
+        result = await run_with_activity_heartbeat(router.harness(
             task_prompt,
             system_prompt=VERIFIER_SYSTEM_PROMPT,
             schema=VerificationResult,
@@ -580,7 +580,7 @@ async def run_verifier(
             cwd=repo_path,
             max_turns=DEFAULT_AGENT_MAX_TURNS,
             permission_mode=permission_mode or None,
-        )
+        ), router.note, label="verifier")
         check_fatal_harness_error(result)
         if result.parsed is not None:
             router.note(
@@ -1111,7 +1111,7 @@ async def run_qa(
     provider = runtime_to_harness_adapter(ai_provider)
 
     try:
-        result = await router.harness(
+        result = await run_with_activity_heartbeat(router.harness(
             task_prompt,
             system_prompt=QA_SYSTEM_PROMPT,
             schema=QAResult,
@@ -1121,7 +1121,7 @@ async def run_qa(
             cwd=worktree_path,
             max_turns=DEFAULT_AGENT_MAX_TURNS,
             permission_mode=permission_mode or None,
-        )
+        ), router.note, label="qa")
         check_fatal_harness_error(result)
         if result.parsed is not None:
             router.note(
@@ -1191,7 +1191,7 @@ async def run_code_reviewer(
     provider = runtime_to_harness_adapter(ai_provider)
 
     try:
-        result = await router.harness(
+        result = await run_with_activity_heartbeat(router.harness(
             task_prompt,
             system_prompt=CODE_REVIEWER_SYSTEM_PROMPT,
             schema=CodeReviewResult,
@@ -1201,7 +1201,7 @@ async def run_code_reviewer(
             cwd=worktree_path,
             max_turns=DEFAULT_AGENT_MAX_TURNS,
             permission_mode=permission_mode or None,
-        )
+        ), router.note, label="code_reviewer")
         check_fatal_harness_error(result)
         if result.parsed is not None:
             router.note(
@@ -1222,9 +1222,9 @@ async def run_code_reviewer(
         )
 
     return CodeReviewResult(
-        approved=True,  # don't block on reviewer failure
-        summary=f"Code reviewer agent failed for {issue_name} — not blocking",
-        blocking=False,
+        approved=False,
+        summary=f"Code reviewer unavailable for {issue_name}; independent approval is not established",
+        blocking=True,
         iteration_id=iteration_id,
     ).model_dump()
 
@@ -1270,7 +1270,7 @@ async def run_qa_synthesizer(
         if ai_provider == "codex":
             # Codex CLI model ids are not LiteLLM provider-qualified names.
             # Use the same structured harness contract as the other Codex roles.
-            harness_result = await router.harness(
+            harness_result = await run_with_activity_heartbeat(router.harness(
                 task_prompt,
                 system_prompt=QA_SYNTHESIZER_SYSTEM_PROMPT,
                 schema=QASynthesisResult,
@@ -1280,7 +1280,7 @@ async def run_qa_synthesizer(
                 cwd=worktree_path or os.getcwd(),
                 max_turns=DEFAULT_AGENT_MAX_TURNS,
                 permission_mode=permission_mode or None,
-            )
+            ), router.note, label="qa_synthesizer")
             check_fatal_harness_error(harness_result)
             result = harness_result.parsed
         else:
