@@ -147,3 +147,11 @@ context:
 - Provider repair commit 802dbc87746fda39b4ab8b2ab23ed50b7ea407cf: QA synthesizer chooses structured Codex harness rather than unqualified LiteLLM model, 30/30 targeted PASS.
 - Full post-fix unit regression: 1236 PASS, 1 SKIP, 1 RuntimeWarning (AsyncMock not awaited), exit 0 in 330.36s.
 - Still OPEN: independent terminal Golden Full S, larger Full L+repair, real provider QA synthesizer in fresh process after code reload, CrewSync confirmed DONE.
+
+## Technical E2E contract (scope: Fast and Full only) — 2026-10-19
+- Fast terminal run exec_20261019_183248_9eawc29q GREEN: status succeeded; result.success=true; completed_count=1, failed_count=0, verifier passed; source commit 9ef33078d932b7c167549c7de62b8534eb490439, finalizer 6d4b5a8; independent unittest 5/5 PASS, clean Git working tree.
+- Old Full run exec_20261019_174256_v7bjqcip terminal status succeeded but result.success=false: 3/3 issues completed, 0 failed, verification AC-1 through AC-6 passed; AC-7 failed because integrated implementation was on calculator-add-subtract while delivered master was still at a merge commit and had a different HEAD subject. Do NOT count old Full as GREEN.
+- Restarted Full runtime after committing Codex QA synthesizer routing fix 802dbc87746fda39b4ab8b2ab23ed50b7ea407cf; refreshed process on port 8003.
+- Live QA Synthesizer smoke exec_20261019_191501_pjk504rc succeeded with action=approve, stuck=false; codex.exe CLI was invoked with ChatGPT subscription credentials. This validates provider routing beyond mocked tests.
+- Fresh Full native build exec_20261019_191149_ko4lcjs6 on D:\Temp\swe-full-terminal-golden-20261019-r3. Explicit single-issue code+test+commit goal; no fixed branch name/commit subject/PR/CI. Started successfully, PRD/architecture produced; last observed status running (planning). Accept only on terminal AgentField success AND result.success=true AND nonempty verified implementation Git commit.
+- Technical MVP gate excludes quality enhancements and separate Full L repair scenario until Full S is conclusively accepted.
