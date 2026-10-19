@@ -110,47 +110,37 @@ def test_non_codex_prompt_suffix_keeps_agentfield_write_tool_default(tmp_path) -
     assert "Codex CLI" not in suffix
 
 
-def test_run_codex_cli_spawns_via_resolved_command(monkeypatch) -> None:
-    """The spawn must route cmd[0] through the SDK's resolve_cli_command.
+def test_run_codex_cli_uses_sdk_process_tree_cleanup(monkeypatch) -> None:
+    """Use the SDK CLI runner, which kills the whole process tree on cancellation.
 
-    On Windows, npm installs the codex CLI only as a .cmd shim, and
-    CreateProcess does no PATHEXT resolution — spawning the bare name fails
-    with FileNotFoundError ([WinError 2]) on every codex harness call.
-    resolve_cli_command resolves the shim's real path (no-op on POSIX).
+    A custom communicate() subprocess leaked cmd/node/codex descendants when
+    AgentField terminalized the reasoner; the SDK runner handles stdin and
+    cancellation together and resolves Windows .cmd shims.
     """
     import asyncio
-
     import agentfield.harness._cli as sdk_cli
-
     from swe_af.runtime.codex_harness_patch import _run_codex_cli_with_stdin
 
-    spawned: dict = {}
+    called = {}
 
-    class FakeProc:
-        returncode = 0
+    async def fake_run_cli(cmd, *, env, cwd, input_text, idle_seconds):
+        called.update(cmd=cmd, env=env, cwd=cwd, input_text=input_text,
+                      idle_seconds=idle_seconds)
+        return "codex stdout", "", 0
 
-        async def communicate(self, data: bytes) -> tuple[bytes, bytes]:
-            spawned["stdin"] = data
-            return b"", b""
-
-    async def fake_exec(program: str, *args: str, **kwargs: object) -> FakeProc:
-        spawned["program"] = program
-        spawned["args"] = args
-        return FakeProc()
-
-    monkeypatch.setattr(sdk_cli, "resolve_cli_command", lambda name: f"resolved::{name}")
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
-
-    stdout, stderr, returncode = asyncio.run(
-        _run_codex_cli_with_stdin(
-            ["codex", "exec", "--json"], "prompt", env=None, cwd=None
-        )
-    )
-
-    assert spawned["program"] == "resolved::codex"
-    assert spawned["args"][:2] == ("exec", "--json")
-    assert spawned["stdin"] == b"prompt"
-    assert (stdout, stderr, returncode) == ("", "", 0)
+    async def forbidden_custom_spawn(*args, **kwargs):
+        raise AssertionError("custom subprocess has no process-tree cancellation")
+    monkeypatch.setattr(sdk_cli, "run_cli", fake_run_cli)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", forbidden_custom_spawn)
+    result = asyncio.run(_run_codex_cli_with_stdin(
+        ["codex", "exec", "--json"], "prompt", env={"X": "Y"}, cwd="C:/tmp"
+    ))
+    assert result == ("codex stdout", "", 0)
+    assert called == {
+        "cmd": ["codex", "exec", "--json"],
+        "env": {"X": "Y"}, "cwd": "C:/tmp",
+        "input_text": "prompt", "idle_seconds": 0,
+    }
 
 
 # The real error event codex exec --json emits when the server's strict

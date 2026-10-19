@@ -163,26 +163,15 @@ async def _run_codex_cli_with_stdin(
     env: dict[str, str] | None,
     cwd: str | None,
 ) -> tuple[str, str, int]:
-    # Windows: CreateProcess does no PATHEXT resolution, and npm installs the
-    # codex CLI only as a .cmd shim — spawning the bare name raises
-    # FileNotFoundError ([WinError 2]) on every call even though the shell
-    # finds it. resolve_cli_command resolves the shim's real path via
-    # shutil.which (a no-op on POSIX and for names that already carry a path).
-    from agentfield.harness._cli import resolve_cli_command
+    # Reuse the SDK's subprocess lifecycle: stdin for Windows .cmd shims,
+    # concurrent bounded output, and whole-process-tree cleanup on timeout
+    # or cancellation. The former direct communicate() leaked Codex children.
+    from agentfield.harness._cli import run_cli
 
-    proc = await asyncio.create_subprocess_exec(
-        resolve_cli_command(cmd[0]),
-        *cmd[1:],
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=env,
-        cwd=cwd,
+    return await run_cli(
+        cmd, env=env, cwd=cwd, input_text=prompt_for_codex,
+        idle_seconds=0,  # A reasoning model can be quiet; outer timeout owns wall.
     )
-    stdout_bytes, stderr_bytes = await proc.communicate(prompt_for_codex.encode("utf-8"))
-    stdout = stdout_bytes.decode("utf-8", errors="replace")
-    stderr = stderr_bytes.decode("utf-8", errors="replace")
-    return stdout, stderr, int(proc.returncode)
 
 
 def apply_codex_harness_patch() -> None:
