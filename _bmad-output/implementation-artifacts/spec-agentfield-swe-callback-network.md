@@ -86,3 +86,11 @@ context:
 - tests/fast/test_app.py: 27 passed, exit 0.
 - Live execution exec_20261019_165548_pygl1ny6 submitted through native AgentField; last observed status running, Golden not accepted.
 - Current gate: LIVE_CODING_RED. Do not mark CrewSync DONE or claim a successful full Golden until independent code/test/commit evidence exists.
+
+## Golden Fast S evidence — 2026-10-19 17:08 local
+- Native AgentField execution exec_20261019_165548_pygl1ny6 invoked swe-fast.build with live Codex gpt-6.1-sol.
+- Git preflight used existing repository; planner completed one task and coder produced calculator.py and test_calculator.py.
+- Coder returned complete=true, tests_passed=true, with commit e4398a075b1a2358e49dd10fd18884e274fd7867.
+- Independent python -m unittest discover -q: 5 tests PASS, exit 0.
+- Last checked root execution remains running at fast_verify; terminal business success and complete Golden acceptance still unconfirmed.
+- Keep LIVE_CODING_RED until AgentField returns terminal result.success=true and corresponding verification receipts.
