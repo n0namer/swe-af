@@ -1265,14 +1265,30 @@ async def run_qa_synthesizer(
     )
 
     try:
-        result = await router.ai(
-            task_prompt,
-            system=QA_SYNTHESIZER_SYSTEM_PROMPT,
-            schema=QASynthesisResult,
-            model=model,
-        )
-        # Unlike the harness-backed agents above, router.ai() returns the
-        # validated schema instance itself — there is no .parsed wrapper.
+        if ai_provider == "codex":
+            # Codex CLI model ids are not LiteLLM provider-qualified names.
+            # Use the same structured harness contract as the other Codex roles.
+            harness_result = await router.harness(
+                task_prompt,
+                system_prompt=QA_SYNTHESIZER_SYSTEM_PROMPT,
+                schema=QASynthesisResult,
+                model=model,
+                provider=runtime_to_harness_adapter(ai_provider),
+                tools=[],
+                cwd=worktree_path or os.getcwd(),
+                max_turns=DEFAULT_AGENT_MAX_TURNS,
+                permission_mode=permission_mode or None,
+            )
+            check_fatal_harness_error(harness_result)
+            result = harness_result.parsed
+        else:
+            # The direct AI API returns the schema instance (not .parsed).
+            result = await router.ai(
+                task_prompt,
+                system=QA_SYNTHESIZER_SYSTEM_PROMPT,
+                schema=QASynthesisResult,
+                model=model,
+            )
         if isinstance(result, QASynthesisResult):
             router.note(
                 f"QA synthesizer complete: action={result.action.value}, "

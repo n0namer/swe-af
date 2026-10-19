@@ -121,3 +121,13 @@ context:
 - Two independent git worktrees exist for calculator-arithmetic and calculator-unit-tests; no committed deliverable at latest readback. Full E2E remains UNACCEPTED.
 - Local FCM model list works, but live chat-completions did not return within 30 seconds. This is a provider readiness blocker.
 - Deterministic code tests PASS does not imply autonomous Full Golden GREEN. Stop declaring MVP complete until full execution reaches terminal success, application files pass independent tests, and exact SHA is recorded.
+
+## Live native Golden evidence and QA provider repair — 2026-10-19
+- Full execution exec_20261019_174256_v7bjqcip independently generated calculator and unittest worktrees, merged level-0 branches at 53ee15f and c28b71c, and created integration commit 2919882e68a6ba600888db0ad8ee1d2f97206779 containing exactly calculator.py and test_calculator.py.
+- Independent QA on merged repo: 4/4 unittest PASS; 1000 integer-pair and 200 float-pair property checks PASS, imports silent, AST syntax PASS, git diff --check PASS.
+- Full native control plane remained running at latest readback; SQLite workflow evidence confirmed 14 succeeded children followed by QA/review and integration coder. Top-level terminal outcome not accepted.
+- Fast new Golden exec_20261019_183248_9eawc29q used 1500s task budget: run_coder and fast_execute_tasks succeeded, commit 9ef3307 created, 5/5 unittest PASS; verifier running at last child readback. Do not report terminal GREEN prematurely.
+- Discovered real provider mismatch: Full run_qa_synthesizer called router.ai (LiteLLM) with unqualified Codex model gpt-6.1-sol; execution log reports Invalid model spec, resulting in fallback/retry.
+- Minimal fix: use router.harness for ai_provider=codex with QASynthesisResult schema, existing LiteLLM path for other models; preserve BLOCK/FIX/APPROVE and fatal-error behavior.
+- Regression tests in tests/test_qa_synthesizer_direct_schema.py plus coding-loop tests: 30/30 PASS, with AGENTFIELD_SERVER=http://localhost:9999 safety fixture. Existing full-suite baseline before this patch: 1235 PASS, 1 SKIP.
+- QA gate remains OPEN until Fast and Full produce terminal success with independent code/test/Git evidence, and Full L repair is accepted. No CrewSync SERVER_DONE claims.
