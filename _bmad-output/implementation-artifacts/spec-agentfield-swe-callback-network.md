@@ -114,3 +114,10 @@ context:
 - FCM model enumeration 200 but real completions 30s timeout. Do not accept inference readiness.
 - Additional selected suite: 45/45 PASS. Broad pytest -x: 221 PASS and 1 check failed because test_ac_14_no_existing_swe_af_files_modified introspects uncommitted git diff and Full source is intentionally changed. Re-run after commit.
 - OPEN: independent live Full acceptance and reliable Fast terminal success; do not declare MVP complete.
+
+## Full-suite regression and live Full evidence — 2026-10-19
+- Broad pytest after installing declared hax-sdk==0.2.8 into current Python venv: 1235 PASS, 1 SKIP, 1 RuntimeWarning (un-awaited AsyncMock in tests/fast/test_executor.py), exit 0, 323.89s. Command: python -m pytest -q -x -p no:cacheprovider tests.
+- Golden Full exec_20261019_174256_v7bjqcip produced PRD, architecture, review and three issue specs. Checkpoint at .artifacts/execution/checkpoint.json recorded level 0 with two in-flight issues, zero completed and zero failed.
+- Two independent git worktrees exist for calculator-arithmetic and calculator-unit-tests; no committed deliverable at latest readback. Full E2E remains UNACCEPTED.
+- Local FCM model list works, but live chat-completions did not return within 30 seconds. This is a provider readiness blocker.
+- Deterministic code tests PASS does not imply autonomous Full Golden GREEN. Stop declaring MVP complete until full execution reaches terminal success, application files pass independent tests, and exact SHA is recorded.
