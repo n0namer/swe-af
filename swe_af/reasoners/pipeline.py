@@ -95,6 +95,52 @@ def _compute_levels(issues: list[dict]) -> list[list[str]]:
     return levels
 
 
+def _issue_file_keys(issue: dict) -> set[tuple[str, str]]:
+    """Conservative Windows file ownership per target repository.
+
+    Directory and API-level conflicts still require explicit dependency edges
+    in the approved architecture; this protects known exact file overlaps.
+    """
+    repo = str(issue.get("target_repo", "")).casefold().strip()
+    files = issue.get("files_to_create", []) + issue.get("files_to_modify", [])
+    return {
+        (repo, str(path).replace("\\", "/").casefold().removeprefix("./"))
+        for path in files if isinstance(path, str) and path.strip()
+    }
+
+
+def _serialize_file_conflicts(issues: list[dict]) -> list[dict]:
+    """Add only required dependency edges for conflicting concurrent issues.
+
+    Plan owners keep full parallelism on disjoint files. Same-level conflicts
+    are ordered by the planner's existing issue order, with no new scheduler.
+    Recompute until file isolation holds even when a new edge pushes an issue
+    into a subsequent existing level. Existing dependencies are preserved.
+    """
+    by_name = {issue["name"]: issue for issue in issues}
+    if len(by_name) != len(issues):
+        raise ValueError("duplicate planned issue names")
+    edges = []
+    for _ in range(len(issues) * len(issues) + 1):
+        levels = _compute_levels(issues)
+        changes = 0
+        for level in levels:
+            owners: dict[tuple[str, str], str] = {}
+            for name in level:
+                current = by_name[name]
+                dependencies = current.setdefault("depends_on", [])
+                for key in sorted(_issue_file_keys(current)):
+                    owner = owners.get(key)
+                    if owner and owner != name and owner not in dependencies:
+                        dependencies.append(owner)
+                        edges.append({"issue": name, "depends_on": owner, "file": key[1]})
+                        changes += 1
+                    owners[key] = name
+        if not changes:
+            return edges
+    raise ValueError("cannot serialize planned file conflicts safely")
+
+
 def _validate_file_conflicts(issues: list[dict], levels: list[list[str]]) -> list[dict]:
     """Detect file conflicts between issues scheduled at the same parallel level.
 
@@ -113,17 +159,15 @@ def _validate_file_conflicts(issues: list[dict], levels: list[list[str]]) -> lis
     conflicts: list[dict] = []
 
     for level_idx, level_names in enumerate(levels):
-        file_to_issues: dict[str, list[str]] = defaultdict(list)
+        file_to_issues: dict[tuple[str, str], list[str]] = defaultdict(list)
         for name in level_names:
             issue = issue_by_name.get(name)
             if issue is None:
                 continue
-            for f in issue.get("files_to_create", []):
-                file_to_issues[f].append(name)
-            for f in issue.get("files_to_modify", []):
-                file_to_issues[f].append(name)
+            for key in _issue_file_keys(issue):
+                file_to_issues[key].append(name)
 
-        for filepath, touching_issues in file_to_issues.items():
+        for (_, filepath), touching_issues in file_to_issues.items():
             if len(touching_issues) > 1:
                 conflicts.append(
                     {

@@ -19,7 +19,7 @@ load_dotenv()  # surface HAX_API_KEY (and friends) before Agent() is constructed
 
 from swe_af.issue import issue_router
 from swe_af.reasoners import router
-from swe_af.reasoners.pipeline import _assign_sequence_numbers, _compute_levels, _validate_file_conflicts
+from swe_af.reasoners.pipeline import _assign_sequence_numbers, _compute_levels, _validate_file_conflicts, _serialize_file_conflicts
 from swe_af.reasoners.schemas import PlanResult, ReviewResult
 from swe_af.surface import TAG_ENTRYPOINT
 
@@ -1598,10 +1598,19 @@ async def plan(
     issues = sprint_result["issues"]
     rationale = sprint_result["rationale"]
 
-    # 5. Compute parallel execution levels & assign sequence numbers BEFORE issue writing
+    # 5. Preserve maximum file-disjoint parallelism; overlap creates dependencies.
+    # Signatures/interfaces are owned by architecture and acceptance tests.
+    serialized_edges = _serialize_file_conflicts(issues)
+    if serialized_edges:
+        app.note(
+            f"Serialized {len(serialized_edges)} conflicting file owners",
+            tags=["pipeline", "file_conflicts", "serialized"],
+        )
     levels = _compute_levels(issues)
     issues = _assign_sequence_numbers(issues, levels)
     file_conflicts = _validate_file_conflicts(issues, levels)
+    if file_conflicts:
+        raise ValueError(f"unsafe parallel file conflicts: {file_conflicts}")
 
     # 4b. Parallel issue writing (issues now have sequence_number set)
     base = os.path.join(os.path.abspath(repo_path), artifacts_dir)
