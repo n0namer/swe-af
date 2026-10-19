@@ -104,45 +104,33 @@ async def build(
     ai_provider = _runtime_to_provider(cfg.runtime)
     abs_artifacts_dir = os.path.join(os.path.abspath(repo_path), artifacts_dir)
 
-    # ── 1. GIT INIT (1 attempt, non-fatal) ─────────────────────────────────
+    # ── 1. GIT INIT: reuse deterministic GitOps for ready repositories ──
     app.note("Fast build: git init", tags=["fast_build", "git_init"])
     git_config = None
     try:
-        raw_git = await app.call(
-            f"{NODE_ID}.run_git_init",
-            repo_path=repo_path,
-            goal=goal,
-            artifacts_dir=abs_artifacts_dir,
-            model=resolved["git_model"],
-            permission_mode=cfg.permission_mode,
-            ai_provider=ai_provider,
-            build_id="",
+        from swe_af.issue.git_ops import (
+            ensure_issue_ready_repo, resolve_base, is_dirty,
         )
-        git_init = _unwrap(raw_git, "run_git_init")
-        if git_init.get("success"):
-            git_config = {
-                "integration_branch": git_init["integration_branch"],
-                "original_branch": git_init["original_branch"],
-                "initial_commit_sha": git_init["initial_commit_sha"],
-                "mode": git_init["mode"],
-                "remote_url": git_init.get("remote_url", ""),
-                "remote_default_branch": git_init.get("remote_default_branch", ""),
-            }
-            app.note(
-                f"Git init: mode={git_init['mode']}, "
-                f"branch={git_init['integration_branch']}",
-                tags=["fast_build", "git_init", "complete"],
-            )
-        else:
-            app.note(
-                f"Git init failed (non-fatal): {git_init.get('error_message', 'unknown')}",
-                tags=["fast_build", "git_init", "error"],
-            )
+        # Git preflight is read-only: do not invoke an LLM for routine Git status.
+        # New/uninitialized repos are reported as non-fatal preflight failures.
+        await asyncio.to_thread(ensure_issue_ready_repo, repo_path)
+        if await asyncio.to_thread(is_dirty, repo_path):
+            app.note("Fast build: existing dirty repo; no git mutation",
+                     tags=["fast_build", "git_init", "dirty"])
+        base_ref, base_sha = await asyncio.to_thread(resolve_base, repo_path)
+        git_config = {
+            "integration_branch": base_ref,
+            "original_branch": base_ref,
+            "initial_commit_sha": base_sha,
+            "mode": "existing",
+            "remote_url": "",
+            "remote_default_branch": "",
+        }
+        app.note(f"Git init: using existing branch={base_ref}",
+                 tags=["fast_build", "git_init", "complete"])
     except Exception as e:
-        app.note(
-            f"Git init exception (non-fatal): {e}",
-            tags=["fast_build", "git_init", "error"],
-        )
+        app.note(f"Git preflight failed (non-fatal): {e}",
+                 tags=["fast_build", "git_init", "error"])
 
     # ── 2. PLAN + EXECUTE (wrapped in build_timeout) ────────────────────────
     app.note(

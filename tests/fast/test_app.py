@@ -1,4 +1,4 @@
-"""Tests for swe_af.fast.app and swe_af.fast.__main__.
+﻿"""Tests for swe_af.fast.app and swe_af.fast.__main__.
 
 Covers:
 - app.node_id == 'swe-fast' when NODE_ID defaults to 'swe-fast' (AC-8)
@@ -239,7 +239,11 @@ class TestBuildSuccessPath:
 
     @pytest.mark.asyncio
     async def test_build_success_returns_success_true(self, tmp_path) -> None:
-        """build() with mocked app.call returns FastBuildResult(success=True)."""
+        """A ready Git repo skips LLM Git-init; remaining stages still execute."""
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=Test",
+                        "-c", "user.email=test@localhost", "commit",
+                        "--allow-empty", "-q", "-m", "baseline"], check=True)
         import swe_af.fast.app as fast_app  # noqa: PLC0415
 
         plan_result = _make_plan_result()
@@ -257,7 +261,10 @@ class TestBuildSuccessPath:
             "run_repo_finalize": finalize_result,
         }
 
+        seen_targets = []
+
         async def mock_call(target: str, **kwargs):
+            seen_targets.append(target)
             for key, value in call_responses.items():
                 if key in target:
                     return {"result": value}
@@ -280,6 +287,7 @@ class TestBuildSuccessPath:
 
         assert result["success"] is True
         assert "Success" in result["summary"]
+        assert not any("run_git_init" in target for target in seen_targets)
 
     @pytest.mark.asyncio
     async def test_build_failure_returns_success_false(self, tmp_path) -> None:
@@ -347,8 +355,11 @@ class TestBuildTimeoutPath:
                 return raw["result"]
             return raw
 
-        # Mock asyncio.wait_for to raise TimeoutError to simulate build timeout
+        # A hung Git-init harness must be bounded before entering planning.
+        seen_timeouts = []
+
         async def mock_wait_for(coro, timeout):
+            seen_timeouts.append(timeout)
             coro.close()  # close the coroutine to avoid warning
             raise asyncio.TimeoutError()
 
@@ -365,6 +376,7 @@ class TestBuildTimeoutPath:
 
         assert result["success"] is False
         assert "timed out" in result["summary"].lower()
+        assert seen_timeouts == [600], "Plan/execute must have a bounded deadline"
 
     @pytest.mark.asyncio
     async def test_build_timeout_result_has_timed_out_execution(self, tmp_path) -> None:
