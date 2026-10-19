@@ -73,6 +73,38 @@ class TestWorktreeLifecycle:
         # Branch survives worktree removal — it is the deliverable.
         assert run_git(git_repo, "rev-parse", "issue/test-1") == sha
 
+    def test_commit_scope_does_not_capture_generated_or_unowned_files(self, git_repo: str) -> None:
+        _, base_sha = git_ops.resolve_base(git_repo)
+        worktree = os.path.join(git_repo, ".worktrees", "scoped")
+        git_ops.add_worktree(git_repo, worktree, "issue/scoped", base_sha)
+        for name in ("owned.go", "unowned.go"):
+            with open(os.path.join(worktree, name), "w") as f:
+                f.write("package example\\n")
+        junk = os.path.join(worktree, ".graphify-code", "graphify-out")
+        os.makedirs(junk)
+        with open(os.path.join(junk, "graph.json"), "w") as f:
+            f.write("{}")
+        sha = git_ops.commit_all(worktree, "scoped checkpoint", allowed_paths=["owned.go"])
+        assert sha
+        assert run_git(worktree, "show", "--pretty=format:", "--name-only", "HEAD").strip() == "owned.go"
+        assert os.path.isfile(os.path.join(junk, "graph.json"))
+        assert os.path.isfile(os.path.join(worktree, "unowned.go"))
+
+    def test_committed_generated_artifacts_are_untracked_without_deleting(self, git_repo: str) -> None:
+        _, base_sha = git_ops.resolve_base(git_repo)
+        worktree = os.path.join(git_repo, ".worktrees", "tracked-generated")
+        git_ops.add_worktree(git_repo, worktree, "issue/tracked-generated", base_sha)
+        folder = os.path.join(worktree, ".graphify-code", "graphify-out")
+        os.makedirs(folder)
+        path = os.path.join(folder, "graph.json")
+        with open(path, "w") as f:
+            f.write("{}")
+        run_git(worktree, "add", "-A")
+        run_git(worktree, "commit", "-qm", "coder included generated files")
+        assert git_ops.scrub_tracked_junk(worktree, "issue") != ""
+        assert os.path.isfile(path)
+        assert ".graphify-code" not in run_git(worktree, "ls-files")
+
     def test_commit_identity_fallback(self, git_repo: str, monkeypatch) -> None:
         _, base_sha = git_ops.resolve_base(git_repo)
         worktree = os.path.join(git_repo, ".worktrees", "wt2")

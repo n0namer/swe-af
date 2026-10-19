@@ -104,7 +104,11 @@ def _has_commit_identity(repo_path: str) -> bool:
 # Bytecode/cache junk that must never be versioned on the issue branch. The
 # coder runs tests inside the worktree, so these appear as a side effect and
 # an indiscriminate `git add` (ours or the coder's) would sweep them in.
-_JUNK_PATHSPECS: tuple[str, ...] = ("*__pycache__*", "*.pyc", "*.pyo")
+_JUNK_PATHSPECS: tuple[str, ...] = (
+    "*__pycache__*", "*.pyc", "*.pyo",
+    ".agentfield-out-*/*", ".codex/graphify/*", ".graphify-code/*",
+    "graft/.cache/*", ".codex-temp-gocache/*",
+)
 
 
 def _commit_index(worktree_path: str, message: str) -> str:
@@ -143,16 +147,41 @@ def scrub_tracked_junk(worktree_path: str, issue_name: str) -> str:
     )
 
 
-def commit_all(worktree_path: str, message: str) -> str:
-    """Commit any uncommitted changes inside the (isolated) worktree.
+def commit_all(
+    worktree_path: str, message: str, allowed_paths: list[str] | None = None,
+) -> str:
+    """Commit issue-owned paths only when ownership is supplied.
 
-    ``add -A`` is safe here precisely because the worktree belongs to this
-    build alone; bytecode junk is excluded. Returns the new commit sha, or
-    "" when there was nothing to commit.
+    The optional scope is necessary because Codex/Ruflo/Graphify generate
+    untracked files in exclusive worktrees. An exclusive worktree does not
+    make those files part of the issue deliverable.
     """
     if not is_dirty(worktree_path):
         return ""
     excludes = [f":(exclude){p}" for p in _JUNK_PATHSPECS]
+    if allowed_paths is not None:
+        allowed = list(dict.fromkeys(p.replace("\\", "/") for p in allowed_paths))
+        if not allowed:
+            return ""
+        for path in allowed:
+            if (not path or path.startswith(("/", "-", ":")) or
+                    any(part in ("", ".", "..") for part in path.split("/"))):
+                raise GitOpsError(f"invalid owned path: {path!r}")
+        _git(worktree_path, "add", "-A", "--", *allowed, *excludes)
+        # --only excludes unrelated paths, even if another agent staged them.
+        identity = [] if _has_commit_identity(worktree_path) else [
+            "-c", "user.name=SWE-AF", "-c", "user.email=swe-af@agentfield.local",
+        ]
+        proc = _git(
+            worktree_path, *identity, "commit", "--only", "-m", message,
+            "--", *allowed, check=False,
+        )
+        if proc.returncode != 0:
+            output = (proc.stdout + proc.stderr).lower()
+            if "nothing to commit" in output or "nothing added to commit" in output:
+                return ""
+            raise GitOpsError(f"scoped commit failed: {proc.stderr.strip()}")
+        return _git(worktree_path, "rev-parse", "HEAD").stdout.strip()
     _git(worktree_path, "add", "-A", "--", ".", *excludes)
     return _commit_index(worktree_path, message)
 

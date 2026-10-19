@@ -261,6 +261,9 @@ async def _implement_issue_impl(
             git_ops.commit_all,
             worktree_path,
             f"chore({planned['name']}): checkpoint uncommitted issue work",
+            allowed_paths=list(dict.fromkeys(
+                spec.files_to_create + spec.files_to_modify
+            )),
         )
         commits = await asyncio.to_thread(
             git_ops.new_commits, repo_path, base_sha, branch
