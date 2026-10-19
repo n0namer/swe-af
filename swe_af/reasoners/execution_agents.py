@@ -985,6 +985,7 @@ async def run_coder(
     project_context: dict | None = None,
     memory_context: dict | None = None,
     model: str = "sonnet",
+    max_turns: int = DEFAULT_AGENT_MAX_TURNS,
     permission_mode: str = "",
     ai_provider: str = "claude",
     workspace_manifest: dict | None = None,
@@ -1027,7 +1028,7 @@ async def run_coder(
             provider=provider,
             tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
             cwd=worktree_path,
-            max_turns=DEFAULT_AGENT_MAX_TURNS,
+            max_turns=max_turns,
             permission_mode=permission_mode or None,
         ), router.note, label="coder")
         check_fatal_harness_error(result)

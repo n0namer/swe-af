@@ -271,6 +271,28 @@ class TestCodingLoopIntegration(unittest.TestCase):
         self.notes.append(msg)
         self.note_tags.append(tags or [])
 
+    def test_coder_receives_bounded_model_turn_budget(self):
+        seen = []
+
+        async def call_fn(agent_name, **kwargs):
+            if agent_name.endswith(".run_coder"):
+                seen.append(kwargs.get("max_turns"))
+                return {"files_changed": ["answer.go"], "summary": "done", "complete": True}
+            if agent_name.endswith(".run_code_reviewer"):
+                return {"approved": True, "blocking": False, "summary": "LGTM"}
+            return {}
+
+        result = _run(run_coding_loop(
+            issue=_make_issue(),
+            dag_state=_make_dag_state(self.artifacts_dir),
+            call_fn=call_fn,
+            node_id="test-node",
+            config=_make_config(agent_max_turns=7),
+            note_fn=self._note_fn,
+        ))
+        self.assertEqual(result.outcome, IssueOutcome.COMPLETED)
+        self.assertEqual(seen, [7])
+
     # -- Scenario 1: Happy path — approved on first iteration --
 
     def test_approved_first_iteration(self):

@@ -624,6 +624,7 @@ async def run_coding_loop(
                     project_context=project_context,
                     memory_context=memory_context,
                     model=config.coder_model,
+                    max_turns=config.agent_max_turns,
                     permission_mode=permission_mode,
                     ai_provider=config.ai_provider,
                     workspace_manifest=ws_manifest_dict,
