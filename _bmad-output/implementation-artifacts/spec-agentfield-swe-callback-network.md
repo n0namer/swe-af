@@ -94,3 +94,23 @@ context:
 - Independent python -m unittest discover -q: 5 tests PASS, exit 0.
 - Last checked root execution remains running at fast_verify; terminal business success and complete Golden acceptance still unconfirmed.
 - Keep LIVE_CODING_RED until AgentField returns terminal result.success=true and corresponding verification receipts.
+
+## 2026-10-19 quality gate: Fast false-positive / Full RED
+- Golden Fast exec_20261019_165548_pygl1ny6 terminated AgentField succeeded, result.success=true, but execution_result.completed_count=0, failed_count=1 and task outcome timeout. Its independent calculator unittest suite 5/5 PASS and Git commit e4398a0 do not prove successful autonomous completion.
+- Fixed swe_af/fast/app.py acceptance: verifier passed is necessary but insufficient; all planned task_results must be completed, with no failed_count or timed_out.
+- Added regression test for verifier PASS plus task timeout; local tests/fast/test_app.py 28/28 PASS; related 45/45 tests PASS.
+- Golden Full exec_20261019_170907_b572kk1l failed with execution timeout; initial phase remained planning + model-driven git init.
+- Reused existing swe_af.issue.git_ops deterministic git preflight for initialized repos in Full when deterministic_git=true; keep LLM fallback for fresh/uninitialized repos and explicit deterministic_git=false.
+- New Full exec_20261019_174256_v7bjqcip is still running at latest readback, not accepted.
+- FCM /v1/models HTTP 200, but /v1/chat/completions smoke timed out after 30s; inference readiness remains RED.
+- Still OPEN: Full live model plan/code/test/finalize terminal GREEN; Fast genuine task success receipt; independent multi-file repair scenario; truthful terminal outcomes.
+- Never mark MVP DONE based solely on top-level transport status succeeded.
+
+## 2026-10-19 adversarial QA readback
+- Fast exec_20261019_165548_pygl1ny6: transport status succeeded, result.success=true but completed_count=0, failed_count=1, timed-out task. Corrected acceptance to reject any failed or timed-out tasks even if verifier passes.
+- Regression test demonstrates failed task plus positive verifier must return result.success=false. 28/28 Fast tests PASS.
+- Full deterministic Git preflight reuses existing swe_af.issue.git_ops for ready committed repositories when deterministic_git=true; LLM fallback for uninitialized repositories.
+- Full E2E exec_20261019_170907_b572kk1l failed. Replacement exec_20261019_174256_v7bjqcip entered planning, still not terminal on last query.
+- FCM model enumeration 200 but real completions 30s timeout. Do not accept inference readiness.
+- Additional selected suite: 45/45 PASS. Broad pytest -x: 221 PASS and 1 check failed because test_ac_14_no_existing_swe_af_files_modified introspects uncommitted git diff and Full source is intentionally changed. Re-run after commit.
+- OPEN: independent live Full acceptance and reliable Fast terminal success; do not declare MVP complete.

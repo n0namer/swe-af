@@ -701,17 +701,36 @@ async def build(
                 tags=["build", "git_init", "retry"],
             )
 
-            git_init_coro = app.call(
-                f"{NODE_ID}.run_git_init",
-                repo_path=repo_path,
-                goal=goal,
-                artifacts_dir=abs_artifacts_dir,
-                model=resolved["git_model"],
-                permission_mode=cfg.permission_mode,
-                ai_provider=cfg.ai_provider,
-                previous_error=previous_error,
-                build_id=build_id,
-            )
+            # Git status and baseline are deterministic; save the LLM for coding.
+            # Preserve legacy Git-init for fresh repos and when explicitly requested.
+            if cfg.deterministic_git:
+                from swe_af.issue.git_ops import ensure_issue_ready_repo, resolve_base
+                try:
+                    await asyncio.to_thread(ensure_issue_ready_repo, repo_path)
+                    base_ref, base_sha = await asyncio.to_thread(resolve_base, repo_path)
+                    async def _ready_git():
+                        return {"result": {
+                            "mode": "existing", "original_branch": base_ref,
+                            "integration_branch": base_ref,
+                            "initial_commit_sha": base_sha, "success": True,
+                        }}
+                    git_init_coro = _ready_git()
+                except Exception:
+                    git_init_coro = app.call(
+                        f"{NODE_ID}.run_git_init", repo_path=repo_path,
+                        goal=goal, artifacts_dir=abs_artifacts_dir,
+                        model=resolved["git_model"], permission_mode=cfg.permission_mode,
+                        ai_provider=cfg.ai_provider, previous_error=previous_error,
+                        build_id=build_id,
+                    )
+            else:
+                git_init_coro = app.call(
+                    f"{NODE_ID}.run_git_init", repo_path=repo_path,
+                    goal=goal, artifacts_dir=abs_artifacts_dir,
+                    model=resolved["git_model"], permission_mode=cfg.permission_mode,
+                    ai_provider=cfg.ai_provider, previous_error=previous_error,
+                    build_id=build_id,
+                )
 
             # Run planning only on first attempt, then just git_init on retries
             if attempt == 1:

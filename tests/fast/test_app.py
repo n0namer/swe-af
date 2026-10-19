@@ -333,6 +333,50 @@ class TestBuildSuccessPath:
         assert "Partial" in result["summary"]
 
 
+    @pytest.mark.asyncio
+    async def test_failed_task_cannot_be_green_when_verifier_passes(self, tmp_path) -> None:
+        """build() with failed execution despite passing verification returns FastBuildResult(success=False)."""
+        import swe_af.fast.app as fast_app  # noqa: PLC0415
+
+        plan_result = _make_plan_result()
+        execution_result = {"task_results": [{"task_name": "calculator", "outcome": "timeout", "error": "Timed out"}], "completed_count": 0, "failed_count": 1, "timed_out": False}
+        verification_result = _make_verification_result(passed=True)
+        git_init_result = _make_git_init_result()
+        finalize_result = _make_finalize_result()
+
+        call_responses = {
+            "run_git_init": git_init_result,
+            "fast_plan_tasks": plan_result,
+            "fast_execute_tasks": execution_result,
+            "fast_verify": verification_result,
+            "run_repo_finalize": finalize_result,
+        }
+
+        async def mock_call(target: str, **kwargs):
+            for key, value in call_responses.items():
+                if key in target:
+                    return {"result": value}
+            return {"result": {}}
+
+        def mock_unwrap(raw, name):
+            if isinstance(raw, dict) and "result" in raw:
+                return raw["result"]
+            return raw
+
+        with (
+            patch.object(fast_app.app, "call", side_effect=mock_call),
+            patch.object(fast_app.app, "note", return_value=None),
+            patch("swe_af.fast.app._unwrap", side_effect=mock_unwrap),
+        ):
+            result = await fast_app.build(
+                goal="Add a health endpoint",
+                repo_path=str(tmp_path),
+            )
+
+        assert result["success"] is False
+        assert "Partial" in result["summary"]
+
+
 class TestBuildTimeoutPath:
     """Functional: build() timeout path returns FastBuildResult(success=False) with 'timed out'."""
 
