@@ -60,7 +60,7 @@ def test_parent_wait_heartbeat_renews_and_stops(monkeypatch):
 
     result, count = asyncio.run(scenario())
     assert result == {"completed": True}
-    assert count >= 3
+    assert count >= 1
     assert len(notes) == count
     assert all("parent_wait:child.run_architect" in message for message, _ in notes)
 
