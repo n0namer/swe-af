@@ -323,3 +323,41 @@ def test_execute_does_not_rerun_on_unrelated_failure(tmp_path, monkeypatch) -> N
     assert len(cmds) == 1
     assert "--output-schema" in cmds[0]
     assert raw.is_error is True
+
+
+def test_codex_uses_agentfield_isolated_output_directory(tmp_path, monkeypatch) -> None:
+    """SDK stores schema in .agentfield-out-* but runs Codex in repo cwd."""
+    import asyncio
+    from agentfield.harness import _schema
+    from agentfield.harness.providers.codex import CodexProvider
+    import swe_af.runtime.codex_harness_patch as patch_mod
+
+    apply_codex_harness_patch()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    output_dir = repo / ".agentfield-out-check"
+    output_dir.mkdir()
+    commands = []
+
+    async def fake_run(cmd, prompt, *, env, cwd):
+        commands.append((cmd, cwd))
+        return _SUCCESS_STDOUT, "", 0
+
+    monkeypatch.setattr(patch_mod, "_run_codex_cli_with_stdin", fake_run)
+    token = active_provider.set("codex")
+    try:
+        _schema.build_prompt_suffix(
+            {"type": "object", "properties": {"ok": {"type": "boolean"}}},
+            str(output_dir),
+        )
+        provider = CodexProvider.__new__(CodexProvider)
+        provider._bin = "codex"
+        asyncio.run(provider.execute("json please", {"cwd": str(repo)}))
+    finally:
+        active_provider.reset(token)
+
+    cmd, cwd = commands[0]
+    assert cwd == str(repo)
+    assert cmd[cmd.index("-C") + 1] == str(repo)
+    assert cmd[cmd.index("--output-last-message") + 1] == _schema.get_output_path(str(output_dir))
+    assert cmd[cmd.index("--output-schema") + 1] == _schema.get_schema_path(str(output_dir))
