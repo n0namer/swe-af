@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
@@ -28,6 +29,17 @@ func saveCheckpoint(dagState *schemas.DAGState, note noteFunc) {
 	if path == "" {
 		return
 	}
+	if previous := loadCheckpoint(dagState.ArtifactsDir); previous != nil {
+		staleLevel := previous.CurrentLevel > dagState.CurrentLevel
+		revisionChanged := previous.GitInitialCommit != "" && previous.GitInitialCommit != dagState.GitInitialCommit
+		terminalRegression := checkpointRegressesTerminalIssue(previous, dagState)
+		if staleLevel || revisionChanged || terminalRegression {
+			if note != nil {
+				note("Checkpoint ignored: stale, revision-mismatched, or terminal-regressive write", []string{"execution", "checkpoint"})
+			}
+			return
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}
@@ -35,11 +47,68 @@ func saveCheckpoint(dagState *schemas.DAGState, note noteFunc) {
 	if err != nil {
 		return
 	}
-	if err := os.WriteFile(path, b, 0o644); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".checkpoint-*.tmp")
+	if err != nil {
+		return
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		return
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		return
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
 		return
 	}
 	if note != nil {
 		note("Checkpoint saved: level="+itoa(dagState.CurrentLevel), []string{"execution", "checkpoint"})
+	}
+}
+
+func checkpointRegressesTerminalIssue(previous, candidate *schemas.DAGState) bool {
+	candidateStatuses := make(map[string]string, len(candidate.AllIssues))
+	for _, issue := range candidate.AllIssues {
+		if id := mapGetStr(issue, "id", ""); id != "" {
+			candidateStatuses[id] = mapGetStr(issue, "status", "")
+		}
+	}
+	for _, issue := range previous.AllIssues {
+		id := mapGetStr(issue, "id", "")
+		previousStatus := mapGetStr(issue, "status", "")
+		if id != "" && isTerminalIssueStatus(previousStatus) && candidateStatuses[id] != previousStatus {
+			return true
+		}
+	}
+	return false
+}
+
+func recoverableIssueIDs(dagState *schemas.DAGState) []string {
+	ids := make([]string, 0, len(dagState.AllIssues))
+	for _, issue := range dagState.AllIssues {
+		if isTerminalIssueStatus(mapGetStr(issue, "status", "")) {
+			continue
+		}
+		if id := mapGetStr(issue, "id", ""); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func isTerminalIssueStatus(status string) bool {
+	switch strings.ToLower(status) {
+	case "completed", "failed", "skipped", "accepted":
+		return true
+	default:
+		return false
 	}
 }
 
