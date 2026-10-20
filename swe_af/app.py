@@ -1754,7 +1754,27 @@ async def execute(
         build_id=build_id,
         workspace_manifest=workspace_manifest,
     )
-    return state.model_dump()
+    result = state.model_dump()
+    # A reasoner returning normally is marked "succeeded" by AgentField.
+    # A failed/skipped/unmerged issue cannot be advertised as accepted even
+    # if the DAG controller itself exited successfully. Preserve the complete
+    # execution receipt for the operator and the existing resume path.
+    if (
+        state.failed_issues
+        or state.skipped_issues
+        or state.in_flight_issues
+        or state.unmerged_branches
+        or (state.all_issues and not state.completed_issues)
+    ):
+        raise ReasonerFailed(
+            "DAG execution incomplete: "
+            f"{len(state.completed_issues)} completed, "
+            f"{len(state.failed_issues)} failed, "
+            f"{len(state.skipped_issues)} skipped, "
+            f"{len(state.unmerged_branches)} unmerged",
+            result=result,
+        )
+    return result
 
 
 @app.reasoner(tags=[TAG_ENTRYPOINT])
