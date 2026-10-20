@@ -83,6 +83,10 @@ async def _dispatch_workspace_setup(
                     tags=["execution", "worktree_setup", "fast_path"],
                 )
             return setup
+        except git_fast_path.WorktreeIntegrityError:
+            # A stale or foreign worktree is a safety blocker, not a reason
+            # to ask another agent to attempt cleanup of its files.
+            raise
         except git_fast_path.GitFastPathError as e:
             if note_fn:
                 note_fn(
@@ -146,9 +150,11 @@ async def _setup_worktrees(
 
         if not setup.get("success"):
             if note_fn:
-                note_fn("Worktree setup failed — issues will run without isolation",
+                note_fn("Worktree setup failed — refusing unisolated coding",
                          tags=["execution", "worktree_setup", "error"])
-            return active_issues
+            raise git_fast_path.WorktreeIntegrityError(
+                "required worktrees unavailable; no unisolated coding allowed"
+            )
 
         return _enrich_issues_from_setup(
             active_issues, setup, dag_state.git_integration_branch,
@@ -178,8 +184,9 @@ async def _setup_worktrees(
                     f"Issues {issue_names} will run without worktree isolation.",
                     tags=["execution", "worktree_setup", "warning"],
                 )
-            all_enriched.extend(repo_issues)
-            continue
+            raise git_fast_path.WorktreeIntegrityError(
+                f"unknown target_repo {repo_name}; refusing unisolated coding"
+            )
         git_init = ws_repo.git_init_result or {}
         integration_branch = git_init.get("integration_branch", "")
         if not integration_branch:
@@ -190,8 +197,9 @@ async def _setup_worktrees(
                     f"Issues {issue_names} will run without worktree isolation.",
                     tags=["execution", "worktree_setup", "warning"],
                 )
-            all_enriched.extend(repo_issues)
-            continue
+            raise git_fast_path.WorktreeIntegrityError(
+                f"repo {repo_name} has no integration branch; refusing unisolated coding"
+            )
 
         repo_worktrees_dir = os.path.join(ws_repo.absolute_path, ".worktrees")
         setup = await _dispatch_workspace_setup(
@@ -207,8 +215,9 @@ async def _setup_worktrees(
         )
 
         if not setup.get("success"):
-            all_enriched.extend(repo_issues)
-            continue
+            raise git_fast_path.WorktreeIntegrityError(
+                f"worktree setup failed for repo {repo_name}; no unisolated coding"
+            )
 
         all_enriched.extend(
             _enrich_issues_from_setup(repo_issues, setup, integration_branch)
