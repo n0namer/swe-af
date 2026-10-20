@@ -22,14 +22,45 @@ All functions are synchronous; the executor wraps them in asyncio.to_thread.
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import time
 
 
 class GitFastPathError(RuntimeError):
-    """A fast-path git operation failed; the caller should fall back to the
-    agent-driven path (or record the failure) rather than crash the build."""
+    """Recoverable git fast-path failure."""
+
+
+class WorktreeIntegrityError(GitFastPathError):
+    """Unsafe or ambiguous worktree state; must NOT fall back to an agent."""
+
+
+def _is_registered_worktree(repo_path: str, path: str, branch: str) -> bool:
+    """Never mistake an arbitrary directory inside a repo for an issue worktree."""
+    expected_path = os.path.normcase(os.path.realpath(path))
+    listing = _git(repo_path, "worktree", "list", "--porcelain", check=False)
+    if listing.returncode != 0:
+        return False
+    registered = False
+    for record in listing.stdout.split("\n\n"):
+        fields = record.splitlines()
+        if (
+            any(line.startswith("worktree ") and
+                os.path.normcase(os.path.realpath(line[9:])) == expected_path
+                for line in fields)
+            and f"branch refs/heads/{branch}" in fields
+        ):
+            registered = True
+            break
+    if not registered:
+        return False
+    top = _git(path, "rev-parse", "--show-toplevel", check=False)
+    current = _git(path, "branch", "--show-current", check=False)
+    return (
+        top.returncode == 0
+        and os.path.normcase(os.path.realpath(top.stdout.strip())) == expected_path
+        and current.returncode == 0
+        and current.stdout.strip() == branch
+    )
 
 
 def _git(repo_path: str, *args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -96,8 +127,12 @@ def setup_worktrees(
                 created = True
                 break
             if _git(repo_path, "rev-parse", "--verify", branch, check=False).returncode == 0:
-                if os.path.isdir(worktree_path):
-                    created = True  # both already exist (resume) — reuse
+                if os.path.lexists(worktree_path):
+                    if not _is_registered_worktree(repo_path, worktree_path, branch):
+                        raise WorktreeIntegrityError(
+                            f"existing path is not the expected registered worktree: {worktree_path}"
+                        )
+                    created = True  # verified resume — reuse, never discard files
                     break
                 proc = _git(repo_path, "worktree", "add", worktree_path, branch, check=False)
                 if proc.returncode == 0:
@@ -178,26 +213,30 @@ def cleanup_worktrees(
     worktrees_dir: str,
     branches: list[str],
 ) -> dict:
-    """Remove worktrees and force-delete their branches (post-merge).
+    """Clean only merged, registered, clean issue worktrees.
 
-    Mirrors the cleanup agent's contract: worktree dir is the branch name
-    with ``/`` → ``-``. Best-effort per entry; returns {success, cleaned}.
-    Raises GitFastPathError when repo_path is not a git repository at all —
-    the caller falls back to the agent path rather than reporting a silent
-    no-op success.
+    Keep dirty or unmerged worktrees as evidence. Never force-remove files.
+    The result reports partial cleanup instead of fabricating success.
     """
     if _git(repo_path, "rev-parse", "--git-dir", check=False).returncode != 0:
         raise GitFastPathError(f"not a git repository: {repo_path}")
     cleaned: list[str] = []
+    # Never use --force or rmtree: failed issues can hold uncommitted evidence.
     for branch in branches:
         worktree_path = os.path.join(worktrees_dir, branch.replace("/", "-"))
-        proc = _git(repo_path, "worktree", "remove", "--force", worktree_path, check=False)
-        if proc.returncode != 0 and os.path.isdir(worktree_path):
-            shutil.rmtree(worktree_path, ignore_errors=True)
-        _git(repo_path, "branch", "-D", branch, check=False)
-        cleaned.append(branch)
-    _git(repo_path, "worktree", "prune", check=False)
-    return {"success": True, "cleaned": cleaned}
+        if not _is_registered_worktree(repo_path, worktree_path, branch):
+            continue
+        if _git(worktree_path, "status", "--porcelain", check=False).stdout.strip():
+            continue
+        # The candidate must have been merged into the checked-out integration
+        # branch before its worktree or branch is eligible for deletion.
+        if _git(repo_path, "merge-base", "--is-ancestor", branch, "HEAD", check=False).returncode != 0:
+            continue
+        if _git(repo_path, "worktree", "remove", worktree_path, check=False).returncode != 0:
+            continue
+        if _git(repo_path, "branch", "-d", branch, check=False).returncode == 0:
+            cleaned.append(branch)
+    return {"success": len(cleaned) == len(branches), "cleaned": cleaned}
 
 
 def combine_merge_results(fast: dict, agent: dict) -> dict:
