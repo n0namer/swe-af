@@ -17,6 +17,12 @@ active_provider: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "swe_af_codex_active_provider", default=None
 )
 
+# AgentField builds schema under a per-call .agentfield-out-* directory, while
+# Codex executes in the repository cwd. Never confuse the two paths.
+active_codex_output_dir: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "swe_af_codex_output_dir", default=None
+)
+
 _ORIGINAL_BUILD_PROMPT_SUFFIX: Any = None
 
 
@@ -221,6 +227,7 @@ def apply_codex_harness_patch() -> None:
 
     async def execute_with_native_structured_output(self: Any, prompt: str, options: dict[str, object]) -> Any:
         cwd = str(options.get("cwd")) if isinstance(options.get("cwd"), str) else None
+        output_dir = active_codex_output_dir.get() or cwd
         model = options.get("model")
         permission_mode = options.get("permission_mode")
         env_value = options.get("env")
@@ -243,9 +250,9 @@ def apply_codex_harness_patch() -> None:
 
         prompt_for_codex = prompt
         used_output_schema = False
-        if cwd:
-            schema_path = _schema.get_schema_path(cwd)
-            output_path = _schema.get_output_path(cwd)
+        if output_dir:
+            schema_path = _schema.get_schema_path(output_dir)
+            output_path = _schema.get_output_path(output_dir)
             if Path(schema_path).exists():
                 # --output-schema only when the schema survives OpenAI's strict
                 # validator; otherwise the server 400s the whole session with
@@ -334,8 +341,8 @@ def apply_codex_harness_patch() -> None:
         records = parse_jsonl(stdout or "")
         result_text = extract_final_text(records) or ""
 
-        if not result_text and cwd:
-            output_path = _schema.get_output_path(cwd)
+        if not result_text and output_dir:
+            output_path = _schema.get_output_path(output_dir)
             output_file = Path(output_path)
             if output_file.exists():
                 try:
@@ -380,6 +387,7 @@ def apply_codex_harness_patch() -> None:
         their runner into the slower stdout-parse fallback path.
         """
         if active_provider.get() == "codex":
+            active_codex_output_dir.set(cwd)
             return build_prompt_suffix_with_schema_file(schema, cwd)
         return _ORIGINAL_BUILD_PROMPT_SUFFIX(schema, cwd)
 
@@ -390,9 +398,11 @@ def apply_codex_harness_patch() -> None:
     ) -> Any:
         provider_value = kwargs.get("provider")
         token = active_provider.set(str(provider_value) if provider_value else None)
+        output_token = active_codex_output_dir.set(None)
         try:
             return await _orig_agent_harness(self, prompt, *args, **kwargs)
         finally:
+            active_codex_output_dir.reset(output_token)
             active_provider.reset(token)
 
     _schema.build_prompt_suffix = build_prompt_suffix_dispatching
