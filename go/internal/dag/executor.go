@@ -139,11 +139,23 @@ func RunDAG(
 	dagState.WorkspaceManifest = o.workspaceManifest
 	dagState.MaxReplans = cfg.MaxReplans
 
-	// Resume from checkpoint if requested.
+	// Fail closed on missing, corrupt, foreign or ambiguous in-flight state.
+	// Runtime/AgentField reconciliation must establish the prior effect outcome
+	// before this DAG executor may dispatch it again.
 	if o.resume {
 		artifactsDir := mapGetStr(planResult, "artifacts_dir", "")
 		if artifactsDir != "" {
-			if loaded := loadCheckpoint(artifactsDir); loaded != nil {
+			loaded := loadCheckpoint(artifactsDir)
+			if loaded == nil {
+				return nil, fmt.Errorf("resume blocked: missing or corrupt checkpoint")
+			}
+			if dagState.GitInitialCommit != "" && loaded.GitInitialCommit != dagState.GitInitialCommit {
+				return nil, fmt.Errorf("resume blocked: checkpoint source revision mismatch")
+			}
+			if len(loaded.InFlightIssues) > 0 {
+				return loaded, fmt.Errorf("resume blocked: unresolved in-flight issues require AgentField reconciliation")
+			}
+			if loaded != nil {
 				dagState = loaded
 				if note != nil {
 					note(fmt.Sprintf("Resumed from checkpoint: level=%d, completed=%d, failed=%d",
