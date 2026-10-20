@@ -26,6 +26,23 @@ active_codex_output_dir: contextvars.ContextVar[str | None] = contextvars.Contex
 _ORIGINAL_BUILD_PROMPT_SUFFIX: Any = None
 
 
+def _codex_completed_usage(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Read the final Codex turn receipt; never sum cumulative usage events."""
+    for event in reversed(events):
+        if event.get("type") != "turn.completed":
+            continue
+        raw = event.get("usage")
+        if not isinstance(raw, dict):
+            continue
+        keys = ("input_tokens", "cached_input_tokens", "output_tokens")
+        if not all(isinstance(raw.get(k, 0), int) and
+                   not isinstance(raw.get(k, 0), bool) and
+                   raw.get(k, 0) >= 0 for k in keys):
+            continue
+        return {**raw, "source": "codex-jsonl/turn.completed"}
+    return None
+
+
 def _codex_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(schema, dict):
         return schema
@@ -339,6 +356,7 @@ def apply_codex_harness_patch() -> None:
 
         stderr_clean = strip_ansi(stderr or "")
         records = parse_jsonl(stdout or "")
+        actual_usage = _codex_completed_usage(records)
         result_text = extract_final_text(records) or ""
 
         if not result_text and output_dir:
@@ -370,6 +388,11 @@ def apply_codex_harness_patch() -> None:
                     result_text=result_text,
                 ),
                 session_id="",
+                usage=actual_usage,
+                input_tokens=actual_usage.get("input_tokens", 0) if actual_usage else 0,
+                output_tokens=actual_usage.get("output_tokens", 0) if actual_usage else 0,
+                cache_read_tokens=actual_usage.get("cached_input_tokens", 0) if actual_usage else 0,
+                model=str(options.get("model", "")) or None,
             ),
             is_error=is_error,
             error_message=error_message,

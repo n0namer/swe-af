@@ -361,3 +361,31 @@ def test_codex_uses_agentfield_isolated_output_directory(tmp_path, monkeypatch) 
     assert cmd[cmd.index("-C") + 1] == str(repo)
     assert cmd[cmd.index("--output-last-message") + 1] == _schema.get_output_path(str(output_dir))
     assert cmd[cmd.index("--output-schema") + 1] == _schema.get_schema_path(str(output_dir))
+
+
+def test_codex_usage_is_taken_from_final_turn_completed_not_summed(tmp_path, monkeypatch):
+    """Codex cumulative usage is authoritative; duplicates must not double count."""
+    import json
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+    usage1 = {"input_tokens": 100, "cached_input_tokens": 45, "output_tokens": 25}
+    usage2 = {"input_tokens": 120, "cached_input_tokens": 60, "output_tokens": 30}
+    stream = "\n".join([
+        json.dumps({"type":"turn.completed", "usage": usage1}),
+        json.dumps({"type":"item.completed", "item":{"type":"agent_message", "text": '{"ok":true}'}}),
+        json.dumps({"type":"turn.completed", "usage": usage2}),
+    ])
+    raw, _ = _run_patched_execute(
+        tmp_path, monkeypatch, schema, [(stream, "", 0)]
+    )
+    assert raw.metrics.input_tokens == 120
+    assert raw.metrics.cache_read_tokens == 60
+    assert raw.metrics.output_tokens == 30
+    assert raw.metrics.usage["source"] == "codex-jsonl/turn.completed"
+
+
+def test_codex_no_usage_does_not_invent_token_counts(tmp_path, monkeypatch):
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+    raw, _ = _run_patched_execute(tmp_path, monkeypatch, schema, [(_SUCCESS_STDOUT, "", 0)])
+    assert raw.metrics.input_tokens == 0
+    assert raw.metrics.output_tokens == 0
+    assert raw.metrics.cache_read_tokens == 0
