@@ -29,10 +29,6 @@ func ResumeBuildHandler(ctx context.Context, deps *Deps, input map[string]any) (
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if deps == nil || deps.App == nil {
-		return nil, errors.New("resume requires an app dependency")
-	}
-
 	repoPath := mapStr(input, "repo_path", "")
 	artifactsDir := mapStr(input, "artifacts_dir", ".artifacts")
 
@@ -54,6 +50,9 @@ func ResumeBuildHandler(ctx context.Context, deps *Deps, input map[string]any) (
 	var checkpoint map[string]any
 	if err := json.Unmarshal(raw, &checkpoint); err != nil {
 		return nil, err
+	}
+	if deps == nil || deps.App == nil {
+		return nil, errors.New("resume requires an app dependency")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
