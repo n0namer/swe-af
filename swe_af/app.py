@@ -96,6 +96,20 @@ async def _harness_with_scoped_credentials(*args, env=None, **kwargs):
 
 app.harness = _harness_with_scoped_credentials
 
+# Parent build/plan executions wait for child reasoners. Renew their own
+# AgentField execution record while awaiting app.call, not just the child
+# node heartbeat: stale reaper otherwise kills valid long planning pipelines.
+_original_call = app.call
+
+async def _call_with_execution_heartbeat(target: str, **kwargs):
+    from swe_af.harness_activity import run_with_activity_heartbeat
+    return await run_with_activity_heartbeat(
+        _original_call(target, **kwargs), app.note,
+        label=f"parent_wait:{target}",
+    )
+
+app.call = _call_with_execution_heartbeat
+
 
 async def _clone_repos(
     cfg: BuildConfig,

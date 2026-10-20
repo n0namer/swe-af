@@ -361,7 +361,7 @@ async def run_environment_scout(
             workspace_manifest=ws_manifest,
             prior_user_responses=prior_user_responses,
         )
-        result = await router.harness(
+        result = await run_with_activity_heartbeat(router.harness(
             prompt=task_prompt,
             schema=ScoutResult,
             provider=provider,
@@ -371,7 +371,7 @@ async def run_environment_scout(
             permission_mode=permission_mode or None,
             system_prompt=SYSTEM_PROMPT,
             cwd=repo_path,
-        )
+        ), router.note, label="environment_scout")
         check_fatal_harness_error(result)
         return result.parsed
 
@@ -468,7 +468,7 @@ async def run_architect(
         workspace_manifest=ws_manifest,
     )
     provider = runtime_to_harness_adapter(ai_provider)
-    result = await router.harness(
+    result = await run_with_activity_heartbeat(router.harness(
         prompt=task_prompt,
         schema=Architecture,
         provider=provider,
@@ -478,7 +478,7 @@ async def run_architect(
         permission_mode=permission_mode or None,
         system_prompt=system_prompt,
         cwd=repo_path,
-    )
+    ), router.note, label="architect")
     check_fatal_harness_error(result)
     check_empty_harness_completion(
         result, role="Architect", provider=provider, model=model
@@ -529,7 +529,7 @@ async def run_tech_lead(
         workspace_manifest=ws_manifest,
     )
     provider = runtime_to_harness_adapter(ai_provider)
-    result = await router.harness(
+    result = await run_with_activity_heartbeat(router.harness(
         prompt=task_prompt,
         schema=ReviewResult,
         provider=provider,
@@ -539,7 +539,7 @@ async def run_tech_lead(
         permission_mode=permission_mode or None,
         system_prompt=system_prompt,
         cwd=repo_path,
-    )
+    ), router.note, label="tech_lead")
     check_fatal_harness_error(result)
     check_empty_harness_completion(
         result, role="Tech lead", provider=provider, model=model
@@ -612,7 +612,7 @@ async def run_sprint_planner(
         architecture_path=paths["architecture"],
     )
     provider = runtime_to_harness_adapter(ai_provider)
-    result = await router.harness(
+    result = await run_with_activity_heartbeat(router.harness(
         prompt=task_prompt,
         schema=SprintPlanOutput,
         provider=provider,
@@ -622,7 +622,7 @@ async def run_sprint_planner(
         permission_mode=permission_mode or None,
         system_prompt=system_prompt,
         cwd=repo_path,
-    )
+    ), router.note, label="sprint_planner")
     check_fatal_harness_error(result)
     check_empty_harness_completion(
         result, role="Sprint planner", provider=provider, model=model
