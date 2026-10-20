@@ -323,3 +323,69 @@ def test_execute_does_not_rerun_on_unrelated_failure(tmp_path, monkeypatch) -> N
     assert len(cmds) == 1
     assert "--output-schema" in cmds[0]
     assert raw.is_error is True
+
+
+def test_codex_uses_agentfield_isolated_output_directory(tmp_path, monkeypatch) -> None:
+    """SDK stores schema in .agentfield-out-* but runs Codex in repo cwd."""
+    import asyncio
+    from agentfield.harness import _schema
+    from agentfield.harness.providers.codex import CodexProvider
+    import swe_af.runtime.codex_harness_patch as patch_mod
+
+    apply_codex_harness_patch()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    output_dir = repo / ".agentfield-out-check"
+    output_dir.mkdir()
+    commands = []
+
+    async def fake_run(cmd, prompt, *, env, cwd):
+        commands.append((cmd, cwd))
+        return _SUCCESS_STDOUT, "", 0
+
+    monkeypatch.setattr(patch_mod, "_run_codex_cli_with_stdin", fake_run)
+    token = active_provider.set("codex")
+    try:
+        _schema.build_prompt_suffix(
+            {"type": "object", "properties": {"ok": {"type": "boolean"}}},
+            str(output_dir),
+        )
+        provider = CodexProvider.__new__(CodexProvider)
+        provider._bin = "codex"
+        asyncio.run(provider.execute("json please", {"cwd": str(repo)}))
+    finally:
+        active_provider.reset(token)
+
+    cmd, cwd = commands[0]
+    assert cwd == str(repo)
+    assert cmd[cmd.index("-C") + 1] == str(repo)
+    assert cmd[cmd.index("--output-last-message") + 1] == _schema.get_output_path(str(output_dir))
+    assert cmd[cmd.index("--output-schema") + 1] == _schema.get_schema_path(str(output_dir))
+
+
+def test_codex_usage_is_taken_from_final_turn_completed_not_summed(tmp_path, monkeypatch):
+    """Codex cumulative usage is authoritative; duplicates must not double count."""
+    import json
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+    usage1 = {"input_tokens": 100, "cached_input_tokens": 45, "output_tokens": 25}
+    usage2 = {"input_tokens": 120, "cached_input_tokens": 60, "output_tokens": 30}
+    stream = "\n".join([
+        json.dumps({"type":"turn.completed", "usage": usage1}),
+        json.dumps({"type":"item.completed", "item":{"type":"agent_message", "text": '{"ok":true}'}}),
+        json.dumps({"type":"turn.completed", "usage": usage2}),
+    ])
+    raw, _ = _run_patched_execute(
+        tmp_path, monkeypatch, schema, [(stream, "", 0)]
+    )
+    assert raw.metrics.input_tokens == 120
+    assert raw.metrics.cache_read_tokens == 60
+    assert raw.metrics.output_tokens == 30
+    assert raw.metrics.usage["source"] == "codex-jsonl/turn.completed"
+
+
+def test_codex_no_usage_does_not_invent_token_counts(tmp_path, monkeypatch):
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+    raw, _ = _run_patched_execute(tmp_path, monkeypatch, schema, [(_SUCCESS_STDOUT, "", 0)])
+    assert raw.metrics.input_tokens == 0
+    assert raw.metrics.output_tokens == 0
+    assert raw.metrics.cache_read_tokens == 0

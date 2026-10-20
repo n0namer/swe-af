@@ -17,7 +17,30 @@ active_provider: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "swe_af_codex_active_provider", default=None
 )
 
+# AgentField builds schema under a per-call .agentfield-out-* directory, while
+# Codex executes in the repository cwd. Never confuse the two paths.
+active_codex_output_dir: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "swe_af_codex_output_dir", default=None
+)
+
 _ORIGINAL_BUILD_PROMPT_SUFFIX: Any = None
+
+
+def _codex_completed_usage(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Read the final Codex turn receipt; never sum cumulative usage events."""
+    for event in reversed(events):
+        if event.get("type") != "turn.completed":
+            continue
+        raw = event.get("usage")
+        if not isinstance(raw, dict):
+            continue
+        keys = ("input_tokens", "cached_input_tokens", "output_tokens")
+        if not all(isinstance(raw.get(k, 0), int) and
+                   not isinstance(raw.get(k, 0), bool) and
+                   raw.get(k, 0) >= 0 for k in keys):
+            continue
+        return {**raw, "source": "codex-jsonl/turn.completed"}
+    return None
 
 
 def _codex_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -221,6 +244,7 @@ def apply_codex_harness_patch() -> None:
 
     async def execute_with_native_structured_output(self: Any, prompt: str, options: dict[str, object]) -> Any:
         cwd = str(options.get("cwd")) if isinstance(options.get("cwd"), str) else None
+        output_dir = active_codex_output_dir.get() or cwd
         model = options.get("model")
         permission_mode = options.get("permission_mode")
         env_value = options.get("env")
@@ -243,9 +267,9 @@ def apply_codex_harness_patch() -> None:
 
         prompt_for_codex = prompt
         used_output_schema = False
-        if cwd:
-            schema_path = _schema.get_schema_path(cwd)
-            output_path = _schema.get_output_path(cwd)
+        if output_dir:
+            schema_path = _schema.get_schema_path(output_dir)
+            output_path = _schema.get_output_path(output_dir)
             if Path(schema_path).exists():
                 # --output-schema only when the schema survives OpenAI's strict
                 # validator; otherwise the server 400s the whole session with
@@ -332,10 +356,11 @@ def apply_codex_harness_patch() -> None:
 
         stderr_clean = strip_ansi(stderr or "")
         records = parse_jsonl(stdout or "")
+        actual_usage = _codex_completed_usage(records)
         result_text = extract_final_text(records) or ""
 
-        if not result_text and cwd:
-            output_path = _schema.get_output_path(cwd)
+        if not result_text and output_dir:
+            output_path = _schema.get_output_path(output_dir)
             output_file = Path(output_path)
             if output_file.exists():
                 try:
@@ -363,6 +388,11 @@ def apply_codex_harness_patch() -> None:
                     result_text=result_text,
                 ),
                 session_id="",
+                usage=actual_usage,
+                input_tokens=actual_usage.get("input_tokens", 0) if actual_usage else 0,
+                output_tokens=actual_usage.get("output_tokens", 0) if actual_usage else 0,
+                cache_read_tokens=actual_usage.get("cached_input_tokens", 0) if actual_usage else 0,
+                model=str(options.get("model", "")) or None,
             ),
             is_error=is_error,
             error_message=error_message,
@@ -380,6 +410,7 @@ def apply_codex_harness_patch() -> None:
         their runner into the slower stdout-parse fallback path.
         """
         if active_provider.get() == "codex":
+            active_codex_output_dir.set(cwd)
             return build_prompt_suffix_with_schema_file(schema, cwd)
         return _ORIGINAL_BUILD_PROMPT_SUFFIX(schema, cwd)
 
@@ -390,9 +421,11 @@ def apply_codex_harness_patch() -> None:
     ) -> Any:
         provider_value = kwargs.get("provider")
         token = active_provider.set(str(provider_value) if provider_value else None)
+        output_token = active_codex_output_dir.set(None)
         try:
             return await _orig_agent_harness(self, prompt, *args, **kwargs)
         finally:
+            active_codex_output_dir.reset(output_token)
             active_provider.reset(token)
 
     _schema.build_prompt_suffix = build_prompt_suffix_dispatching
