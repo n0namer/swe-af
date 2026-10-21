@@ -407,7 +407,7 @@ func TestLoadPythonGoldenCheckpoint(t *testing.T) {
 	// max_replans is intentionally absent to exercise UnmarshalJSON default (=2).
 	golden := `{
   "repo_path": "/tmp/repo",
-  "artifacts_dir": "` + dir + `",
+  "artifacts_dir": "` + filepath.ToSlash(dir) + `",
   "prd_path": "/tmp/repo/.artifacts/plan/prd.md",
   "architecture_path": "",
   "issues_dir": "",
