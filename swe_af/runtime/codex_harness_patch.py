@@ -20,6 +20,14 @@ active_provider: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _ORIGINAL_BUILD_PROMPT_SUFFIX: Any = None
 
 
+def _codex_windows_sandbox_args(env: dict[str, str], platform: str) -> list[str]:
+    """Opt into the Windows MXC workspace sandbox without changing global Codex config."""
+    value = env.get("SWE_CODEX_PREFER_MXC", "").strip().lower()
+    if platform == "nt" and value in {"1", "true", "yes"}:
+        return ["-c", "features.prefer_mxc=true"]
+    return []
+
+
 def _codex_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(schema, dict):
         return schema
@@ -240,6 +248,7 @@ def apply_codex_harness_patch() -> None:
             merged_env.update({str(k): str(v) for k, v in env_value.items() if isinstance(k, str)})
 
         cmd = [self._bin, "exec", "--json", "--skip-git-repo-check"]
+        cmd.extend(_codex_windows_sandbox_args(merged_env, os.name))
         if cwd:
             cmd.extend(["-C", cwd])
         if model:
