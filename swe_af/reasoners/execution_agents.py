@@ -651,6 +651,21 @@ async def run_git_init(
             "- If the error indicates a parsing issue, ensure your output is valid JSON\n"
         )
 
+    if os.environ.get("SWE_NATIVE_GIT_INIT", "").strip().lower() in {"1", "true", "yes"}:
+        import asyncio
+        from swe_af.issue.git_ops import GitOpsError, native_git_init
+
+        try:
+            result = await asyncio.to_thread(native_git_init, repo_path, build_id)
+            router.note("Native Git init completed", tags=["git_init", "complete"])
+            return GitInitResult(**result).model_dump()
+        except GitOpsError as exc:
+            router.note(f"Native Git init blocked: {exc}", tags=["git_init", "error"])
+            return GitInitResult(
+                mode="unknown", original_branch="", integration_branch="",
+                initial_commit_sha="", success=False, error_message=str(exc),
+            ).model_dump()
+
     provider = runtime_to_harness_adapter(ai_provider)
 
     try:

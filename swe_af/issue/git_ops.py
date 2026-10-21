@@ -225,3 +225,75 @@ def default_remote_branch(repo_path: str) -> str:
     ref = proc.stdout.strip()
     prefix = "refs/remotes/origin/"
     return ref[len(prefix):] if ref.startswith(prefix) else ""
+
+def native_git_init(repo_path: str, build_id: str = "") -> dict:
+    """Host-mediated, bounded Git init used when the Codex sandbox protects .git.
+
+    Reuses the existing _git subprocess contract. Never runs an LLM with
+    unrestricted host permissions; never overwrites a dirty workspace.
+    """
+    import re
+    import uuid
+
+    repo_path = os.path.abspath(repo_path)
+    os.makedirs(repo_path, exist_ok=True)
+    fresh = not os.path.exists(os.path.join(repo_path, ".git"))
+    mode = "fresh" if fresh else "existing"
+    if fresh:
+        _git(repo_path, "init", "-q")
+    else:
+        dirty = _git(repo_path, "status", "--porcelain").stdout.splitlines()
+        # AgentField may write temporary artifacts while Full planning runs.
+        permitted = ("?? .artifacts/", "?? .agentfield-out-", "?? .worktrees/")
+        if any(not line.startswith(permitted) for line in dirty):
+            raise GitOpsError("dirty workspace: refusing native Git initialization")
+
+    original_branch = _git(repo_path, "branch", "--show-current", check=False).stdout.strip()
+    if not fresh and not original_branch:
+        raise GitOpsError("detached source HEAD: refusing native Git initialization")
+    if fresh:
+        ignore_path = os.path.join(repo_path, ".gitignore")
+        with open(ignore_path, "a", encoding="utf-8") as handle:
+            handle.write(".worktrees/\n.artifacts/\n.agentfield-out-*/\n")
+        _git(repo_path, "add", ".gitignore")
+        identity = ["-c", "user.name=SWE-AF", "-c", "user.email=swe-af@agentfield.local"]
+        _git(repo_path, *identity, "commit", "-qm", "chore: initialize SWE-AF workspace")
+
+    initial_sha = _git(repo_path, "rev-parse", "HEAD").stdout.strip()
+    suffix = build_id or uuid.uuid4().hex[:8]
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", suffix):
+        raise GitOpsError("invalid build identity for integration branch")
+    integration_branch = f"{suffix}-integration"
+    exists = _git(repo_path, "show-ref", "--verify", "--quiet",
+                  f"refs/heads/{integration_branch}", check=False)
+    if exists.returncode == 0:
+        raise GitOpsError("integration branch already exists; reconcile before retry")
+    _git(repo_path, "switch", "-c", integration_branch)
+
+    ignore_path = os.path.join(repo_path, ".gitignore")
+    current = ""
+    if os.path.exists(ignore_path):
+        with open(ignore_path, encoding="utf-8") as handle:
+            current = handle.read()
+    wanted = [item for item in (".worktrees/", ".artifacts/", ".agentfield-out-*/")
+              if item not in current.splitlines()]
+    if wanted:
+        with open(ignore_path, "a", encoding="utf-8") as handle:
+            handle.write(("\n" if current and not current.endswith("\n") else "")
+                         + "\n".join(wanted) + "\n")
+        _git(repo_path, "add", ".gitignore")
+        _git(repo_path, "-c", "user.name=SWE-AF",
+             "-c", "user.email=swe-af@agentfield.local",
+             "commit", "-qm", "chore: ignore SWE-AF generated artifacts")
+    os.makedirs(os.path.join(repo_path, ".worktrees"), exist_ok=True)
+    remote_url = _git(repo_path, "config", "--get", "remote.origin.url",
+                      check=False).stdout.strip()
+    remote_head = _git(repo_path, "symbolic-ref", "--quiet", "--short",
+                       "refs/remotes/origin/HEAD", check=False).stdout.strip()
+    return {
+        "mode": mode, "original_branch": "" if fresh else original_branch,
+        "integration_branch": integration_branch,
+        "initial_commit_sha": initial_sha, "success": True,
+        "error_message": "", "remote_url": remote_url,
+        "remote_default_branch": remote_head.rsplit("/", 1)[-1] if remote_head else "",
+    }
