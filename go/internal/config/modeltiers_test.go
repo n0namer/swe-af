@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 // Ports tests/test_model_tiers.py — the per-tier model env vars
 // (SWE_MODEL_LOW / _MED / _HIGH).
@@ -170,8 +173,8 @@ func TestDefaultPlanningModel_HighTier(t *testing.T) {
 		{"unset high tier falls back to env cascade",
 			map[string]string{"SWE_DEFAULT_MODEL": "env-default"}, "env-default"},
 		{"whitespace high tier treated as unset",
-			map[string]string{"SWE_MODEL_HIGH": "   "}, "sonnet"},
-		{"no env at all defaults to sonnet", nil, "sonnet"},
+			map[string]string{"SWE_MODEL_HIGH": "   "}, platformDefaultModel(defaultRuntimeFor(runtime.GOOS), runtime.GOOS)},
+		{"no env at all defaults to platform model", nil, platformDefaultModel(defaultRuntimeFor(runtime.GOOS), runtime.GOOS)},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

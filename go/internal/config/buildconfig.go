@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"runtime"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
 )
@@ -17,6 +18,8 @@ const DefaultAgentMaxTurns = 150
 type BuildConfig struct {
 	Runtime string            `json:"runtime"`
 	Models  map[string]string `json:"models"`
+
+	runtimeExplicit bool
 
 	MaxReviewIterations       int     `json:"max_review_iterations"`
 	MaxPlanRevisionIterations int     `json:"max_plan_revision_iterations"`
@@ -206,6 +209,7 @@ func LoadBuildConfig(raw map[string]any) (*BuildConfig, error) {
 	}
 
 	cfg := defaultBuildConfig()
+	_, cfg.runtimeExplicit = raw["runtime"]
 	if err := strictDecode(raw, &cfg); err != nil {
 		return nil, err
 	}
@@ -248,7 +252,8 @@ func (c *BuildConfig) PrimaryRepo() *schemas.RepoSpec {
 // ResolvedModels ports BuildConfig.resolved_models() — resolves all internal
 // *_model fields from V2 runtime config. Reads env at call time.
 func (c *BuildConfig) ResolvedModels() (map[string]string, error) {
-	return ResolveRuntimeModels(c.Runtime, c.Models, nil)
+	implicitPlatform := !c.runtimeExplicit && implicitPlatformDefaultsActive()
+	return resolveRuntimeModels(c.Runtime, c.Models, nil, implicitPlatform, runtime.GOOS)
 }
 
 // ToExecutionConfigDict ports BuildConfig.to_execution_config_dict() — the exact
@@ -259,8 +264,7 @@ func (c *BuildConfig) ToExecutionConfigDict() map[string]any {
 	if c.Models != nil {
 		models = c.Models
 	}
-	return map[string]any{
-		"runtime":                       c.Runtime,
+	result := map[string]any{
 		"models":                        models,
 		"permission_mode":               c.PermissionMode,
 		"max_retries_per_issue":         c.MaxRetriesPerIssue,
@@ -282,4 +286,8 @@ func (c *BuildConfig) ToExecutionConfigDict() map[string]any {
 		"ci_wait_seconds":               c.CIWaitSeconds,
 		"ci_poll_seconds":               c.CIPollSeconds,
 	}
+	if c.runtimeExplicit {
+		result["runtime"] = c.Runtime
+	}
+	return result
 }

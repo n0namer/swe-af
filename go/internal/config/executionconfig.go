@@ -1,11 +1,15 @@
 package config
 
+import "runtime"
+
 // ExecutionConfig ports execution/schemas.py::ExecutionConfig — configuration
 // for the DAG executor. The 17 role model strings are resolved once at load
 // (model_post_init) into resolvedModels and read via the *Model accessors.
 type ExecutionConfig struct {
 	Runtime string            `json:"runtime"`
 	Models  map[string]string `json:"models"`
+
+	runtimeExplicit bool
 
 	MaxRetriesPerIssue         int     `json:"max_retries_per_issue"`
 	MaxReplans                 int     `json:"max_replans"`
@@ -75,6 +79,7 @@ func LoadExecutionConfig(raw map[string]any) (*ExecutionConfig, error) {
 	}
 
 	cfg := defaultExecutionConfig()
+	_, cfg.runtimeExplicit = raw["runtime"]
 	if err := strictDecode(raw, &cfg); err != nil {
 		return nil, err
 	}
@@ -85,7 +90,8 @@ func LoadExecutionConfig(raw map[string]any) (*ExecutionConfig, error) {
 	}
 
 	// model_post_init: resolve runtime model selection once at construction.
-	resolved, err := ResolveRuntimeModels(cfg.Runtime, cfg.Models, nil)
+	implicitPlatform := !cfg.runtimeExplicit && implicitPlatformDefaultsActive()
+	resolved, err := resolveRuntimeModels(cfg.Runtime, cfg.Models, nil, implicitPlatform, runtime.GOOS)
 	if err != nil {
 		return nil, err
 	}

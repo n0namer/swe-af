@@ -12,6 +12,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/runtimex"
@@ -128,8 +129,8 @@ var tierModelEnvVars = map[string]string{
 
 const (
 	// Codex model defaults are auth-mode dependent (see codexDefaultModel).
-	codexAPIKeyModel  = "gpt-5.3-codex" // OpenAI API-key auth (api_key mode)
-	codexChatGPTModel = "gpt-5.5"       // ChatGPT-account auth (-codex blocked)
+	codexAPIKeyModel  = "gpt-5.3-codex"
+	codexChatGPTModel = "gpt-5.5"
 
 	// Default model for the open_code runtime — both the auto-selected
 	// OpenRouter path (see openRouterOnlyEnv) and an explicit
@@ -141,6 +142,7 @@ const (
 	// Infron is OpenAI-compatible and serves the standard <provider>/<model>
 	// ids, so this is the existing gateway default with the prefix swapped.
 	infronAutoDefaultModel = "infron/deepseek/deepseek-v4-flash-0731"
+	fcmFastCodingModel     = "broker/fast-coding"
 )
 
 // runtimeBaseModels ports _RUNTIME_BASE_MODELS[runtime] as a fresh copy for the
@@ -209,23 +211,35 @@ func infronOnlyEnv() bool {
 	return envStripped("INFRON_API_KEY") != ""
 }
 
-// DefaultRuntime ports _default_runtime, honoring SWE_DEFAULT_RUNTIME.
-// When unset, auto-selects open_code if only a gateway key is present,
-// otherwise claude_code. An invalid env value falls back to claude_code.
-func DefaultRuntime() string {
+// defaultRuntimeFor resolves explicit SWE runtime first, then the host platform.
+func defaultRuntimeFor(goos string) string {
 	value := envStripped("SWE_DEFAULT_RUNTIME")
 	if value == "" {
+		if envStripped("ANTHROPIC_API_KEY") != "" {
+			return "claude_code"
+		}
 		if openRouterOnlyEnv() || infronOnlyEnv() {
 			return "open_code"
 		}
-		return "claude_code"
+		if goos == "windows" {
+			return "codex"
+		}
+		return "open_code"
 	}
 	for _, rv := range runtimex.RuntimeValues {
 		if value == rv {
 			return value
 		}
 	}
-	return "claude_code"
+	if goos == "windows" {
+		return "codex"
+	}
+	return "open_code"
+}
+
+// DefaultRuntime resolves the runtime for the current host.
+func DefaultRuntime() string {
+	return defaultRuntimeFor(runtime.GOOS)
 }
 
 // codexUsesChatGPTAuth ports _codex_uses_chatgpt_auth. api_key → false,
@@ -301,7 +315,8 @@ func DefaultPlanningModel() string {
 	if highModel := tierModelsFromEnv()["high"]; highModel != "" {
 		return highModel
 	}
-	if envModel := defaultModelFromEnv(DefaultRuntime()); envModel != "" {
+	resolvedRuntime := DefaultRuntime()
+	if envModel := defaultModelFromEnv(resolvedRuntime); envModel != "" {
 		return envModel
 	}
 	if openRouterOnlyEnv() {
@@ -309,6 +324,11 @@ func DefaultPlanningModel() string {
 	}
 	if infronOnlyEnv() {
 		return infronAutoDefaultModel
+	}
+	if implicitPlatformDefaultsActive() {
+		if model := platformDefaultModel(resolvedRuntime, runtime.GOOS); model != "" {
+			return model
+		}
 	}
 	return "sonnet"
 }
@@ -321,7 +341,9 @@ func DefaultRoleModel(role string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("unknown role %s", pyRepr(role))
 	}
-	resolved, err := ResolveRuntimeModels(DefaultRuntime(), nil, []string{field})
+	resolved, err := resolveRuntimeModels(
+		DefaultRuntime(), nil, []string{field}, implicitPlatformDefaultsActive(), runtime.GOOS,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -371,21 +393,37 @@ func sortedAllowedModelKeys() []string {
 	return keys
 }
 
-// ResolveRuntimeModels ports resolve_runtime_models. Resolution order (lowest →
-// highest precedence): runtime base defaults → env cascade → tier env vars
-// (SWE_MODEL_LOW / SWE_MODEL_MED / SWE_MODEL_HIGH, each applying to the roles
-// in its tier, see RoleToTier) → models["default"] → models["<role>"].
-// fieldNames nil defaults to AllModelFields.
-func ResolveRuntimeModels(runtime string, models map[string]string, fieldNames []string) (map[string]string, error) {
+func implicitPlatformDefaultsActive() bool {
+	return envStripped("SWE_DEFAULT_RUNTIME") == "" && !openRouterOnlyEnv() && !infronOnlyEnv()
+}
+
+func platformDefaultModel(runtimeName, goos string) string {
+	if goos == "windows" && runtimeName == "codex" {
+		return "gpt-5.6-luna"
+	}
+	if goos != "windows" && runtimeName == "open_code" {
+		return fcmFastCodingModel
+	}
+	return ""
+}
+
+// ResolveRuntimeModels preserves the historical semantics for an explicitly
+// selected runtime. Platform defaults are applied only by internal callers
+// that know the runtime was omitted.
+func ResolveRuntimeModels(runtimeName string, models map[string]string, fieldNames []string) (map[string]string, error) {
+	return resolveRuntimeModels(runtimeName, models, fieldNames, false, runtime.GOOS)
+}
+
+func resolveRuntimeModels(runtimeName string, models map[string]string, fieldNames []string, implicitPlatformDefault bool, goos string) (map[string]string, error) {
 	if fieldNames == nil {
 		fieldNames = AllModelFields
 	}
 
-	base := runtimeBaseModels(runtime)
+	base := runtimeBaseModels(runtimeName)
 	if base == nil {
 		return nil, fmt.Errorf(
 			"Unsupported runtime %s. Valid runtimes: %s",
-			pyRepr(runtime),
+			pyRepr(runtimeName),
 			strings.Join(runtimeValuesSlice(), ", "),
 		)
 	}
@@ -395,16 +433,22 @@ func ResolveRuntimeModels(runtime string, models map[string]string, fieldNames [
 		return nil, err
 	}
 
-	if runtime == "codex" {
+	if implicitPlatformDefault {
+		if platformModel := platformDefaultModel(runtimeName, goos); platformModel != "" {
+			for field := range base {
+				base[field] = platformModel
+			}
+		}
+	} else if runtimeName == "codex" {
 		codexModel := codexDefaultModel()
 		for field := range base {
 			base[field] = codexModel
 		}
-	} else if runtime == "open_code" && openRouterOnlyEnv() {
+	} else if runtimeName == "open_code" && openRouterOnlyEnv() {
 		for field := range base {
 			base[field] = openRouterAutoDefaultModel
 		}
-	} else if runtime == "open_code" && infronOnlyEnv() {
+	} else if runtimeName == "open_code" && infronOnlyEnv() {
 		for field := range base {
 			base[field] = infronAutoDefaultModel
 		}
@@ -415,7 +459,7 @@ func ResolveRuntimeModels(runtime string, models map[string]string, fieldNames [
 		resolved[field] = base[field]
 	}
 
-	if envDefault := defaultModelFromEnv(runtime); envDefault != "" {
+	if envDefault := defaultModelFromEnv(runtimeName); envDefault != "" {
 		for _, field := range fieldNames {
 			resolved[field] = envDefault
 		}

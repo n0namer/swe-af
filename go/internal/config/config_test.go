@@ -1,6 +1,7 @@
 package config
 
 import (
+	"runtime"
 	"testing"
 )
 
@@ -39,7 +40,7 @@ func TestDefaultRuntime(t *testing.T) {
 		env  map[string]string
 		want string
 	}{
-		{"no keys -> claude_code", nil, "claude_code"},
+		{"no keys -> platform default", nil, defaultRuntimeFor(runtime.GOOS)},
 		{"anthropic -> claude_code", map[string]string{"ANTHROPIC_API_KEY": "sk-ant"}, "claude_code"},
 		{"openrouter only -> open_code", map[string]string{"OPENROUTER_API_KEY": "sk-or"}, "open_code"},
 		{"both keys -> claude_code", map[string]string{"ANTHROPIC_API_KEY": "sk-ant", "OPENROUTER_API_KEY": "sk-or"}, "claude_code"},
@@ -48,8 +49,8 @@ func TestDefaultRuntime(t *testing.T) {
 		{"infron + anthropic -> claude_code", map[string]string{"ANTHROPIC_API_KEY": "sk-ant", "INFRON_API_KEY": "sk-inf"}, "claude_code"},
 		{"env open_code", map[string]string{"SWE_DEFAULT_RUNTIME": "open_code"}, "open_code"},
 		{"env codex", map[string]string{"SWE_DEFAULT_RUNTIME": "codex"}, "codex"},
-		{"invalid env -> claude_code", map[string]string{"SWE_DEFAULT_RUNTIME": "bogus_runtime"}, "claude_code"},
-		{"empty env -> claude_code", map[string]string{"SWE_DEFAULT_RUNTIME": ""}, "claude_code"},
+		{"invalid env -> platform default", map[string]string{"SWE_DEFAULT_RUNTIME": "bogus_runtime"}, defaultRuntimeFor(runtime.GOOS)},
+		{"empty env -> platform default", map[string]string{"SWE_DEFAULT_RUNTIME": ""}, defaultRuntimeFor(runtime.GOOS)},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -75,7 +76,7 @@ func TestDefaultPlanningModel(t *testing.T) {
 		want string
 	}{
 		{"claude env -> sonnet", map[string]string{"ANTHROPIC_API_KEY": "sk-ant"}, "sonnet"},
-		{"no provider env -> sonnet", nil, "sonnet"},
+		{"no provider env -> platform default", nil, platformDefaultModel(defaultRuntimeFor(runtime.GOOS), runtime.GOOS)},
 		{"openrouter only -> deepseek", map[string]string{"OPENROUTER_API_KEY": "sk-or"}, openRouterAutoDefaultModel},
 		{"infron only -> infron deepseek", map[string]string{"INFRON_API_KEY": "sk-inf"}, infronAutoDefaultModel},
 		{"existing gateway key wins over infron", map[string]string{"OPENROUTER_API_KEY": "sk-or", "INFRON_API_KEY": "sk-inf"}, openRouterAutoDefaultModel},
@@ -375,11 +376,17 @@ func mustLoadBuild(t *testing.T, raw map[string]any) *BuildConfig {
 func TestBuildConfig_Defaults(t *testing.T) {
 	clearProviderEnv(t)
 	cfg := mustLoadBuild(t, nil)
-	if cfg.Runtime != "claude_code" {
-		t.Errorf("runtime = %q", cfg.Runtime)
+	wantRuntime := defaultRuntimeFor(runtime.GOOS)
+	if cfg.Runtime != wantRuntime {
+		t.Errorf("runtime = %q, want %q", cfg.Runtime, wantRuntime)
 	}
-	if cfg.AIProvider() != "claude" {
-		t.Errorf("ai_provider = %q", cfg.AIProvider())
+	wantProvider := map[string]string{
+		"claude_code": "claude",
+		"open_code":   "opencode",
+		"codex":       "codex",
+	}[wantRuntime]
+	if cfg.AIProvider() != wantProvider {
+		t.Errorf("ai_provider = %q, want %q", cfg.AIProvider(), wantProvider)
 	}
 	// spot-check numeric/bool defaults.
 	checks := map[string]bool{
@@ -664,16 +671,17 @@ func mustLoadExec(t *testing.T, raw map[string]any) *ExecutionConfig {
 func TestExecutionConfig_DefaultResolution(t *testing.T) {
 	clearProviderEnv(t)
 	cfg := mustLoadExec(t, nil)
-	if cfg.Runtime != "claude_code" {
+	if cfg.Runtime != defaultRuntimeFor(runtime.GOOS) {
 		t.Errorf("runtime = %q", cfg.Runtime)
 	}
-	if cfg.AIProvider() != "claude" {
+	if cfg.AIProvider() != runtimeToProvider(defaultRuntimeFor(runtime.GOOS)) {
 		t.Errorf("ai_provider = %q", cfg.AIProvider())
 	}
-	if cfg.CoderModel() != "sonnet" {
+	platformModel := platformDefaultModel(defaultRuntimeFor(runtime.GOOS), runtime.GOOS)
+	if cfg.CoderModel() != platformModel {
 		t.Errorf("coder_model = %q", cfg.CoderModel())
 	}
-	if cfg.QASynthesizerModel() != "haiku" {
+	if cfg.QASynthesizerModel() != platformModel {
 		t.Errorf("qa_synthesizer_model = %q", cfg.QASynthesizerModel())
 	}
 	// EC's own default divergence: max_retries_per_issue = 1.
