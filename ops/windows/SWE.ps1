@@ -10,7 +10,7 @@ param(
   [switch]$List,
   [switch]$NoPR,
   [int]$AgentTimeoutMinutes=90,
-  [int]$MaxConcurrentIssues=4,
+  [int]$MaxConcurrentIssues=10,
   [int]$MaxReplans=3
 )
 $ErrorActionPreference='Stop'
@@ -55,7 +55,7 @@ if ($Mode -eq 'full') {
      max_replans=[Math]::Max(1,[Math]::Min($MaxReplans,5))
      max_retries_per_issue=2; enable_replanning=$true
      enable_issue_advisor=$true; max_verify_fix_cycles=2
-     max_concurrent_issues=[Math]::Max(1,[Math]::Min($MaxConcurrentIssues,6))
+     max_concurrent_issues=[Math]::Max(1,[Math]::Min($MaxConcurrentIssues,10))
      enable_github_pr=(-not $NoPR)
    }
 } else {
