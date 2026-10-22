@@ -405,9 +405,15 @@ func TestLoadPythonGoldenCheckpoint(t *testing.T) {
 	}
 	// A realistic Python-shaped checkpoint (DAGState.model_dump()). Note:
 	// max_replans is intentionally absent to exercise UnmarshalJSON default (=2).
+	// Marshal the temp path separately because Windows paths contain backslashes,
+	// which must be escaped when embedded in JSON.
+	dirJSON, err := json.Marshal(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	golden := `{
   "repo_path": "/tmp/repo",
-  "artifacts_dir": "` + dir + `",
+  "artifacts_dir": ` + string(dirJSON) + `,
   "prd_path": "/tmp/repo/.artifacts/plan/prd.md",
   "architecture_path": "",
   "issues_dir": "",
