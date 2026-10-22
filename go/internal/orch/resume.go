@@ -42,7 +42,22 @@ func ResumeBuildHandler(ctx context.Context, deps *Deps, input map[string]any) (
 	}
 	var checkpoint map[string]any
 	if err := json.Unmarshal(raw, &checkpoint); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode checkpoint %s: %w", planPath, err)
+	}
+	if checkpoint == nil {
+		return nil, fmt.Errorf("invalid checkpoint %s: expected an object", planPath)
+	}
+	// A syntactically valid JSON object is not necessarily a resumable DAG.
+	// Require the durable issue graph before dispatching execute; otherwise a
+	// truncated/old/handwritten checkpoint can be reconstructed as an empty plan.
+	for _, key := range []string{"all_issues", "levels"} {
+		value, ok := checkpoint[key]
+		if !ok || value == nil {
+			return nil, fmt.Errorf("invalid checkpoint %s: required field %q is missing or null", planPath, key)
+		}
+		if _, ok := value.([]any); !ok {
+			return nil, fmt.Errorf("invalid checkpoint %s: field %q must be an array", planPath, key)
+		}
 	}
 
 	// Reconstruct plan_result exactly as app.py:2112-2121. The PRD / architecture
