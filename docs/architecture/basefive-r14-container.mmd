@@ -1,0 +1,17 @@
+flowchart LR
+    caller["Caller"]
+    subgraph sweaf["SWE-AF logical runtime containers - deployment UNVERIFIED"]
+        python["Python issue orchestrator - implement_issue"]
+        go["Go full-build orchestrator - Build"]
+    end
+    agents["AgentField dispatch boundary"]
+    local["Local repository and artifacts"]
+    github["GitHub PR boundary - optional"]
+    caller -->|fully scoped issue dict| python
+    caller -->|goal and input map| go
+    python -->|coding loop and verifier calls| agents
+    go -->|plan execute verify fix| agents
+    python -->|worktree checkpoint cleanup| local
+    go -->|prepare and finalize repositories| local
+    python -->|configured PR request| github
+    go -->|single or multi-repo PR flow| github

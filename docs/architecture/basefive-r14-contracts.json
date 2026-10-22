@@ -1,0 +1,141 @@
+{
+  "schema": "swe-af.basefive-r14-contracts.v1",
+  "project": "swe-af",
+  "recorded_date": "2026-10-14",
+  "git_receipt": "064a7226a500365005b5b662044fc9014a328722",
+  "acceptance": "UNACCEPTED",
+  "proof_level": "source-contract-only",
+  "sources": {
+    "AGENTS.md": "4a8876425a07de89597f3b56c6ba918b8dd89ddbce1abb72b4f9db9ec1782ae9",
+    "docs/acceptance/c4-releasegate-reducer-frontier-20261013.md": "feeb1fe6a88e53770831de890fe3674e6425dd40327deb913fbf73f3a01f1f17",
+    ".archsteer/model.json": "ed964b0a700a566bd9e42caa55551baee873706aa500fbd57c446a28b7971260",
+    ".archsteer/architecture.md": "7d7ee7046812a9c3c5da1d3b7484015432c4cb3b3cb106a6d34e8bffeb65a3d2",
+    "swe_af/issue/build.py": "440909dfb60d257232658c18cd2f193f49d1c28446d7f630c9cebee4c80a1bcd",
+    "go/internal/orch/build.go": "05c39a2e3b41869b01a1482543c9875630a0777fbea24ea706c05727fe640cbc",
+    "graphify-out/graph.json": "e18cd58bd72e8975c07f305a988192227c529a39ab35752388ad0db706f5c277"
+  },
+  "api": {
+    "pythonSignature": "async def implement_issue( issue: dict, repo_path: str, base_branch: str = \"\", artifacts_dir: str = \".artifacts\", additional_context: str = \"\", config: dict | None = None, ) -> dict:",
+    "goSignature": "func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {",
+    "goRegistration": [["build", "Build"]],
+    "goInput": [
+      {"field":"Goal","type":"string","json":"goal"},
+      {"field":"RepoPath","type":"string","json":"repo_path"},
+      {"field":"RepoURL","type":"string","json":"repo_url"},
+      {"field":"ArtifactsDir","type":"string","json":"artifacts_dir"},
+      {"field":"AdditionalContext","type":"string","json":"additional_context"},
+      {"field":"Config","type":"map[string]any","json":"config"},
+      {"field":"ExecuteFnTarget","type":"string","json":"execute_fn_target"},
+      {"field":"MaxTurns","type":"int","json":"max_turns"},
+      {"field":"PermissionMode","type":"string","json":"permission_mode"},
+      {"field":"EnableLearning","type":"bool","json":"enable_learning"}
+    ],
+    "pythonResultFields": ["success","outcome","summary","build_id","branch","base_branch","base_sha","commits","files_changed","diff_stat","iterations","iteration_history","debt_items","verification","pr_url","error_message"],
+    "goResultFields": ["PlanResult","DAGState","Verification","Success","Summary","PRResults","CIGateResults"],
+    "goCalls": ["execute","generate_fix_issues","plan","run_git_init","run_github_pr","run_repo_finalize","run_verifier"]
+  },
+  "dto": {
+    "pythonInput": "IssueSpec.model_validate(issue)",
+    "pythonResult": "IssueBuildResult(...).model_dump()",
+    "goInput": "buildInput JSON tags; marshal/unmarshal errors ignored in Build",
+    "goResult": "schemas.BuildResult constructor and conditional workspace_handle",
+    "wireSchemaVersion": null,
+    "wireCompatibility": "UNVERIFIED",
+    "comparison": "DIFFERENT_ENTRYPOINTS_NOT_PARITY",
+    "definitionsOutsideReadScope": ["swe_af/issue/schemas.py", "go/internal/schemas"],
+    "runtimeExecution": "UNVERIFIED"
+  },
+  "coverage": {
+    "archsteerComponents": 288,
+    "graphifyNodes": 9256,
+    "graphifyEdges": 24563,
+    "graphifyFiles": 542,
+    "archsteerGoFileCount": 0,
+    "graphifyGoFileCount": 200,
+    "graphifyGoDirectories": ["go","go/cmd/furrow-dial","go/cmd/furrowd","go/cmd/swe-fast","go/cmd/swe-planner","go/internal/afx","go/internal/cigate","go/internal/coding","go/internal/config","go/internal/dag","go/internal/dagutil","go/internal/envelope","go/internal/fast","go/internal/fatal","go/internal/furrow","go/internal/harnessx","go/internal/hitl","go/internal/issue","go/internal/node","go/internal/orch","go/internal/pro","go/internal/prompts/advisor","go/internal/prompts/coding","go/internal/prompts/gitops","go/internal/prompts/planning","go/internal/roles/advisor","go/internal/roles/ci","go/internal/roles/coding","go/internal/roles/gitops","go/internal/roles/planning","go/internal/runtimex","go/internal/schemas","go/internal/tools","go/internal/workspace","go/test/functional","go/test/mockclaude"],
+    "archsteerTargets": {
+      "swe_af/issue/build.py": ["_run_verification","_maybe_create_pr","_checkpoint_if_dirty","_checkpoint_interrupted_issue","_implement_issue_impl","implement_issue"],
+      "go/internal/orch/build.go": []
+    },
+    "graphifyTargets": {"swe_af/issue/build.py":10,"go/internal/orch/build.go":14},
+    "pythonMissingGraphSymbols": ["_checkpoint_if_dirty","_checkpoint_interrupted_issue"],
+    "graphifyAliasFiles": 0,
+    "archsteerAliasFiles": 69,
+    "repositoryCompleteness": "UNVERIFIED",
+    "graphSourceFreshness": "UNVERIFIED",
+    "packageRuntimeCoverage": "UNVERIFIED"
+  },
+  "invariants": [
+    {"source":"swe_af/issue/build.py","anchor":"success = coding_ok and bool(commits) and verify_ok","meaning":"Issue success needs completed coding, commits, and verification when present"},
+    {"source":"swe_af/issue/build.py","anchor":"if cfg.verify and coding_ok and commits:","meaning":"Verification is conditional, not mandatory by this source alone"},
+    {"source":"swe_af/issue/build.py","anchor":"except asyncio.CancelledError:","meaning":"Cancellation checkpoints interrupted work and re-raises"},
+    {"source":"swe_af/issue/build.py","anchor":"if cfg.enable_github_pr and coding_ok and commits:","meaning":"PR gate uses coding and commits, not verifier result"},
+    {"source":"go/internal/orch/build.go","anchor":"success := asBool(verification[\"passed\"])","meaning":"Go build success derives from verification"},
+    {"source":"go/internal/orch/build.go","anchor":"if isEmptyBuild(success, everCompleted, everMerged)","meaning":"Empty build can return result-carrying ReasonerFailed"},
+    {"source":"go/internal/orch/build.go","anchor":"_ = json.Unmarshal(raw, &in)","meaning":"Input JSON decode error is ignored; no strict DTO validation claim"}
+  ],
+  "diagrams": [
+    {
+      "level":"context","file":"docs/architecture/basefive-r14-C4-context.md",
+      "nodes":[
+        {"id":"caller","label":"Caller / coding harness","source":"swe_af/issue/build.py","anchor":"the caller"},
+        {"id":"system","label":"SWE-AF orchestration system","source":"go/internal/orch/build.go","anchor":"func Build("},
+        {"id":"agents","label":"AgentField agent calls","source":"swe_af/issue/build.py","anchor":"agent.call(target, **kwargs)"},
+        {"id":"git","label":"Local Git repositories","source":"swe_af/issue/build.py","anchor":"git_ops.add_worktree"},
+        {"id":"github","label":"GitHub / PR service - optional","source":"go/internal/orch/build.go","anchor":"\"run_github_pr\""}
+      ],
+      "edges":[
+        {"from":"caller","to":"system","label":"issue spec or build input","source":"swe_af/issue/build.py","anchor":"async def implement_issue("},
+        {"from":"system","to":"agents","label":"dispatch coding and verification","source":"swe_af/issue/build.py","anchor":"f\"{node_id}.run_verifier\""},
+        {"from":"system","to":"git","label":"isolated issue branch and worktree","source":"swe_af/issue/build.py","anchor":"git_ops.add_worktree"},
+        {"from":"system","to":"github","label":"configured PR call","source":"swe_af/issue/build.py","anchor":"if cfg.enable_github_pr and coding_ok and commits:"}
+      ]
+    },
+    {
+      "level":"container","file":"docs/architecture/basefive-r14-container.mmd",
+      "nodes":[
+        {"id":"caller","label":"Caller","source":"swe_af/issue/build.py","anchor":"the caller"},
+        {"id":"python","label":"Python issue orchestrator - implement_issue","source":"swe_af/issue/build.py","anchor":"async def implement_issue("},
+        {"id":"go","label":"Go full-build orchestrator - Build","source":"go/internal/orch/build.go","anchor":"func Build("},
+        {"id":"agents","label":"AgentField dispatch boundary","source":"go/internal/orch/build.go","anchor":"deps.Call(ctx, \"execute\""},
+        {"id":"local","label":"Local repository and artifacts","source":"swe_af/issue/build.py","anchor":"os.makedirs(abs_artifacts, exist_ok=True)"},
+        {"id":"github","label":"GitHub PR boundary - optional","source":"go/internal/orch/build.go","anchor":"\"run_github_pr\""}
+      ],
+      "edges":[
+        {"from":"caller","to":"python","label":"fully scoped issue dict","source":"swe_af/issue/build.py","anchor":"issue: dict,"},
+        {"from":"caller","to":"go","label":"goal and input map","source":"go/internal/orch/build.go","anchor":"input map[string]any"},
+        {"from":"python","to":"agents","label":"coding loop and verifier calls","source":"swe_af/issue/build.py","anchor":"agent.call(target, **kwargs)"},
+        {"from":"go","to":"agents","label":"plan execute verify fix","source":"go/internal/orch/build.go","anchor":"deps.App.Call(ctx, deps.target(\"plan\"), planKwargs)"},
+        {"from":"python","to":"local","label":"worktree checkpoint cleanup","source":"swe_af/issue/build.py","anchor":"git_ops.remove_worktree"},
+        {"from":"go","to":"local","label":"prepare and finalize repositories","source":"go/internal/orch/build.go","anchor":"prepareSingleRepo(ctx, deps, cfg, repoPath)"},
+        {"from":"python","to":"github","label":"configured PR request","source":"swe_af/issue/build.py","anchor":"f\"{node_id}.run_github_pr\""},
+        {"from":"go","to":"github","label":"single or multi-repo PR flow","source":"go/internal/orch/build.go","anchor":"singleRepoPR(ctx, deps, cfg"}
+      ]
+    },
+    {
+      "level":"component","file":"docs/architecture/basefive-r14-component.mmd",
+      "nodes":[
+        {"id":"entry","label":"implement_issue","source":"swe_af/issue/build.py","anchor":"async def implement_issue("},
+        {"id":"impl","label":"_implement_issue_impl","source":"swe_af/issue/build.py","anchor":"async def _implement_issue_impl("},
+        {"id":"loop","label":"run_coding_loop - imported","source":"swe_af/issue/build.py","anchor":"from swe_af.execution.coding_loop import run_coding_loop"},
+        {"id":"checkpoint","label":"checkpoint helpers","source":"swe_af/issue/build.py","anchor":"async def _checkpoint_if_dirty("},
+        {"id":"verify","label":"_run_verification - conditional","source":"swe_af/issue/build.py","anchor":"async def _run_verification("},
+        {"id":"result","label":"IssueBuildResult constructor","source":"swe_af/issue/build.py","anchor":"return IssueBuildResult("},
+        {"id":"handlers","label":"Handlers registration","source":"go/internal/orch/build.go","anchor":"func Handlers()"},
+        {"id":"build","label":"Build","source":"go/internal/orch/build.go","anchor":"func Build("},
+        {"id":"dispatch","label":"Deps call boundary - imported roles","source":"go/internal/orch/build.go","anchor":"deps.Call(ctx, \"run_verifier\""},
+        {"id":"goresult","label":"BuildResult / ReasonerFailed","source":"go/internal/orch/build.go","anchor":"buildResult := schemas.BuildResult{"}
+      ],
+      "edges":[
+        {"from":"entry","to":"impl","label":"delegate issue implementation","source":"swe_af/issue/build.py","anchor":"return await _implement_issue_impl("},
+        {"from":"impl","to":"loop","label":"execute scoped issue","source":"swe_af/issue/build.py","anchor":"loop_result = await run_coding_loop("},
+        {"from":"impl","to":"checkpoint","label":"normal or interrupted salvage","source":"swe_af/issue/build.py","anchor":"await _checkpoint_interrupted_issue("},
+        {"from":"impl","to":"verify","label":"verify when coding and commits pass","source":"swe_af/issue/build.py","anchor":"verification = await _run_verification("},
+        {"from":"impl","to":"result","label":"structured result after cleanup","source":"swe_af/issue/build.py","anchor":"return IssueBuildResult("},
+        {"from":"handlers","to":"build","label":"build handler","source":"go/internal/orch/build.go","anchor":"\"build\": Build"},
+        {"from":"build","to":"dispatch","label":"plan execute verify and fix","source":"go/internal/orch/build.go","anchor":"deps.Call(ctx, \"generate_fix_issues\""},
+        {"from":"build","to":"goresult","label":"result plus optional failed error","source":"go/internal/orch/build.go","anchor":"return buildResultMap, rf"}
+      ]
+    }
+  ]
+}

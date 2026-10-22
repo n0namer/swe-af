@@ -1,0 +1,23 @@
+flowchart LR
+    subgraph python["Python issue orchestrator components"]
+        entry["implement_issue"]
+        impl["_implement_issue_impl"]
+        loop["run_coding_loop - imported"]
+        checkpoint["checkpoint helpers"]
+        verify["_run_verification - conditional"]
+        result["IssueBuildResult constructor"]
+    end
+    subgraph go["Go full-build orchestrator components"]
+        handlers["Handlers registration"]
+        build["Build"]
+        dispatch["Deps call boundary - imported roles"]
+        goresult["BuildResult / ReasonerFailed"]
+    end
+    entry -->|delegate issue implementation| impl
+    impl -->|execute scoped issue| loop
+    impl -->|normal or interrupted salvage| checkpoint
+    impl -->|verify when coding and commits pass| verify
+    impl -->|structured result after cleanup| result
+    handlers -->|build handler| build
+    build -->|plan execute verify and fix| dispatch
+    build -->|result plus optional failed error| goresult
