@@ -56,13 +56,13 @@ user_environment:
       description: Override the model id for every role (e.g. openrouter/deepseek/deepseek-v4-flash-0731)
     - name: SWE_PRO_ENGINE
       description: >-
-        High-performance coding engine (beta). On by default for nodes
-        installed this way — set it to 0 (or false) to use the classic coding
-        loop instead.
+        High-performance coding engine (beta). Opt in with 1 (or true); the
+        classic coding loop is enabled by default.
       # The resolver injects this last unless the process env or a stored
-      # secret overrides it, so an `af install` gets the engine without asking
-      # and `SWE_PRO_ENGINE=0 af run` still opts out.
-      default: "1"
+      # secret overrides it; `SWE_PRO_ENGINE=1 af run` opts in explicitly.
+      # Keep the classic Go planner surface enabled by default so discovery
+      # exposes swe-planner.implement_issue. The pro surface is opt-in.
+      default: "0"
     - name: SWE_PRO_VARIANT
       description: Engine reasoning-effort variant (low | high) — unset keeps the engine default
     - name: SWE_PRO_MAX_COST

@@ -142,6 +142,40 @@ async def _maybe_create_pr(
         return ""
 
 
+async def _checkpoint_if_dirty(
+    *,
+    worktree_path: str,
+    issue_name: str,
+    message: str,
+) -> bool:
+    """Commit tracked work exactly once when a checkpoint has something to save."""
+    await asyncio.to_thread(git_ops.scrub_tracked_junk, worktree_path, issue_name)
+    if not await asyncio.to_thread(git_ops.is_dirty, worktree_path):
+        return False
+    await asyncio.to_thread(git_ops.commit_all, worktree_path, message)
+    return True
+
+
+async def _checkpoint_interrupted_issue(
+    *,
+    worktree_path: str,
+    issue_name: str,
+    note: Callable,
+) -> None:
+    """Persist tracked repair work without allowing checkpoint errors to mask the cause."""
+    try:
+        await _checkpoint_if_dirty(
+            worktree_path=worktree_path,
+            issue_name=issue_name,
+            message=f"chore({issue_name}): checkpoint interrupted issue work",
+        )
+    except Exception as checkpoint_error:  # noqa: BLE001 — preserve interruption cause
+        note(
+            f"Interrupted-work checkpoint failed: {checkpoint_error}",
+            tags=["issue_build", "checkpoint", "error"],
+        )
+
+
 async def _implement_issue_impl(
     *,
     issue: dict,
@@ -254,13 +288,10 @@ async def _implement_issue_impl(
         iteration_history = loop_result.iteration_history
         debt_items = loop_result.debt_items
 
-        await asyncio.to_thread(
-            git_ops.scrub_tracked_junk, worktree_path, planned["name"]
-        )
-        await asyncio.to_thread(
-            git_ops.commit_all,
-            worktree_path,
-            f"chore({planned['name']}): checkpoint uncommitted issue work",
+        await _checkpoint_if_dirty(
+            worktree_path=worktree_path,
+            issue_name=planned["name"],
+            message=f"chore({planned['name']}): checkpoint uncommitted issue work",
         )
         commits = await asyncio.to_thread(
             git_ops.new_commits, repo_path, base_sha, branch
@@ -304,10 +335,26 @@ async def _implement_issue_impl(
                 debt_items=debt_items,
                 note=note,
             )
+    except asyncio.CancelledError:
+        await _checkpoint_interrupted_issue(
+            worktree_path=worktree_path,
+            issue_name=planned["name"],
+            note=note,
+        )
+        commits = await asyncio.to_thread(
+            git_ops.new_commits, repo_path, base_sha, branch
+        )
+        raise
     except Exception as e:  # noqa: BLE001 — surface as a structured failure
         error_message = error_message or str(e)
         note(f"Issue build failed: {e}", tags=["issue_build", "error"])
-        # Salvage whatever the coder committed before the failure.
+        # Preserve uncommitted work from an interrupted coder before salvage.
+        await _checkpoint_interrupted_issue(
+            worktree_path=worktree_path,
+            issue_name=planned["name"],
+            note=note,
+        )
+        # Salvage committed work, including the interruption checkpoint.
         commits = await asyncio.to_thread(
             git_ops.new_commits, repo_path, base_sha, branch
         )

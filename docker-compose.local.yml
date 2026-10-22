@@ -25,14 +25,17 @@ services:
   swe-agent:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: go/Dockerfile
     env_file: .env
     environment:
       - AGENTFIELD_SERVER=http://host.docker.internal:8080
       - NODE_ID=swe-planner
-      - PORT=8003
+      - PORT=8005
       # Callback URL for control plane to reach this agent
-      - AGENT_CALLBACK_URL=http://localhost:8003
+      - AGENT_CALLBACK_URL=http://localhost:8005
+      # Keep the classic Go planner surface enabled for the target-native
+      # implement_issue canary (the pro surface intentionally withholds it).
+      - SWE_PRO_ENGINE=${SWE_PRO_ENGINE:-0}
       # Empty = auto: open_code when only an OpenRouter or Infron key is
       # present, else claude_code. A baked claude_code fallback here would
       # break gateway-only deployments.
@@ -49,7 +52,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - DATABASE_URL_TEST=${DATABASE_URL_TEST:-postgres://builder:builder@build-db:5432/buildtest}
     ports:
-      - "8003:8003"
+      - "8005:8005"
     volumes:
       - workspaces:/workspaces
       - ${HOME}/.codex:/root/.codex
