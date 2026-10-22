@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
 import tempfile
 from enum import Enum
 from typing import Any, Literal
@@ -607,8 +608,8 @@ _LEGACY_TOP_LEVEL_EQUIVALENTS: dict[str, str] = {
 # HTTP 400 "not supported when using Codex with a ChatGPT account" under
 # ChatGPT-account login, which fails in ~3s and (pre-fix) cascaded into an empty
 # build. So the base default is chosen by ``_codex_default_model()`` below.
-_CODEX_API_KEY_MODEL = "gpt-5.3-codex"   # OpenAI API-key auth (api_key mode)
-_CODEX_CHATGPT_MODEL = "gpt-5.5"         # ChatGPT-account auth (-codex blocked)
+_CODEX_API_KEY_MODEL = "gpt-5.3-codex"
+_CODEX_CHATGPT_MODEL = "gpt-5.5"
 
 # Default model for the open_code runtime — both the auto-selected OpenRouter
 # path (see _openrouter_only_env) and an explicit SWE_DEFAULT_RUNTIME=open_code
@@ -619,6 +620,7 @@ _OPENROUTER_AUTO_DEFAULT_MODEL = "openrouter/deepseek/deepseek-v4-flash-0731"
 # Infron is OpenAI-compatible and serves the standard <provider>/<model> ids,
 # so this is the existing gateway default with the prefix swapped.
 _INFRON_AUTO_DEFAULT_MODEL = "infron/deepseek/deepseek-v4-flash-0731"
+_FCM_FAST_CODING_MODEL = "broker/fast-coding"
 
 _RUNTIME_BASE_MODELS: dict[str, dict[str, str]] = {
     "claude_code": {
@@ -701,29 +703,26 @@ def _infron_only_env() -> bool:
     return bool(os.getenv("INFRON_API_KEY", "").strip())
 
 
-def _default_runtime() -> Literal["claude_code", "open_code", "codex"]:
-    """Default runtime, honoring the ``SWE_DEFAULT_RUNTIME`` env var.
-
-    Lets the deployer pick the runtime without every caller having to pass
-    a config. When ``SWE_DEFAULT_RUNTIME`` is unset, auto-selects ``open_code``
-    if only an OpenRouter or Infron key is present (see
-    ``_openrouter_only_env`` and ``_infron_only_env``), otherwise
-    ``claude_code``. Logs and falls back to ``claude_code`` when the env value
-    isn't a valid runtime.
-    """
+def _default_runtime(
+    platform: str | None = None,
+) -> Literal["claude_code", "open_code", "codex"]:
+    """Resolve runtime with explicit env first, then the host platform default."""
     value = os.getenv("SWE_DEFAULT_RUNTIME", "").strip()
+    host_platform = sys.platform if platform is None else platform
     if not value:
         if _openrouter_only_env() or _infron_only_env():
             return "open_code"
-        return "claude_code"
+        return "codex" if host_platform.startswith("win") else "open_code"
     if value in RUNTIME_VALUES:
         return value  # type: ignore[return-value]
+    fallback = "codex" if host_platform.startswith("win") else "open_code"
     logging.getLogger(__name__).warning(
-        "SWE_DEFAULT_RUNTIME=%r is not one of %s; falling back to claude_code",
+        "SWE_DEFAULT_RUNTIME=%r is not one of %s; falling back to %s",
         value,
         RUNTIME_VALUES,
+        fallback,
     )
-    return "claude_code"
+    return fallback  # type: ignore[return-value]
 
 
 _DEFAULT_MODEL_ENV_VARS: tuple[str, ...] = (
@@ -761,6 +760,23 @@ def _default_model_from_env(runtime: str) -> str | None:
         value = os.getenv(var, "").strip()
         if value:
             return value
+    return None
+
+
+def _implicit_platform_model(runtime: str) -> str | None:
+    """Return the model selected by an implicit gateway platform, if any.
+
+    Gateway auto-selection is deliberately kept below explicit SWE model
+    configuration.  This helper only supplies the runtime base layer; the
+    normal resolver then applies ``SWE_DEFAULT_MODEL``/``AI_MODEL`` and caller
+    role overrides in the same order as the Go implementation.
+    """
+    if runtime != "open_code":
+        return None
+    if _openrouter_only_env():
+        return _OPENROUTER_AUTO_DEFAULT_MODEL
+    if _infron_only_env():
+        return _INFRON_AUTO_DEFAULT_MODEL
     return None
 
 
@@ -828,11 +844,13 @@ def _default_planning_model(runtime: str | None = None) -> str:
     Env / explicit values (layers 1–2) still win verbatim — the deployer owns
     them — so only the auto default (layer 3) is made runtime-aware.
     """
+    runtime_was_explicit = runtime is not None or bool(os.getenv("SWE_DEFAULT_RUNTIME", "").strip())
     resolved_runtime = normalize_runtime_provider(runtime) if runtime else _default_runtime()
     return resolve_runtime_models(
         runtime=resolved_runtime,
         models=None,
         field_names=["pm_model"],
+        implicit_platform_default=(not runtime_was_explicit and _implicit_platform_defaults_active()),
     )["pm_model"]
 
 
@@ -896,11 +914,31 @@ def _validate_flat_models(models: dict[str, str] | None) -> dict[str, str]:
     return models
 
 
+def _implicit_platform_defaults_active() -> bool:
+    return (
+        not os.getenv("SWE_DEFAULT_RUNTIME", "").strip()
+        and not _openrouter_only_env()
+        and not _infron_only_env()
+    )
+
+
+def _platform_default_model(runtime: str, platform: str | None = None) -> str | None:
+    host_platform = sys.platform if platform is None else platform
+    if host_platform.startswith("win") and runtime == "codex":
+        return "gpt-5.6-luna"
+    if not host_platform.startswith("win") and runtime == "open_code":
+        return _FCM_FAST_CODING_MODEL
+    return None
+
+
 def resolve_runtime_models(
     *,
     runtime: str,
     models: dict[str, str] | None,
     field_names: list[str] | None = None,
+    implicit_platform_default: bool = False,
+    platform: str | None = None,
+    base_models: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Resolve internal ``*_model`` fields from runtime + flat role overrides.
 
@@ -926,19 +964,20 @@ def resolve_runtime_models(
 
     flat_models = _validate_flat_models(models)
 
-    base = _RUNTIME_BASE_MODELS[runtime]
-    if runtime == "codex":
-        # Choose the codex base default by auth mode (see _codex_default_model).
+    base = dict(base_models or _RUNTIME_BASE_MODELS[runtime])
+    if implicit_platform_default:
+        platform_model = _platform_default_model(runtime, platform)
+        if platform_model:
+            base = {field: platform_model for field in base}
+    elif runtime == "codex":
+        # Explicit codex keeps the historical auth-aware model default.
         codex_model = _codex_default_model()
         base = {field: codex_model for field in base}
-    elif runtime == "open_code" and _openrouter_only_env():
-        # OpenRouter was auto-selected (an OpenRouter key, no explicit runtime):
-        # default to DeepSeek. Explicit open_code deployers keep their own base
-        # default; SWE_DEFAULT_MODEL / models overrides still win over this.
-        base = {field: _OPENROUTER_AUTO_DEFAULT_MODEL for field in base}
-    elif runtime == "open_code" and _infron_only_env():
-        # Same rule for the Infron gateway (see _infron_only_env).
-        base = {field: _INFRON_AUTO_DEFAULT_MODEL for field in base}
+    else:
+        # Existing implicit gateway selection remains unchanged.
+        gateway_model = _implicit_platform_model(runtime)
+        if gateway_model:
+            base = {field: gateway_model for field in base}
     resolved: dict[str, str] = {field: base[field] for field in field_names}
 
     env_default = _default_model_from_env(runtime)
@@ -1105,9 +1144,14 @@ class BuildConfig(BaseModel):
 
     def resolved_models(self) -> dict[str, str]:
         """Resolve all internal ``*_model`` fields from V2 runtime config."""
+        implicit_platform = (
+            "runtime" not in self.model_fields_set
+            and _implicit_platform_defaults_active()
+        )
         return resolve_runtime_models(
             runtime=self.runtime,
             models=self.models,
+            implicit_platform_default=implicit_platform,
         )
 
     def to_execution_config_dict(self) -> dict:
@@ -1115,8 +1159,7 @@ class BuildConfig(BaseModel):
 
         Carries forward runtime model selection plus non-model execution settings.
         """
-        return {
-            "runtime": self.runtime,
+        result = {
             "models": self.models,
             "permission_mode": self.permission_mode,
             "max_retries_per_issue": self.max_retries_per_issue,
@@ -1138,6 +1181,9 @@ class BuildConfig(BaseModel):
             "ci_wait_seconds": self.ci_wait_seconds,
             "ci_poll_seconds": self.ci_poll_seconds,
         }
+        if "runtime" in self.model_fields_set:
+            result["runtime"] = self.runtime
+        return result
 
 
 class BuildResult(BaseModel):
@@ -1325,9 +1371,14 @@ class ExecutionConfig(BaseModel):
 
     def model_post_init(self, __context: Any) -> None:
         """Resolve runtime model selection once at construction time."""
+        implicit_platform = (
+            "runtime" not in self.model_fields_set
+            and _implicit_platform_defaults_active()
+        )
         self._resolved_models = resolve_runtime_models(
             runtime=self.runtime,
             models=self.models,
+            implicit_platform_default=implicit_platform,
         )
 
     def _model_for(self, field_name: str) -> str:

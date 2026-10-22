@@ -4,6 +4,18 @@ from __future__ import annotations
 
 RUNTIME_VALUES = ("claude_code", "open_code", "codex")
 
+_HARNESS_PROVIDERS = {
+    "claude_code": "claude",
+    "open_code": "opencode",
+    "codex": "codex",
+}
+
+_HARNESS_ADAPTERS = {
+    "claude_code": "claude-code",
+    "open_code": "opencode",
+    "codex": "codex",
+}
+
 
 def normalize_runtime_provider(runtime: str) -> str:
     """Normalize user/runtime aliases to canonical runtime values."""
@@ -20,18 +32,10 @@ def normalize_runtime_provider(runtime: str) -> str:
 def runtime_to_harness_provider(runtime: str) -> str:
     """Map canonical runtime to harness provider value."""
     normalized = normalize_runtime_provider(runtime)
-    if normalized == "claude_code":
-        return "claude"
-    if normalized == "open_code":
-        return "opencode"
-    return "codex"
+    return _HARNESS_PROVIDERS[normalized]
 
 
 def runtime_to_harness_adapter(runtime: str) -> str:
     """Map runtime aliases to AgentField harness adapter values."""
     normalized = normalize_runtime_provider(runtime)
-    if normalized == "claude_code":
-        return "claude-code"
-    if normalized == "open_code":
-        return "opencode"
-    return "codex"
+    return _HARNESS_ADAPTERS[normalized]

@@ -1465,8 +1465,17 @@ async def plan(
     # whose CLI can't consume it — the cross-runtime leak that caused silent
     # ~1s empty completions when a caller pinned ``codex`` under OpenRouter-only
     # env. Explicit ``ai_provider`` still wins; only the auto default is gated.
+    # Keep the omitted-runtime signal when choosing the model.  The shared
+    # resolver uses that provenance to retain implicit platform/gateway policy;
+    # passing the already-resolved runtime here would make an omitted runtime
+    # indistinguishable from an explicit one.
+    runtime_was_omitted = ai_provider is None
     ai_provider = ai_provider or _default_runtime()
-    default_model = _default_planning_model(ai_provider)
+    default_model = (
+        _default_planning_model()
+        if runtime_was_omitted
+        else _default_planning_model(ai_provider)
+    )
     pm_model = pm_model or default_model
     architect_model = architect_model or default_model
     tech_lead_model = tech_lead_model or default_model

@@ -2,39 +2,19 @@
 
 from __future__ import annotations
 
-import os
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from swe_af.runtime.providers import RUNTIME_VALUES
+from swe_af.execution.schemas import (
+    _OPENROUTER_AUTO_DEFAULT_MODEL,
+    _default_runtime,
+    resolve_runtime_models,
+)
 
-# ---------------------------------------------------------------------------
-# Runtime default model strings
-# ---------------------------------------------------------------------------
-
+# Compatibility aliases for callers/tests that inspect the historical fast
+# defaults; the actual values now come from the shared resolver's table.
 _CLAUDE_CODE_DEFAULT = "haiku"
-# Fast mode shares the open_code default with the main path so an
-# OpenRouter-only install behaves the same on both nodes. Keep in sync with
-# ``swe_af.execution.schemas._OPENROUTER_AUTO_DEFAULT_MODEL`` (not imported at
-# module scope to avoid a circular import).
-_OPEN_CODE_DEFAULT = "openrouter/deepseek/deepseek-v4-flash-0731"
-
-_RUNTIME_DEFAULTS: dict[str, str] = {
-    "claude_code": _CLAUDE_CODE_DEFAULT,
-    "open_code": _OPEN_CODE_DEFAULT,
-    # codex is resolved dynamically (auth-mode dependent); see _runtime_default().
-}
-
-
-def _runtime_default(runtime: str) -> str:
-    """Default model for a runtime. Codex is auth-mode dependent: the ``-codex``
-    models are blocked under ChatGPT-account auth, so fall back to a
-    ChatGPT-compatible model there (see ``schemas._codex_default_model``)."""
-    if runtime == "codex":
-        from swe_af.execution.schemas import _codex_default_model  # noqa: PLC0415
-
-        return _codex_default_model()
-    return _RUNTIME_DEFAULTS[runtime]
+_OPEN_CODE_DEFAULT = _OPENROUTER_AUTO_DEFAULT_MODEL
 
 # All four roles resolved by fast_resolve_models()
 _FAST_ROLES: tuple[str, ...] = ("pm_model", "coder_model", "verifier_model", "git_model")
@@ -107,26 +87,12 @@ class FastVerificationResult(BaseModel):
 # Build-level schemas
 # ---------------------------------------------------------------------------
 
-def _default_fast_runtime() -> str:
-    """Default runtime for fast builds, honoring ``SWE_DEFAULT_RUNTIME``.
-
-    When unset (or blank), auto-selects ``open_code`` if only an OpenRouter key
-    is present — the same detection the main path uses — else ``claude_code``.
-    """
-    value = os.getenv("SWE_DEFAULT_RUNTIME", "").strip()
-    if not value:
-        from swe_af.execution.schemas import _openrouter_only_env  # noqa: PLC0415
-
-        return "open_code" if _openrouter_only_env() else "claude_code"
-    return value if value in RUNTIME_VALUES else "claude_code"
-
-
 class FastBuildConfig(BaseModel):
     """Configuration for a fast single-pass build run."""
 
     model_config = ConfigDict(extra="forbid")
 
-    runtime: Literal["claude_code", "open_code", "codex"] = Field(default_factory=_default_fast_runtime)
+    runtime: Literal["claude_code", "open_code", "codex"] = Field(default_factory=_default_runtime)
     models: dict[str, str] | None = None
     max_tasks: int = 10
     task_timeout_seconds: int = 300
@@ -175,38 +141,23 @@ def fast_resolve_models(config: FastBuildConfig) -> dict[str, str]:
         ValueError: If ``config.models`` contains a key that is not ``"default"``
             and not one of the four known role names.
     """
-    runtime_default = _runtime_default(config.runtime)
-
-    resolved: dict[str, str] = {role: runtime_default for role in _FAST_ROLES}
-
-    # Deployer env cascade (SWE_DEFAULT_MODEL → AI_MODEL → HARNESS_MODEL, the
-    # latter only on open_code), same as the main path — lets the variable that
-    # selects a model for the main node select it for fast builds too.
-    # Caller-supplied models still win.
-    from swe_af.execution.schemas import _default_model_from_env  # noqa: PLC0415
-
-    env_model = _default_model_from_env(config.runtime)
-    if env_model:
-        resolved = {role: env_model for role in _FAST_ROLES}
-
+    # Fast mode deliberately keeps its Claude role default (haiku), while all
+    # runtime, gateway, env/tier, and explicit role precedence comes from the
+    # main resolver.  The base override is below every shared override layer.
+    base_models = None
+    if config.runtime == "claude_code":
+        base_models = {role: _CLAUDE_CODE_DEFAULT for role in _FAST_ROLES}
     if config.models:
-        # Validate all keys first
-        valid_keys = {"default"} | set(_ROLE_KEY_MAP.keys())
-        for key in config.models:
-            if key not in valid_keys:
-                raise ValueError(
-                    f"Unknown role key {key!r} in models dict. "
-                    f"Valid keys are: {sorted(valid_keys)}"
-                )
-
-        # Apply "default" override first
-        if "default" in config.models:
-            for role in _FAST_ROLES:
-                resolved[role] = config.models["default"]
-
-        # Apply per-role overrides
-        for role_key, resolved_key in _ROLE_KEY_MAP.items():
-            if role_key in config.models:
-                resolved[resolved_key] = config.models[role_key]
-
-    return resolved
+        valid_keys = {"default"} | set(_ROLE_KEY_MAP)
+        unknown = sorted(set(config.models) - valid_keys)
+        if unknown:
+            raise ValueError(
+                f"Unknown role key {unknown[0]!r} in models dict. "
+                f"Valid keys are: {sorted(valid_keys)}"
+            )
+    return resolve_runtime_models(
+        runtime=config.runtime,
+        models=config.models,
+        field_names=list(_FAST_ROLES),
+        base_models=base_models,
+    )

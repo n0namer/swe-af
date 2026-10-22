@@ -33,9 +33,11 @@ from swe_af.execution.fatal_error import (
 )
 from swe_af.execution.schemas import (
     _CODEX_CHATGPT_MODEL,
+    _INFRON_AUTO_DEFAULT_MODEL,
     _OPENROUTER_AUTO_DEFAULT_MODEL,
     _RUNTIME_BASE_MODELS,
     _default_planning_model,
+    _default_runtime,
 )
 
 # open_code's base default for an *explicit* open_code runtime (i.e. not the
@@ -175,6 +177,12 @@ def test_runtime_aliases_are_normalized(monkeypatch: pytest.MonkeyPatch) -> None
     assert _default_planning_model("claude-code") == "sonnet"
 
 
+def test_platform_default_runtime_matrix() -> None:
+    assert _default_runtime("win32") == "codex"
+    assert _default_runtime("linux") == "open_code"
+    assert _default_runtime("darwin") == "open_code"
+
+
 def test_omitted_runtime_falls_back_to_env_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -182,6 +190,23 @@ def test_omitted_runtime_falls_back_to_env_resolution(
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     # OpenRouter-only env auto-selects open_code, so the auto default applies.
     assert _default_planning_model() == _OPENROUTER_AUTO_DEFAULT_MODEL
+
+
+def test_infron_only_platform_default_is_selected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The implicit Infron platform follows the Go resolver's gateway rule."""
+    monkeypatch.setenv("INFRON_API_KEY", "sk-inf-test")
+
+    assert _default_planning_model() == _INFRON_AUTO_DEFAULT_MODEL
+
+
+def test_explicit_swe_model_overrides_implicit_infron_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deployer SWE override wins over platform auto-selection."""
+    monkeypatch.setenv("INFRON_API_KEY", "sk-inf-test")
+    monkeypatch.setenv("SWE_DEFAULT_MODEL", "infron/provider/model-x")
+
+    assert _default_planning_model() == "infron/provider/model-x"
 
 
 # ---------------------------------------------------------------------------
