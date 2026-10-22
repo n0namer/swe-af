@@ -1,0 +1,22 @@
+{
+  "name": "skill-intelligence-agentfield-hot-mvp-gate",
+  "title": "AF Skill Intelligence: close native AgentField hot adapter E2E",
+  "description": "Continue existing Go code, not a rewrite. Read README.md, skillindex/hot_agentfield.go, skillindex/hot_agentfield_test.go, authoring/agentfield.go, and docs/go-wave-v2-independent-qa-hot-adapter-20261013.md. The historic QA says ProfileRef alias RED, but latest WIP implementation already uses cloneQuery(requestQuery) at the executor boundary and its existing test mutates executor input; do NOT redo that already-fixed defect. Baseline in this isolated mission branch is WIP fdfa3d0f8d365d76dfe9c96f9e68d111b290f1b2, NOT stable acceptance. Goal: add the smallest meaningful native AgentField hot-path execution/integration regression, using the existing SearchResolveExecute or SearchResolveExecutePinned pathway, exact Registry/skill/profile identity, and a local bounded in-process or localhost test executor (no external calls). Verify one real transport/executor call on success and fail closed on bad/mutable/stale refs or invalid receipt. Reuse existing Go structs/interfaces/SDK patterns; no new orchestrator, registry, plan, skill promotion authority or speculative APIs. Run RED where possible, smallest patch and GREEN. Before changes, read BMad Help/Quick Dev. Do not edit original dirty repository, only SWE issue worktree. No push/deploy, external skill acquisition, code execution from third-party skills, PR or external send. Output exact source/test files, commands, result, SHA and unresolved runtime-only dependencies; independent QA still required.",
+  "acceptance_criteria": [
+    "Existing Go hot search/resolve path and trusted exact identity remain unchanged, noncanonical indexes stay read-only",
+    "At least one new specific executable Go integration/regression test proves a native bounded AgentField executor call and terminal evidence through current interfaces",
+    "Negative test demonstrates bad/stale profile/version/source/receipt cannot be accepted or reach executor",
+    "go test ./skillindex ./authoring ./acquisition -count=1 passes using offline Go toolchain on Windows",
+    "Only scoped source/tests committed to isolated issue branch; QA/reviewer approve independently or blockers explicit"
+  ],
+  "files_to_modify": [
+    "skillindex/hot_agentfield.go",
+    "skillindex/hot_agentfield_test.go"
+  ],
+  "files_to_create": [
+    "skillindex/hot_agentfield_native_mvp_test.go"
+  ],
+  "testing_strategy": "Go offline on Windows A55: GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOTMPDIR on D:, go test ./skillindex ./authoring ./acquisition -count=1 -timeout 120s; verify exact source identity and no external egress.",
+  "estimated_complexity": "medium",
+  "needs_deeper_qa": true
+}

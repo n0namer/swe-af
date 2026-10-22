@@ -1,0 +1,163 @@
+{
+  "prd": {
+    "validated_description": "ROUTING: Terra / High \u00b7 confidence 95% \u00b7 Windows compatibility requires careful verification. FACT: PRD written to D:\\Temp\\swe-full-codeaf-20261020\\.artifacts\\plan\\prd.md with 12 automated acceptance criteria, dependency boundaries, commands, baseline evidence and independent acceptance gates. Product source and HEAD 45b41f2c remain unchanged. Ready for architecture; implementation and PLAN_ACCEPTED remain pending.",
+    "acceptance_criteria": [
+      "AC-01: Verify preserved base SHA, mission branch, isolated workspace and approved changed paths.",
+      "AC-02: A frozen raw byte-zero Windows subprocess fixture produces a genuine contention RED on the preserved candidate.",
+      "AC-03: Repaired old/new contention matrix passes natively, including ten repeated exclusive-lock runs.",
+      "AC-04: Blocking, shared-lock, release, handle-error and partial-acquisition cleanup tests pass.",
+      "AC-05: Production metadata readers preserve payload bytes, limits, readability and active heartbeat behavior.",
+      "AC-06: Unknown or corrupt locked state fails closed; stale heartbeat cannot permit an unowned headless brain.",
+      "AC-07: Execute filelock, lease and standing suites; required ownership behavior passes and remaining failures are classified.",
+      "AC-08: Native HTTP provider/tool E2E changes fixture 41 to 42 and produces passing Go tests.",
+      "AC-09: CLI success/failure JSON assertions pass; reopened SQLite contains durable run-correlated evidence.",
+      "AC-10: Windows command compilation, schema tests, affected regressions and static checks pass with isolation evidence.",
+      "AC-11: Every failure is classified against reproduced baseline as introduced, preexisting, environment or unresolved.",
+      "AC-12: Independent QA verifies the final durable local SHA and executable hash without unauthorized remote actions."
+    ],
+    "must_have": [
+      "Minimal repair of existing Go implementation.",
+      "Mixed-version RED/GREEN evidence using an independent historical primitive.",
+      "Continuous exclusion, readable metadata and fail-closed resident execution.",
+      "Existing native provider/tool/journal E2E retained.",
+      "Disjoint writer scopes, independent QA and durable local acceptance."
+    ],
+    "nice_to_have": [
+      "Additional mixed-version stress repetitions.",
+      "Offline non-Windows cross-compilation when existing tools permit."
+    ],
+    "out_of_scope": [
+      "New factory, scheduler or orchestrator.",
+      "Ancillary modernization and unrelated baseline repairs.",
+      "Original dirty checkout changes.",
+      "Remote provider calls, outbound messages, push, deployment or release.",
+      "CrewSync SERVER_DONE claims without authorized server readback."
+    ],
+    "assumptions": [
+      "Historical Windows compatibility targets the byte-zero implementation preserved before the candidate.",
+      "The existing loopback HTTP provider is the authorized provider E2E boundary.",
+      "Architecture freezes metadata strategy before product implementation begins.",
+      "Downstream execution recovers existing native authority and records PLAN_ACCEPTED."
+    ],
+    "risks": [
+      "A simple byte-zero revert can break separate-handle metadata reads and heartbeat writes.",
+      "Source inspection found headlessBrain can construct a brain without a lease when the holder is marked Stuck; the PRD explicitly covers this.",
+      "Unchanged baseline: filelock passed; lease rewrite sampling and standing Linux-unit path assertions failed.",
+      "Independent PRD reviewer launch failed because its configured model was unavailable; local review is recorded in review-rubric.md.",
+      "Graph tools, make and process-level egress verification were unavailable or unverified."
+    ],
+    "ask_user_form": null
+  },
+  "architecture": {
+    "summary": "Use existing Go modular monolith and Windows LockFileEx filelock boundary. Existing dual-range design from .artifacts/plan/architecture.md is a candidate, not accepted. Legacy-byte-zero and new-range simultaneous ownership must be impossible; preserve exact resident caller semantics and headless provider->tools->journal E2E. Source architecture: D:\\Temp\\swe-full-codeaf-20261020\\.artifacts\\plan\\architecture.md",
+    "components": [
+      {
+        "name": "Existing library/runtime",
+        "responsibility": "Implement bounded local issue-owned code using existing project modules",
+        "touches_files": [],
+        "depends_on": []
+      }
+    ],
+    "interfaces": [
+      "Use exact existing Go source signature and schema; no invented external provider or registry contracts"
+    ],
+    "decisions": [
+      {
+        "decision": "MVP first: bounded independent local proof",
+        "rationale": "External runtime and contract gates remain unverified; no fake acceptance"
+      }
+    ],
+    "file_changes_overview": "cmd/codeaf/mission_windows_resident_test.go, internal/filelock/filelock_windows.go, internal/filelock/filelock_windows_compat_test.go, internal/filelock/filelock_windows_test.go, internal/lease/resident.go, internal/lease/resident_test.go"
+  },
+  "review": {
+    "approved": false,
+    "feedback": "Architecture draft is unaccepted. Operator explicitly authorized bounded local test-led implementation only; external live gates remain blocked.",
+    "scope_issues": [],
+    "complexity_assessment": "appropriate",
+    "summary": "Local bounded implementation authorized; do not claim whole-project approval"
+  },
+  "issues": [
+    {
+      "name": "win32-mixed-version-lock-compat",
+      "title": "Repair Windows mixed-version LockFileEx exclusion",
+      "description": "At candidate 45b41f2c existing filelock_windows.go locks 1<<40, whereas historical binaries lock byte 0. RED before GREEN: use real Windows LockFileEx byte-zero holder in a new test; new Lock must return busy on another handle. Repair with minimal compatible protocol that retains both old/new exclusion, handles partial acquisition rollback, unlock, shared/exclusive semantics, and payload read safety. Preserve existing code and never invent new lock service; do not change schema or provider. Architecture document includes dual-range candidate and Windows mapping caveats; implement only proven safe design.",
+      "acceptance_criteria": [
+        "Real byte-zero legacy process lock excludes new exclusive owner",
+        "New-vs-new reader/writer semantics preserved",
+        "No partial lock leak; payload/metadata semantics correctly handled",
+        "Only owned files in commit"
+      ],
+      "depends_on": [],
+      "provides": [
+        "win32-mixed-version-lock-compat"
+      ],
+      "estimated_complexity": "medium",
+      "files_to_create": [
+        "internal/filelock/filelock_windows_compat_test.go"
+      ],
+      "files_to_modify": [
+        "internal/filelock/filelock_windows.go",
+        "internal/filelock/filelock_windows_test.go"
+      ],
+      "testing_strategy": "go test ./internal/filelock -count=1 -timeout 120s; mixed-version actual lock red/green on Windows; go vet ./internal/filelock.",
+      "sequence_number": null,
+      "guidance": {
+        "needs_new_tests": true,
+        "estimated_scope": "medium",
+        "touches_interfaces": true,
+        "needs_deeper_qa": true,
+        "testing_guidance": "go test ./internal/filelock -count=1 -timeout 120s; mixed-version actual lock red/green on Windows; go vet ./internal/filelock.",
+        "review_focus": "Real Windows/local Go regression and exact owned-file scope",
+        "risk_rationale": "MVP correctness and fail-closed state"
+      },
+      "target_repo": ""
+    },
+    {
+      "name": "resident-lease-exact-compat",
+      "title": "Validate and minimally repair resident lifecycle with interoperable filelock",
+      "description": "After compatible filelock passes, use existing resident.go protocol to confirm metadata observation, active lease ownership, tick/release and mixed-version admission behavior. Fail closed on unknown holder, never permit dual ownership. Keep deterministic cancellation and no stale-owner guessing. Add regression only when missing; preserve existing source and no production deploy.",
+      "acceptance_criteria": [
+        "Mixed-version lease never creates two live owners",
+        "Resident readback and release stable under Win32 locking",
+        "Actual headless Windows E2E remains green"
+      ],
+      "depends_on": [
+        "win32-mixed-version-lock-compat"
+      ],
+      "provides": [
+        "resident-lease-exact-compat"
+      ],
+      "estimated_complexity": "medium",
+      "files_to_create": [
+        "cmd/codeaf/mission_windows_resident_test.go"
+      ],
+      "files_to_modify": [
+        "internal/lease/resident.go",
+        "internal/lease/resident_test.go"
+      ],
+      "testing_strategy": "go test ./internal/filelock ./internal/lease -count=1 -timeout 180s; go test ./cmd/codeaf -run '^TestDoFailsFastWhenAnotherProcessHoldsTheResidentLock$|^TestMissionWindowsHeadlessCLI$' -count=1 -timeout 240s.",
+      "sequence_number": null,
+      "guidance": {
+        "needs_new_tests": true,
+        "estimated_scope": "medium",
+        "touches_interfaces": true,
+        "needs_deeper_qa": true,
+        "testing_guidance": "go test ./internal/filelock ./internal/lease -count=1 -timeout 180s; go test ./cmd/codeaf -run '^TestDoFailsFastWhenAnotherProcessHoldsTheResidentLock$|^TestMissionWindowsHeadlessCLI$' -count=1 -timeout 240s.",
+        "review_focus": "Real Windows/local Go regression and exact owned-file scope",
+        "risk_rationale": "MVP correctness and fail-closed state"
+      },
+      "target_repo": ""
+    }
+  ],
+  "levels": [
+    [
+      "win32-mixed-version-lock-compat"
+    ],
+    [
+      "resident-lease-exact-compat"
+    ]
+  ],
+  "file_conflicts": [],
+  "artifacts_dir": "D:\\Temp\\swe-full-codeaf-20261020\\.artifacts\\native30-execute",
+  "rationale": "Recovered from successful actual AgentField PM outputs, checked architecture.md, and explicit local issue file ownership. No repeated PRD or Architect generation; no external side effects."
+}

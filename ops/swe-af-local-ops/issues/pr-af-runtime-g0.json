@@ -1,0 +1,18 @@
+{
+  "name": "pr-af-g0-permanent-dev-runtime-identity",
+  "title": "PR-AF G0: prove maintained Go DEV runtime identity before source changes",
+  "description": "Follow existing PR-AF PLAN.md strictly. First verify CURRENT permanent AgentField DEV installed package identity/source/process/callback URL and 17-reasoner surface. Maintained Go node is go/cmd/pr-af, not the root superseded Python package; note that A55 AgentField 127.0.0.1:18080 is not automatically permanent DEV. If permanent DEV cannot be reached with authorized existing access, report BLOCKED with exact missing evidence; do not substitute local unit tests, patch PR-AF, deploy/restart or fake a G0 pass. Use BMad Help and Quick Dev; update existing PLAN.md only with directly verified facts. Never push or change external callbacks/production. Work only in isolated SWE issue worktree.",
+  "acceptance_criteria": [
+    "Exact CURRENT runtime source, node implementation (Go vs Python) and callback URI independently identified OR explicitly BLOCKED",
+    "Real installed PR-AF reasoner surface count and process identity verified OR explicitly unavailable",
+    "No mutation of AgentField DEV, production, remote callbacks or source if identity not established",
+    "Only supported evidence written back to canonical PLAN.md; no duplicate plan created"
+  ],
+  "files_to_modify": [
+    "PLAN.md"
+  ],
+  "files_to_create": [],
+  "testing_strategy": "First read runtime via authorized AgentField DEV; offline go test ./internal/config -count=1 under go/ is supporting evidence only and not G0 acceptance.",
+  "estimated_complexity": "medium",
+  "needs_deeper_qa": true
+}

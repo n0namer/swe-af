@@ -1,0 +1,32 @@
+From 2d44bf89fffa03e372b7f3b44cee3a2984bd1700 Mon Sep 17 00:00:00 2001
+From: Nikita <nik.gam@gmail.com>
+Date: Tue, 20 Oct 2026 15:26:31 +0300
+Subject: [PATCH] fix(windows): suppress harness CLI console windows
+
+---
+ sdk/python/agentfield/harness/_cli.py | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/sdk/python/agentfield/harness/_cli.py b/sdk/python/agentfield/harness/_cli.py
+index 35d6cb91..677c9c3c 100644
+--- a/sdk/python/agentfield/harness/_cli.py
++++ b/sdk/python/agentfield/harness/_cli.py
+@@ -310,6 +310,7 @@ async def run_cli(
+         env=merged_env,
+         cwd=cwd,
+         start_new_session=True,
++        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+     )
+ 
+     max_output_bytes = _resolve_max_output_bytes()
+@@ -349,6 +350,7 @@ async def run_cli(
+                     capture_output=True,
+                     timeout=5,
+                     check=False,
++                    creationflags=subprocess.CREATE_NO_WINDOW,
+                 )
+             except (OSError, subprocess.SubprocessError):
+                 pass
+-- 
+2.45.2.windows.1
+

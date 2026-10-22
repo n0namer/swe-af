@@ -1,0 +1,14 @@
+# Runtime / private state is not source code
+logs/
+.monitor.lock
+*.lock
+*.tmp
+*.log
+*.jsonl
+.env
+.env.*
+**/__pycache__/
+**/*.pyc
+.venv/
+node_modules/
+# Native DAG plans and issue briefs are tracked as source of truth.

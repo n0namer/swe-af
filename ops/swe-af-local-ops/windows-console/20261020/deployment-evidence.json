@@ -1,0 +1,134 @@
+﻿{
+    "timestamp":  "2026-10-20T12:09:22.6008479Z",
+    "node":  "DESKTOP-A55K2JN",
+    "agentfield_base_sha":  "44167dc1050f5bff79abc32fab19c0bb50643093",
+    "fix_commit":  "6f52089d5edaf4944eedd9b3c4102c1ed46f770f",
+    "deployed_sdk_file":  "D:\\Users\\NIKITA\\Documents\\DEV\\universal-solver-site\\agentfield\\sdk\\python\\agentfield\\harness\\_cli.py",
+    "deployed_sha256":  "417D9036892D72450C293B31A29021E96258A1668E1B2CC0084BFB6D6D583B2A",
+    "installed_diff":  "2 lines added: run_cli CREATE_NO_WINDOW; taskkill CREATE_NO_WINDOW",
+    "sdk_backup":  "D:\\Temp\\af-window-cli-predeploy-20261020-143616.py",
+    "tests":  {
+                  "isolated_pytest_harness_cli":  "42 passed",
+                  "concurrent_cmd_calls":  10,
+                  "concurrent_codex_version_calls":  10,
+                  "child_visible_window_events":  0,
+                  "child_focus_events":  0,
+                  "scheduler_manual_test_runs":  4,
+                  "scheduler_visible_new_console_events":  0,
+                  "scheduler_focus_console_events":  0,
+                  "json_stderr":  "passed",
+                  "timeout":  "passed"
+              },
+    "active_execution_runs":  0,
+    "services":  [
+                     {
+                         "port":  8003,
+                         "pid":  295384,
+                         "node":  "swe-planner",
+                         "status":  "healthy",
+                         "registered_health":  "active",
+                         "heartbeat":  "2026-10-20T12:08:43.0747826Z",
+                         "source_generation":  "predeploy_process_not_recycled"
+                     },
+                     {
+                         "port":  8004,
+                         "pid":  299388,
+                         "node":  "swe-fast",
+                         "status":  "healthy",
+                         "registered_health":  "active",
+                         "heartbeat":  "2026-10-20T12:08:43.1526675Z",
+                         "source_generation":  "predeploy_process_not_recycled"
+                     },
+                     {
+                         "port":  8005,
+                         "pid":  297332,
+                         "node":  "swe-codeaf-validation",
+                         "status":  "healthy",
+                         "registered_health":  "active",
+                         "heartbeat":  "2026-10-20T12:08:43.1724531Z",
+                         "source_generation":  "predeploy_process_not_recycled"
+                     },
+                     {
+                         "port":  8006,
+                         "pid":  285924,
+                         "node":  "swe-codeaf-mvp",
+                         "status":  "healthy",
+                         "registered_health":  "active",
+                         "heartbeat":  "2026-10-20T12:08:43.1718993Z",
+                         "source_generation":  "predeploy_process_not_recycled"
+                     },
+                     {
+                         "port":  8009,
+                         "pid":  344372,
+                         "node":  "swe-factory",
+                         "status":  "healthy",
+                         "registered_health":  "active",
+                         "heartbeat":  "2026-10-20T12:08:43.3586831Z",
+                         "source_generation":  "recycled_after_deploy"
+                     },
+                     {
+                         "port":  8010,
+                         "pid":  360528,
+                         "node":  "swe-factory-30",
+                         "status":  "healthy",
+                         "registered_health":  "active",
+                         "heartbeat":  "2026-10-20T12:08:42.9063403Z",
+                         "source_generation":  "recycled_after_deploy"
+                     }
+                 ],
+    "scheduler":  [
+                      {
+                          "name":  "SWE-AF-Native-Factory",
+                          "state":  "Running",
+                          "last_task_result":  2147946720,
+                          "action":  "powershell.exe",
+                          "arguments":  "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\start-swe-factory.ps1"
+                      },
+                      {
+                          "name":  "SWE-AF-Native-Full30",
+                          "state":  "Running",
+                          "last_task_result":  2147946720,
+                          "action":  "powershell.exe",
+                          "arguments":  "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\start-swe-full30.ps1"
+                      },
+                      {
+                          "name":  "SWE-AF-AgentField-Local-Monitor",
+                          "state":  "Ready",
+                          "last_task_result":  0,
+                          "action":  "powershell.exe",
+                          "arguments":  "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\monitor-agentfield.ps1"
+                      },
+                      {
+                          "name":  "SWE-AF-Full30-Recovery-Watch",
+                          "state":  "Ready",
+                          "last_task_result":  0,
+                          "action":  "D:\\Users\\NIKITA\\Documents\\DEV\\universal-solver-site\\agentfield\\sdk\\python\\.venv\\Scripts\\pythonw.exe",
+                          "arguments":  "\"D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\scheduled-pythonw.py\" \"D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\full30-recovery-watch.py\" \"D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\logs\\task-SWE-AF-Full30-Recovery-Watch\""
+                      },
+                      {
+                          "name":  "AgentField Runtime Diagnostics",
+                          "state":  "Ready",
+                          "last_task_result":  0,
+                          "action":  "C:\\Users\\NIKITA\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\pythonw.exe",
+                          "arguments":  "\"D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\scheduled-pythonw.py\" \"D:\\Users\\NIKITA\\Documents\\DEV\\worktrees\\agentfield-native-local-20261019\\scripts\\agentfield_runtime_diagnostics.py\" \"D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\logs\\task-AgentField-Runtime-Diagnostics\" --state-dir \"C:\\Users\\NIKITA\\.agentfield\\diagnostics\""
+                      },
+                      {
+                          "name":  "AgentField Runtime Diagnostics 8080",
+                          "state":  "Ready",
+                          "last_task_result":  0,
+                          "action":  "C:\\Users\\NIKITA\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\pythonw.exe",
+                          "arguments":  "\"D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\scheduled-pythonw.py\" \"D:\\Users\\NIKITA\\Documents\\DEV\\worktrees\\agentfield-native-local-20261019\\scripts\\agentfield_runtime_diagnostics.py\" \"D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-local-ops\\logs\\task-AgentField-Runtime-Diagnostics-8080\" --url http://127.0.0.1:8080 --state-dir \"C:\\Users\\NIKITA\\.agentfield\\diagnostics\\control-plane-8080\""
+                      },
+                      {
+                          "name":  "AgentField Deep Research 18080",
+                          "state":  "Ready",
+                          "last_task_result":  0,
+                          "action":  "powershell.exe",
+                          "arguments":  "-WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"D:\\_cache\\agentfield-ui-runtime\\afdr-18080-start.ps1\""
+                      }
+                  ],
+    "independent_qa":  "not completed",
+    "real_codex_reasoning_e2e":  "not run",
+    "legacy_node_recycle":  "not performed; source/version in live memory requires owner-aware recycle",
+    "whole_host_reboot":  "not performed"
+}

@@ -1,0 +1,198 @@
+{
+  "prd": {
+    "validated_description": "ROUTING: Sol / High \u00b7 confidence 96% \u00b7 Source-verified integration and durability requirements. Created .artifacts/plan/prd.md, grounded in HEAD c821400615d02c85fc6913543c7e9e66fd3e759f. Independent PRD QA passed; reviews are in review-prd.md and review-source.md. Offline focused/package Go tests and go vet passed. Product source and Git HEAD remain unchanged. Next: canonical contract discovery and architecture review before PLAN_ACCEPTED.",
+    "acceptance_criteria": [
+      "AC-01: Existing retrieval, provenance, isolation and replay-key regression tests pass unchanged.",
+      "AC-02: Repeated rebuilds across input permutations produce identical ordered hits and reports without mutating inputs.",
+      "AC-03: Every invalid Registry/profile/owner/eligibility case causes zero reservations and zero execution submissions.",
+      "AC-04: Production composition rejects invalid pins, profiles and selection limits before execution.",
+      "AC-05: Replay keys distinguish every request, profile, provenance, pin and execution-binding field across processes.",
+      "AC-06: A new process replays the identical durable terminal receipt with exactly one total submission.",
+      "AC-07: Concurrent processes produce exactly one submission; foreign reservation holders cannot commit.",
+      "AC-08: Crash, cancellation and ambiguous-effect tests retain fences and prevent blind resubmission.",
+      "AC-09: Malformed, nonterminal, foreign and corrupt receipts never become successful replay results.",
+      "AC-10: AgentField transport tests enforce terminal completion, deadlines, response bounds, redirect refusal and credential isolation.",
+      "AC-11: Missing runtime produces BLOCKED_RUNTIME without synthetic success.",
+      "AC-12: Hot hits and misses cause zero implicit acquisition or provider calls.",
+      "AC-13: Required MVP tests, package tests and go vet pass offline, with test-name discovery preventing empty-test acceptance.",
+      "AC-14: Independent authorized runtime verification confirms exact provenance, terminal AgentField evidence and one effect across replay; otherwise runtime acceptance remains blocked."
+    ],
+    "must_have": [
+      "Preserve existing WIP adapter, fail-closed boundaries and current HEAD fixes.",
+      "Freeze canonical contracts before parallel resolver, transport and durable-store implementation.",
+      "Verify exact profile membership, skill ownership, provenance and eligibility through read-only canonical authority.",
+      "Provide cross-process atomic reservations, ownership fencing and validated durable receipt envelopes.",
+      "Use independent native QA and evidence-triggered advisor/replanning.",
+      "Separate offline acceptance from real-runtime MVP acceptance."
+    ],
+    "nice_to_have": [
+      "Additional retrieval-quality fixtures and local benchmarks.",
+      "Read-only visibility into pending execution fences."
+    ],
+    "out_of_scope": [
+      "Registry authority, promotion or policy changes.",
+      "A new orchestrator, scheduler or task store.",
+      "Implicit cold acquisition or external provider calls.",
+      "Distributed storage and automatic ambiguous-effect retries.",
+      "Original dirty-source mutation, cache commits, pushes or deployment."
+    ],
+    "assumptions": [
+      "Unavailable canonical wire contracts block dependent adapters rather than permit invented endpoints.",
+      "MVP durability targets multiple processes sharing one local A55 store.",
+      "Real-runtime canaries require explicit authorization and available canonical runtimes.",
+      "The PRD is independently reviewed planning input, not PLAN_ACCEPTED or execution authority."
+    ],
+    "risks": [
+      "Current Load/Save interfaces and process-local mutexes do not establish cross-process fencing.",
+      "Current receipt validation checks execution ID without proving successful terminal completion.",
+      "Registry and AgentField runtime acceptance remains unverified.",
+      "Race testing is blocked by disabled cgo; offline package tests and vet passed."
+    ],
+    "ask_user_form": null
+  },
+  "architecture": {
+    "summary": "Preserve current Go package boundaries and exact trusted skill provenance. Existing WIP c821400 has hot adapter, cloning, replay-key patch. Architecture file explicitly marks external C1 Registry/Profile and C2 AgentField target contracts blocked. Independently implement only local in-process, version-exact testable pieces; no invented external routes or Registry authority. Durable reservation/commit is local host only. Source architecture: D:\\Temp\\swe-full-skill-intelligence-20261020\\.artifacts\\plan\\architecture.md",
+    "components": [
+      {
+        "name": "Existing library/runtime",
+        "responsibility": "Implement bounded local issue-owned code using existing project modules",
+        "touches_files": [],
+        "depends_on": []
+      }
+    ],
+    "interfaces": [
+      "Use exact existing Go source signature and schema; no invented external provider or registry contracts"
+    ],
+    "decisions": [
+      {
+        "decision": "MVP first: bounded independent local proof",
+        "rationale": "External runtime and contract gates remain unverified; no fake acceptance"
+      }
+    ],
+    "file_changes_overview": "skillindex/hot_agentfield.go, skillindex/hot_agentfield_native_mvp_test.go, skillindex/hot_native_integration_test.go, skillindex/hot_profile_contract.go, skillindex/hot_profile_contract_test.go, skillindex/hot_receipt_store.go, skillindex/hot_receipt_store_test.go"
+  },
+  "review": {
+    "approved": false,
+    "feedback": "Architecture draft is unaccepted. Operator explicitly authorized bounded local test-led implementation only; external live gates remain blocked.",
+    "scope_issues": [],
+    "complexity_assessment": "appropriate",
+    "summary": "Local bounded implementation authorized; do not claim whole-project approval"
+  },
+  "issues": [
+    {
+      "name": "hot-receipt-durable-local-fence",
+      "title": "Implement local durable idempotent receipt reservation",
+      "description": "Build a small local file-backed, crash-restart recoverable reservation and terminal receipt mechanism for existing skillindex AgentField hot execution seam, using local Go stdlib only. Must preserve exact binding-key+request-key, distinguish in-progress from completed and fail closed on corruption/conflict. Do not invent external Registry/AgentField contract, new scheduler or promoted capability; use existing hot_agentfield types, keep separate new files and tests, and no external calls.",
+      "acceptance_criteria": [
+        "Exact same binding key/request key does not cause second effect",
+        "Different binding or conflicting receipt rejected",
+        "Crash/restart preserves terminal and in-progress fences",
+        "No external side effects; clear limitations"
+      ],
+      "depends_on": [],
+      "provides": [
+        "hot-receipt-durable-local-fence"
+      ],
+      "estimated_complexity": "medium",
+      "files_to_create": [
+        "skillindex/hot_receipt_store.go",
+        "skillindex/hot_receipt_store_test.go"
+      ],
+      "files_to_modify": [],
+      "testing_strategy": "go test ./skillindex -count=1 -timeout 120s; add subprocess/restart and key-mismatch negative regression; targeted go vet.",
+      "sequence_number": null,
+      "guidance": {
+        "needs_new_tests": true,
+        "estimated_scope": "medium",
+        "touches_interfaces": true,
+        "needs_deeper_qa": true,
+        "testing_guidance": "go test ./skillindex -count=1 -timeout 120s; add subprocess/restart and key-mismatch negative regression; targeted go vet.",
+        "review_focus": "Real Windows/local Go regression and exact owned-file scope",
+        "risk_rationale": "MVP correctness and fail-closed state"
+      },
+      "target_repo": ""
+    },
+    {
+      "name": "hot-exact-profile-contract-check",
+      "title": "Pin local profile/skill identity and fail-closed input contracts",
+      "description": "In local skillindex library use existing ExactReference, TrustedSkillPin and query/profile types. Provide minimal local validation and regression for exact immutable profile-skill binding, owner/source/trust evidence and stale/forged input rejection. Do not create a fake authoritative Registry, invent live remote endpoint, or promote skill. Other new files must be disjoint from receipt store; if exact owner contract absent, return typed BLOCKED_CONTRACT, not fabricated allowed.",
+      "acceptance_criteria": [
+        "No mutable aliases or unverified source becomes eligible",
+        "Existing hot adapter/index behavior preserved",
+        "Block unproven external membership claims"
+      ],
+      "depends_on": [],
+      "provides": [
+        "hot-exact-profile-contract-check"
+      ],
+      "estimated_complexity": "medium",
+      "files_to_create": [
+        "skillindex/hot_profile_contract.go",
+        "skillindex/hot_profile_contract_test.go"
+      ],
+      "files_to_modify": [],
+      "testing_strategy": "go test ./skillindex -count=1 -timeout 120s; tests fail closed on nonexact/mismatched/missing owner/profile evidence.",
+      "sequence_number": null,
+      "guidance": {
+        "needs_new_tests": true,
+        "estimated_scope": "medium",
+        "touches_interfaces": true,
+        "needs_deeper_qa": true,
+        "testing_guidance": "go test ./skillindex -count=1 -timeout 120s; tests fail closed on nonexact/mismatched/missing owner/profile evidence.",
+        "review_focus": "Real Windows/local Go regression and exact owned-file scope",
+        "risk_rationale": "MVP correctness and fail-closed state"
+      },
+      "target_repo": ""
+    },
+    {
+      "name": "hot-native-integration-qa",
+      "title": "Integrate verified local fences with existing AgentField seam",
+      "description": "After local durable fence and profile contract artifacts pass QA, minimally wire their existing interfaces into hot_agentfield.go while preserving c821400 exact execution receipt key and clone isolation. One permitted local in-process or loopback fixture verifies selection -> exact resolution -> one submission -> validated terminal receipt and restart replay. Fail closed for missing C1/C2 remote contracts; no external HTTP calls without permission, no Registry promotion.",
+      "acceptance_criteria": [
+        "At most one local effect on same exact binding",
+        "Invalid/stale receipt refused",
+        "No fake success on unknown registry or deployment",
+        "Evidence identifies local fixture not real external DEV"
+      ],
+      "depends_on": [
+        "hot-receipt-durable-local-fence",
+        "hot-exact-profile-contract-check"
+      ],
+      "provides": [
+        "hot-native-integration-qa"
+      ],
+      "estimated_complexity": "medium",
+      "files_to_create": [
+        "skillindex/hot_native_integration_test.go"
+      ],
+      "files_to_modify": [
+        "skillindex/hot_agentfield.go",
+        "skillindex/hot_agentfield_native_mvp_test.go"
+      ],
+      "testing_strategy": "go test ./skillindex ./authoring ./acquisition -count=1 -timeout 180s; independent adversarial replay-key QA.",
+      "sequence_number": null,
+      "guidance": {
+        "needs_new_tests": true,
+        "estimated_scope": "medium",
+        "touches_interfaces": true,
+        "needs_deeper_qa": true,
+        "testing_guidance": "go test ./skillindex ./authoring ./acquisition -count=1 -timeout 180s; independent adversarial replay-key QA.",
+        "review_focus": "Real Windows/local Go regression and exact owned-file scope",
+        "risk_rationale": "MVP correctness and fail-closed state"
+      },
+      "target_repo": ""
+    }
+  ],
+  "levels": [
+    [
+      "hot-receipt-durable-local-fence",
+      "hot-exact-profile-contract-check"
+    ],
+    [
+      "hot-native-integration-qa"
+    ]
+  ],
+  "file_conflicts": [],
+  "artifacts_dir": "D:\\Temp\\swe-full-skill-intelligence-20261020\\.artifacts\\native30-execute",
+  "rationale": "Recovered from successful actual AgentField PM outputs, checked architecture.md, and explicit local issue file ownership. No repeated PRD or Architect generation; no external side effects."
+}

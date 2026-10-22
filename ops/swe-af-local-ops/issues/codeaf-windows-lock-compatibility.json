@@ -1,0 +1,21 @@
+{
+  "name": "codeaf-windows-mixed-version-resident-lock",
+  "title": "Preserve Windows filelock mixed-version exclusion without breaking readable payloads",
+  "description": "Continue CodeAF MVP from clean candidate 45b41f2c3a72902aef6e35a5b95f4ff30ede80d2 in D:\\Temp\\swe-codeaf-clean-repair-20261020, with baseline existing code, no new orchestration. The real native Windows TestMissionWindowsHeadlessCLI has PASSED in 46.89s: codeaf do -> localhost mock provider -> schema-correct edits[].old/new -> 41->42 -> Go test -> JSON ok=true/stop=done -> nonempty SQLite journal. Existing filelock implementation internal/filelock/filelock_windows.go moved LockFileEx from byte 0 to 1<<40 to let holder payloads be readable. Independent reviewer reproduced a BLOCKING mixed-version bug: older CodeAF binary locking byte 0 and newer binary locking 1<<40 can both acquire exclusive lock on same resident file. Reproduce this before repairing: write an actual Windows regression that holds byte zero with Win32 windows.LockFileEx and calls current filelock.Lock on a second handle; new lock MUST fail busy. Also preserve new-new exclusive contention, unlocking/reacquisition, reading metadata/payload where possible, and no silently permitted double resident owners. Prefer the smallest safe compatibility fix in existing filelock/lease protocols, not inventing a new lock service. If simultaneous readability and legacy lock cannot both be guaranteed, fail closed for legacy holder with honest error/unknown holder; never sacrifice mutual exclusion. Preserve existing productive CodeAF E2E and targeted filelock/lease tests. Treat scope as one coherent code+test task. Do not touch dirty original CodeAF, deploy, push, external send or CrewSync acceptance. Run tests with process-local TEMP/TMP/GOTMPDIR=D:\\Temp\\codeaf-b1-go-temp-20261019, GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off. Go test ./internal/filelock ./internal/lease and TestMissionWindowsHeadlessCLI plus go build ./cmd/codeaf. Review dirty worktree and commit only owned changes, provide SHA, test evidence, remaining gate. The independent reviewer MUST fail closed on mixed-version lock collision.",
+  "acceptance_criteria": [
+    "Native Windows legacy byte-zero exclusive holder and new filelock exclusive holder cannot coexist on same file",
+    "New-new Windows lock contention and release remain correct; resident lease fails closed on incompatible holder",
+    "Existing TestMissionWindowsHeadlessCLI remains PASS and verifies physical provider->edit->Go fixture tests->durable journal",
+    "Affected Go tests and build PASS with bounded offline env; no unrelated source changes or generated caches committed",
+    "Return exact git SHA, independent QA verdict, and explicit unaccepted status until reviewer approves"
+  ],
+  "files_to_modify": [
+    "internal/filelock/filelock_windows.go",
+    "internal/filelock/filelock_windows_test.go",
+    "internal/lease/resident_test.go"
+  ],
+  "files_to_create": [],
+  "testing_strategy": "RED first: Windows LockFileEx at byte 0 held by old implementation, new filelock.Lock on another handle must return IsBusy. Then minimal compatible fix. go test ./internal/filelock ./internal/lease -count=1 -timeout 120s; go test ./cmd/codeaf -run '^TestMissionWindowsHeadlessCLI$' -count=1 -timeout 180s; go build ./cmd/codeaf. No full-package long tests until targeted GREEN.",
+  "estimated_complexity": "medium",
+  "needs_deeper_qa": true
+}

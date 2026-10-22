@@ -1,0 +1,160 @@
+{
+  "prd": {
+    "validated_description": "ROUTING: Sol / High \u00b7 confidence 97% \u00b7 Evidence-sensitive runtime requirements. FACT: Wrote .artifacts/plan/prd.md and independent QA receipt .artifacts/plan/review-rubric.md. Committed locally as dc8d42e366952ff717331ad8a8e33f4e8e297133. Planning QA passed with boundaries; post-commit document checks passed. Product completion remains BLOCKED: no CURRENT DEV identity, functional canary, semantic E2E or SourceLoop acceptance was established. No product source changed or external publication occurred.",
+    "acceptance_criteria": [
+      "AC-01: Verify baseline HEAD, preserve existing edits and restrict changes to the task allowlist.",
+      "AC-02: Prove CURRENT permanent DEV Go source, installed artifact and process identity; missing evidence blocks G0.",
+      "AC-03: Assert exact 17-reasoner discovery and callback reachability from the control-plane namespace.",
+      "AC-04: Execute all five specified node contract tests without skips.",
+      "AC-05: Assert dry-run produces zero GitHub writes using recording fakes and a positive control.",
+      "AC-06: Execute all six specified orchestration regressions without skips.",
+      "AC-07: Verify configuration precedence, effective limits and evidence supporting any spend-enforcement claim.",
+      "AC-08: Pass build, vet, required tests and formatting checks; reject skipped mandatory tests.",
+      "AC-09: Require actual passing functional test events; exit-zero skips cannot pass acceptance.",
+      "AC-10: Prove a bounded current DEV canary with coherent execution DAG and zero GitHub mutations.",
+      "AC-11: Accept an unmocked pinned real-PR review only against frozen behavioral witnesses, negative controls and independent QA.",
+      "AC-12: Preserve failures, classify ownership, replan affected dependencies and keep positive semantic acceptance false.",
+      "AC-13: Verify SourceLoop captured-diff and durable-dev equality, or evidence an explicit no-runtime-delta case.",
+      "AC-14: Use at most three concurrent workers, disjoint writes, independent QA and truthful advisor availability.",
+      "AC-15: Create scoped local commits after checks and report local, functional, semantic and durability acceptance separately."
+    ],
+    "must_have": [
+      "Preserve the maintained Go implementation and existing architecture.",
+      "Follow canonical PLAN.md gates with dependency-aware parallel execution capped at three workers.",
+      "Permit independently verified local improvements while runtime gates remain blocked.",
+      "Require CURRENT identity, callback, semantic and SourceLoop evidence.",
+      "Use BMad Quick Dev, independent QA, scoped local commits and evidence-based replanning."
+    ],
+    "nice_to_have": [
+      "A second representative semantic PR after MVP acceptance.",
+      "Additional bounded fault-injection coverage using existing seams."
+    ],
+    "out_of_scope": [
+      "New architecture, replacement pipelines or speculative rewrites.",
+      "Push, PR publication, comments, outbound messages, deployment or shared-system restarts.",
+      "Production, credential, access or billing changes.",
+      "SourceLoop redesign, automatic promotion or orchestration-owned compensating product changes."
+    ],
+    "assumptions": [
+      "ASSUMPTION: Future semantic execution requires an authorized pinned real-PR snapshot and existing permitted provider access.",
+      "FACT: The PRD is ready for downstream review; PLAN_ACCEPTED and runtime gate acceptance were not manufactured.",
+      "FACT: Existing untracked local state was preserved and excluded from the commit."
+    ],
+    "risks": [
+      "G0 remains blocked: af is unavailable; Docker readback supplied no CURRENT runtime evidence.",
+      "Config tests passed; node/orchestrator tests were blocked by dependency-cache permissions.",
+      "Existing config formatting differences were observed and left unchanged.",
+      "Current cost reporting does not establish hard provider-spend enforcement.",
+      "Native issue advisor was unavailable; one research agent encountered provider 429 exhaustion.",
+      "Next step: obtain authorized sanitized CURRENT DEV readback while progressing eligible local verification tasks."
+    ],
+    "ask_user_form": null
+  },
+  "architecture": {
+    "summary": "PR-AF current North Star depends on Go permanent DEV runtime identity, not local source alone. PLAN.md is canonical and G0 remains blocked, no deploy or external messages. Local Go node is 17 reasoners, with typed SDK review and trace. Implement independent local negative-path regression tasks only; preserve existing source and fail closed on missing SDK cache or CURRENT runtime evidence. Source architecture: D:\\Temp\\swe-full-pr-af-20261020\\.artifacts\\plan\\architecture.md",
+    "components": [
+      {
+        "name": "Existing library/runtime",
+        "responsibility": "Implement bounded local issue-owned code using existing project modules",
+        "touches_files": [],
+        "depends_on": []
+      }
+    ],
+    "interfaces": [
+      "Use exact existing Go source signature and schema; no invented external provider or registry contracts"
+    ],
+    "decisions": [
+      {
+        "decision": "MVP first: bounded independent local proof",
+        "rationale": "External runtime and contract gates remain unverified; no fake acceptance"
+      }
+    ],
+    "file_changes_overview": "go/internal/node/node_test.go, go/internal/node/register_test.go, go/internal/node/runtime_identity_test.go, go/internal/orch/output.go, go/internal/orch/output_test.go, go/internal/orch/review_failure_gate_test.go"
+  },
+  "review": {
+    "approved": false,
+    "feedback": "Architecture draft is unaccepted. Operator explicitly authorized bounded local test-led implementation only; external live gates remain blocked.",
+    "scope_issues": [],
+    "complexity_assessment": "appropriate",
+    "summary": "Local bounded implementation authorized; do not claim whole-project approval"
+  },
+  "issues": [
+    {
+      "name": "pr-go-node-local-runtime-contract",
+      "title": "Check maintained PR-AF Go node registration and callback contract",
+      "description": "Using existing Go node registration and package manifest, add/repair smallest local deterministic regressions proving maintained Go 17-reasoner registration and callback wiring. Distinguish Go from legacy Python local-path install; do not alter shared runtime or fake installed source identity. If SDK v0.1.130 unavailable, record typed dependency blocker instead of modifying go.mod or downloading without authorization. Only edit files in go/internal/node.",
+      "acceptance_criteria": [
+        "Expected reasoner registration and routed callback exercised locally",
+        "Go/Python selector ambiguity clearly represented",
+        "No service mutation or promoted runtime identity"
+      ],
+      "depends_on": [],
+      "provides": [
+        "pr-go-node-local-runtime-contract"
+      ],
+      "estimated_complexity": "medium",
+      "files_to_create": [
+        "go/internal/node/runtime_identity_test.go"
+      ],
+      "files_to_modify": [
+        "go/internal/node/register_test.go",
+        "go/internal/node/node_test.go"
+      ],
+      "testing_strategy": "cd go && go test ./internal/node -count=1 -timeout 120s; report missing external module as BLOCKED_INFRA, no fake green.",
+      "sequence_number": null,
+      "guidance": {
+        "needs_new_tests": true,
+        "estimated_scope": "medium",
+        "touches_interfaces": true,
+        "needs_deeper_qa": true,
+        "testing_guidance": "cd go && go test ./internal/node -count=1 -timeout 120s; report missing external module as BLOCKED_INFRA, no fake green.",
+        "review_focus": "Real Windows/local Go regression and exact owned-file scope",
+        "risk_rationale": "MVP correctness and fail-closed state"
+      },
+      "target_repo": ""
+    },
+    {
+      "name": "pr-go-review-local-failclosed",
+      "title": "Strengthen local PR review result fail-closed behavior",
+      "description": "Inspect existing orchestrator tests and only repair source-level genuine defects in failure propagation, empty/no evidence result and bounded partial-review finalization. Preserve typed API and existing orchestrator, no new provider or SDK; add focused adversarial unit regression without posting PR comments or remote GitHub mutations.",
+      "acceptance_criteria": [
+        "Empty or contradictory evidence cannot be emitted as positive useful review",
+        "Actual partial/failure result is truthful and bounded",
+        "No external outbound call or changed public schema"
+      ],
+      "depends_on": [],
+      "provides": [
+        "pr-go-review-local-failclosed"
+      ],
+      "estimated_complexity": "medium",
+      "files_to_create": [
+        "go/internal/orch/review_failure_gate_test.go"
+      ],
+      "files_to_modify": [
+        "go/internal/orch/output.go",
+        "go/internal/orch/output_test.go"
+      ],
+      "testing_strategy": "cd go && go test ./internal/orch -count=1 -timeout 120s; report offline module limitation separately.",
+      "sequence_number": null,
+      "guidance": {
+        "needs_new_tests": true,
+        "estimated_scope": "medium",
+        "touches_interfaces": true,
+        "needs_deeper_qa": true,
+        "testing_guidance": "cd go && go test ./internal/orch -count=1 -timeout 120s; report offline module limitation separately.",
+        "review_focus": "Real Windows/local Go regression and exact owned-file scope",
+        "risk_rationale": "MVP correctness and fail-closed state"
+      },
+      "target_repo": ""
+    }
+  ],
+  "levels": [
+    [
+      "pr-go-node-local-runtime-contract",
+      "pr-go-review-local-failclosed"
+    ]
+  ],
+  "file_conflicts": [],
+  "artifacts_dir": "D:\\Temp\\swe-full-pr-af-20261020\\.artifacts\\native30-execute",
+  "rationale": "Recovered from successful actual AgentField PM outputs, checked architecture.md, and explicit local issue file ownership. No repeated PRD or Architect generation; no external side effects."
+}

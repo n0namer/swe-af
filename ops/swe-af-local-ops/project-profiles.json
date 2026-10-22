@@ -1,0 +1,76 @@
+{
+  "schema": "swe-af-local-project-profiles.v1",
+  "agentfield_url": "http://127.0.0.1:18080",
+  "submission_target": "swe-factory.implement_issue",
+  "swe_af_code_root": "D:\\Users\\NIKITA\\Documents\\DEV\\swe-af-native-runtime-heartbeat-20261020",
+  "swe_af_code_sha": "675c2f73689fdfe852736c4a2cf8cca8a9bab355",
+  "monitor": {
+    "task_name": "SWE-AF-AgentField-Local-Monitor",
+    "interval_seconds": 60,
+    "read_only": true
+  },
+  "model_policy": {
+    "runtime": "codex",
+    "coder": "gpt-6-luna",
+    "qa": "gpt-6.1-sol",
+    "reviewer": "gpt-6.1-sol",
+    "verifier": "gpt-6.1-sol",
+    "no_external_sends": true
+  },
+  "initial_limits": {
+    "max_parallel_issue_roots": 30,
+    "agent_timeout_seconds": 1800,
+    "coding_iterations": 2,
+    "agent_max_turns": 18,
+    "scale_only_after_real_qa": false
+  },
+  "full_dag_issue_limits": {
+    "pr-af": 10,
+    "af-skill-intelligence": 10,
+    "codeaf": 10
+  },
+  "projects": [
+    {
+      "id": "pr-af",
+      "canonical_source": "D:\\Users\\NIKITA\\Documents\\DEV\\universal-solver-site\\pr-af",
+      "safe_repo_path": "D:\\Temp\\swe-pr-af-mission-20261020",
+      "base_branch": "mission/swe-pr-af-20261020",
+      "source_of_truth": "PLAN.md",
+      "prerequisite": "AgentField permanent DEV CURRENT Go/Python runtime/source/callback identity G0 must be confirmed",
+      "readiness": "g0_runtime_unverified",
+      "first_test": "go test ./internal/config -count=1",
+      "branch_prefix": "issue/pr-af-",
+      "cross_dependencies": [
+        "agentfield-dev"
+      ]
+    },
+    {
+      "id": "codeaf",
+      "canonical_source": "D:\\Users\\NIKITA\\Documents\\DEV\\universal-solver-site\\CodeAF",
+      "safe_repo_path": "D:\\Temp\\swe-codeaf-clean-repair-20261020",
+      "base_branch": "mission/codeaf-clean-lock-repair-20261020",
+      "source_of_truth": "Existing CrewSync task codeaf:v2-r10-native-mvp-e2e-20261014-r1 and native Go source",
+      "prerequisite": "Existing native E2E green, Windows filelock mixed-version exclusion remains unaccepted; continue on clean WIP candidate, no duplicate active SWE-AF issue",
+      "readiness": "ready_for_filelock_compatibility_repair",
+      "first_test": "go test ./cmd/codeaf -run TestMissionWindowsHeadlessCLI -count=1",
+      "branch_prefix": "issue/codeaf-",
+      "cross_dependencies": []
+    },
+    {
+      "id": "af-skill-intelligence",
+      "canonical_source": "D:\\Users\\NIKITA\\Documents\\DEV\\universal-solver-site\\af-skill-intelligence",
+      "safe_repo_path": "D:\\Temp\\swe-skill-intelligence-mission-20261020",
+      "base_branch": "mission/swe-skill-intelligence-20261020",
+      "wip_snapshot_sha": "fdfa3d0f8d365d76dfe9c96f9e68d111b290f1b2",
+      "source_of_truth": "README.md, existing BMad output, exact Registry/AgentField source and independent QA",
+      "prerequisite": "Preserve unaccepted candidate; independent QA for AgentField hot adapter before integration",
+      "readiness": "ready_for_independent_qa",
+      "first_test": "go test ./skillindex -count=1",
+      "branch_prefix": "issue/skill-intelligence-",
+      "cross_dependencies": [
+        "agentfield-go-sdk",
+        "universal-solver-registry"
+      ]
+    }
+  ]
+}
