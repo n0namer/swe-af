@@ -2,6 +2,7 @@ package dag
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,19 +45,29 @@ func saveCheckpoint(dagState *schemas.DAGState, note noteFunc) {
 }
 
 // loadCheckpoint loads DAGState from a checkpoint file, or returns nil when not
-// found. Ports _load_checkpoint. It round-trips a checkpoint written by either
-// the Python or Go executor (DAGState.UnmarshalJSON seeds max_replans=2).
+// found or invalid. Kept for non-resume inspection callers and existing tests.
 func loadCheckpoint(artifactsDir string) *schemas.DAGState {
+	state, err := loadCheckpointStrict(artifactsDir)
+	if err != nil {
+		return nil
+	}
+	return state
+}
+
+// loadCheckpointStrict loads and validates a checkpoint, preserving the cause of
+// read/decode failures. Resume must fail closed rather than silently initialize a
+// fresh DAG when durable state exists but cannot be restored.
+func loadCheckpointStrict(artifactsDir string) (*schemas.DAGState, error) {
 	path := filepath.Join(artifactsDir, "execution", "checkpoint.json")
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil // not found (or unreadable) -> None
+		return nil, fmt.Errorf("read checkpoint %s: %w", path, err)
 	}
 	var state schemas.DAGState
 	if err := json.Unmarshal(b, &state); err != nil {
-		return nil
+		return nil, fmt.Errorf("decode checkpoint %s: %w", path, err)
 	}
-	return &state
+	return &state, nil
 }
 
 // initDAGState extracts a DAGState from a PlanResult dict, populating all
