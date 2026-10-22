@@ -69,6 +69,18 @@ def is_dirty(repo_path: str) -> bool:
     return bool(_git(repo_path, "status", "--porcelain").stdout.strip())
 
 
+def _is_retryable_worktree_add_failure(detail: str) -> bool:
+    """Whether a failed worktree add can be retried without repeating intent."""
+    normalized = detail.lower()
+    if "reference already exists" in normalized or "branch named" in normalized:
+        return False
+    return (
+        "another git process seems to be running" in normalized
+        or "could not lock" in normalized
+        or ("unable to create" in normalized and "file exists" in normalized)
+    )
+
+
 def add_worktree(
     repo_path: str,
     worktree_path: str,
@@ -78,13 +90,15 @@ def add_worktree(
 ) -> None:
     """Create an isolated worktree on a new branch off base_sha.
 
-    Retries a few times because concurrent ``git worktree add`` calls against
-    the same repository can briefly contend on the repo lock — the exact
-    scenario a fan-out caller creates.
+    Retries only transient repository-lock contention. Deterministic failures
+    such as a branch collision fail immediately so recovery does not repeat
+    the same mutation attempt.
     """
     os.makedirs(os.path.dirname(worktree_path), exist_ok=True)
     last_detail = ""
+    attempts_used = 0
     for attempt in range(1, attempts + 1):
+        attempts_used = attempt
         proc = _git(
             repo_path, "worktree", "add", "-b", branch, worktree_path, base_sha,
             check=False,
@@ -92,13 +106,19 @@ def add_worktree(
         if proc.returncode == 0:
             return
         last_detail = proc.stderr.strip() or proc.stdout.strip()
+        if not _is_retryable_worktree_add_failure(last_detail):
+            break
         if attempt < attempts:
             time.sleep(0.5 * attempt)
-    raise GitOpsError(f"git worktree add failed after {attempts} attempts: {last_detail}")
+    raise GitOpsError(f"git worktree add failed after {attempts_used} attempts: {last_detail}")
 
 
 def _has_commit_identity(repo_path: str) -> bool:
-    return bool(_git(repo_path, "config", "user.email", check=False).stdout.strip())
+    """Whether Git can create a commit without an explicit fallback identity."""
+    return all(
+        _git(repo_path, "config", key, check=False).stdout.strip()
+        for key in ("user.name", "user.email")
+    )
 
 
 # Bytecode/cache junk that must never be versioned on the issue branch. The

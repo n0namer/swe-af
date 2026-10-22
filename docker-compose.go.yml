@@ -67,7 +67,10 @@ services:
       # container-reachable: the engine otherwise advertises
       # http://localhost:8801, which the control plane cannot reach from its
       # own container.
-      - SWE_PRO_ENGINE=${SWE_PRO_ENGINE:-}
+      # The classic surface includes swe-planner.implement_issue, which is the
+      # target-native semantic canary for this node. Opt into swe-pro explicitly
+      # when that alternate surface is wanted.
+      - SWE_PRO_ENGINE=${SWE_PRO_ENGINE:-0}
       - SWE_PRO_PUBLIC_URL=${SWE_PRO_PUBLIC_URL:-http://swe-agent-go:8801}
       - SWE_PRO_MODELS_HIGH=${SWE_PRO_MODELS_HIGH:-}
       - SWE_PRO_MODELS_LOW=${SWE_PRO_MODELS_LOW:-}
