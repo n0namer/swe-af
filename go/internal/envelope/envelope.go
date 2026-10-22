@@ -14,6 +14,84 @@ import (
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
 )
 
+// Binding is the optional G8 provenance and correlation binding carried by
+// execution envelopes and checkpoints. All fields are optional so envelopes
+// produced by older callers remain valid.
+type Binding struct {
+	CapabilityID  string `json:"capability_id,omitempty"`
+	DefinitionID  string `json:"definition_id,omitempty"`
+	SourceRevision string `json:"source_revision,omitempty"`
+	ParentID      string `json:"parent_id,omitempty"`
+	RootID        string `json:"root_id,omitempty"`
+	ThreadID      string `json:"thread_id,omitempty"`
+}
+
+var bindingKeys = []string{"capability_id", "definition_id", "source_revision", "parent_id", "root_id", "thread_id"}
+
+// BindingFrom extracts the canonical binding from a map. AgentField's native
+// names are accepted as aliases for parent/root correlation, and nested
+// provenance/correlation maps are accepted for compatibility with new clients.
+func BindingFrom(values map[string]any) Binding {
+	var b Binding
+	if values == nil {
+		return b
+	}
+	read := func(key string) string {
+		if v, ok := values[key].(string); ok {
+			return strings.TrimSpace(v)
+		}
+		return ""
+	}
+	b.CapabilityID, b.DefinitionID, b.SourceRevision = read("capability_id"), read("definition_id"), read("source_revision")
+	b.ParentID, b.RootID, b.ThreadID = read("parent_id"), read("root_id"), read("thread_id")
+	if b.ParentID == "" { b.ParentID = read("parent_execution_id") }
+	if b.RootID == "" { b.RootID = read("root_workflow_id") }
+	for key := range map[string]struct{}{"provenance": {}, "correlation": {}} {
+		nested, ok := values[key].(map[string]any)
+		if !ok { continue }
+		if key == "provenance" {
+			if b.CapabilityID == "" { b.CapabilityID = mapString(nested, "capability_id") }
+			if b.DefinitionID == "" { b.DefinitionID = mapString(nested, "definition_id") }
+			if b.SourceRevision == "" { b.SourceRevision = mapString(nested, "source_revision") }
+		} else {
+			if b.ParentID == "" { b.ParentID = mapString(nested, "parent_id") }
+			if b.RootID == "" { b.RootID = mapString(nested, "root_id") }
+			if b.ThreadID == "" { b.ThreadID = mapString(nested, "thread_id") }
+		}
+	}
+	return b
+}
+
+func mapString(m map[string]any, key string) string {
+	if s, ok := m[key].(string); ok { return strings.TrimSpace(s) }
+	return ""
+}
+
+// HasBinding reports whether values carry at least one binding field.
+func HasBinding(values map[string]any) bool {
+	if values == nil { return false }
+	for _, key := range bindingKeys { if _, ok := values[key]; ok { return true } }
+	_, p := values["provenance"]
+	_, c := values["correlation"]
+	return p || c || values["parent_execution_id"] != nil || values["root_workflow_id"] != nil
+}
+
+// ValidateBinding checks only fields present in expected. Empty expected fields
+// are ignored, preserving compatibility with legacy calls and partial bindings.
+func ValidateBinding(actual, expected map[string]any) error {
+	if !HasBinding(expected) { return nil }
+	a, e := BindingFrom(actual), BindingFrom(expected)
+	for name, pair := range map[string][2]string{
+		"capability_id": {a.CapabilityID, e.CapabilityID}, "definition_id": {a.DefinitionID, e.DefinitionID},
+		"source_revision": {a.SourceRevision, e.SourceRevision}, "parent_id": {a.ParentID, e.ParentID},
+		"root_id": {a.RootID, e.RootID}, "thread_id": {a.ThreadID, e.ThreadID},
+	} {
+		av, ev := pair[0], pair[1]
+		if ev != "" && av != ev { return fmt.Errorf("provenance/correlation mismatch for %s: got %q, want %q", name, av, ev) }
+	}
+	return nil
+}
+
 // envelopeKeys is the set of keys present in the execution envelope returned by
 // the control plane's _build_execute_response. Verbatim port of _ENVELOPE_KEYS.
 var envelopeKeys = map[string]struct{}{
@@ -28,6 +106,16 @@ var envelopeKeys = map[string]struct{}{
 	"result":        {},
 	"error_message": {},
 	"cost":          {},
+	"capability_id": {},
+	"definition_id": {},
+	"source_revision": {},
+	"parent_id":     {},
+	"root_id":       {},
+	"thread_id":     {},
+	"parent_execution_id": {},
+	"root_workflow_id": {},
+	"provenance":    {},
+	"correlation":   {},
 }
 
 // failureStatuses are the terminal-failure envelope statuses.

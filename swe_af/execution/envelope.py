@@ -19,10 +19,47 @@ _ENVELOPE_KEYS = frozenset({
     "execution_id", "run_id", "node_id", "type", "target",
     "status", "duration_ms", "timestamp", "result",
     "error_message", "cost",
+    "capability_id", "definition_id", "source_revision",
+    "parent_id", "root_id", "thread_id",
+    "parent_execution_id", "root_workflow_id", "provenance", "correlation",
 })
 
+_BINDING_KEYS = ("capability_id", "definition_id", "source_revision",
+                 "parent_id", "root_id", "thread_id")
 
-def unwrap_call_result(result, label: str = "call"):
+
+def binding_from(value: dict | None) -> dict[str, str]:
+    """Return the canonical optional G8 binding from a flat or nested map."""
+    value = value if isinstance(value, dict) else {}
+    out = {key: str(value.get(key) or "").strip() for key in _BINDING_KEYS}
+    out["parent_id"] = out["parent_id"] or str(value.get("parent_execution_id") or "").strip()
+    out["root_id"] = out["root_id"] or str(value.get("root_workflow_id") or "").strip()
+    for section, keys in (("provenance", _BINDING_KEYS[:3]), ("correlation", _BINDING_KEYS[3:])):
+        nested = value.get(section)
+        if isinstance(nested, dict):
+            for key in keys:
+                out[key] = out[key] or str(nested.get(key) or "").strip()
+    return out
+
+
+def has_binding(value: dict | None) -> bool:
+    value = value if isinstance(value, dict) else {}
+    return any(key in value for key in _BINDING_KEYS + ("parent_execution_id", "root_workflow_id", "provenance", "correlation"))
+
+
+def validate_binding(actual: dict | None, expected: dict | None) -> None:
+    """Raise ValueError when supplied provenance/correlation values disagree."""
+    if not has_binding(expected):
+        return
+    got, want = binding_from(actual), binding_from(expected)
+    for key in _BINDING_KEYS:
+        if want[key] and got[key] != want[key]:
+            raise ValueError(
+                f"provenance/correlation mismatch for {key}: got {got[key]!r}, want {want[key]!r}"
+            )
+
+
+def unwrap_call_result(result, label: str = "call", expected_binding: dict | None = None):
     """Extract the actual reasoner output from an ``app.call()`` response.
 
     Parameters
@@ -44,6 +81,11 @@ def unwrap_call_result(result, label: str = "call"):
     """
     if not isinstance(result, dict):
         return result
+
+    # Callers that know the expected execution lineage can validate it without
+    # changing the legacy two-argument API.
+    if expected_binding is not None:
+        validate_binding(result, expected_binding)
 
     # Fast path: already unwrapped (no envelope keys present)
     if not _ENVELOPE_KEYS.intersection(result):

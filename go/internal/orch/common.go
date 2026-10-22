@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -163,6 +164,10 @@ func (d *Deps) Call(ctx context.Context, name string, kwargs map[string]any, lab
 	if err != nil {
 		return nil, err
 	}
+	raw = bindAgentFieldCorrelation(ctx, raw, kwargs)
+	if err := envelope.ValidateBinding(raw, kwargs); err != nil {
+		return nil, fmt.Errorf("AgentField handoff %s: %w", label, err)
+	}
 	return envelope.UnwrapCallResult(raw, label)
 }
 
@@ -170,7 +175,13 @@ func (d *Deps) Call(ctx context.Context, name string, kwargs map[string]any, lab
 // unwrapping — used by build's git-init loop, which unwraps separately so it can
 // treat an unwrap failure as a non-fatal git-init failure (app.py:701-704).
 func (d *Deps) CallRaw(ctx context.Context, name string, kwargs map[string]any) (map[string]any, error) {
-	return d.App.Call(ctx, d.target(name), kwargs)
+	raw, err := d.App.Call(ctx, d.target(name), kwargs)
+	if err != nil { return nil, err }
+	raw = bindAgentFieldCorrelation(ctx, raw, kwargs)
+	if err := envelope.ValidateBinding(raw, kwargs); err != nil {
+		return nil, fmt.Errorf("AgentField handoff %s: %w", name, err)
+	}
+	return raw, nil
 }
 
 // target renders the fully-qualified "<NodeID>.<name>" call target. At runtime
@@ -193,12 +204,31 @@ func (d *Deps) NewCallFn() coding.CallFn {
 		if err != nil {
 			return nil, err
 		}
+		raw = bindAgentFieldCorrelation(ctx, raw, kwargs)
+		if err := envelope.ValidateBinding(raw, kwargs); err != nil {
+			return nil, fmt.Errorf("AgentField handoff %s: %w", target, err)
+		}
 		label := target
 		if i := strings.LastIndex(target, "."); i >= 0 {
 			label = target[i+1:]
 		}
 		return envelope.UnwrapCallResult(raw, label)
 	}
+}
+
+// bindAgentFieldCorrelation preserves SDK lineage on canonical envelopes
+// without mutating the map returned by the App or a test double.
+func bindAgentFieldCorrelation(ctx context.Context, raw, kwargs map[string]any) map[string]any {
+	if raw == nil { return raw }
+	out := make(map[string]any, len(raw)+3)
+	for key, value := range raw { out[key] = value }
+	ec := executionContextFrom(ctx)
+	if _, ok := out["parent_id"]; !ok && ec.ParentExecutionID != "" { out["parent_id"] = ec.ParentExecutionID }
+	if _, ok := out["root_id"]; !ok && ec.RootWorkflowID != "" { out["root_id"] = ec.RootWorkflowID }
+	if _, ok := out["thread_id"]; !ok && kwargs != nil {
+		if thread, ok := kwargs["thread_id"].(string); ok && strings.TrimSpace(thread) != "" { out["thread_id"] = strings.TrimSpace(thread) }
+	}
+	return out
 }
 
 // NewNoteFn adapts App.Note to the coding.NoteFn signature (msg, []tags) that

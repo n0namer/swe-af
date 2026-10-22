@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/Agent-Field/SWE-AF/go/internal/envelope"
 )
 
 // ResumeBuildHandler satisfies the orchestrator Handler shape.
@@ -44,6 +46,13 @@ func ResumeBuildHandler(ctx context.Context, deps *Deps, input map[string]any) (
 	if err := json.Unmarshal(raw, &checkpoint); err != nil {
 		return nil, err
 	}
+	// Legacy checkpoints have no binding and remain resumable. Once a
+	// checkpoint carries one, a caller-provided binding must agree with it.
+	if envelope.HasBinding(checkpoint) {
+		if err := envelope.ValidateBinding(checkpoint, input); err != nil {
+			return nil, fmt.Errorf("checkpoint resume: %w", err)
+		}
+	}
 
 	// Reconstruct plan_result exactly as app.py:2112-2121. The PRD / architecture
 	// / review are not needed for resume — the DAGState carries the issue graph.
@@ -56,6 +65,11 @@ func ResumeBuildHandler(ctx context.Context, deps *Deps, input map[string]any) (
 		"file_conflicts": []any{},
 		"artifacts_dir":  mapStr(checkpoint, "artifacts_dir", base),
 		"rationale":      mapStr(checkpoint, "original_plan_summary", ""),
+	}
+	// Carry the binding into the reconstructed plan so execute and every later
+	// checkpoint remain attached to the same capability and correlation chain.
+	for _, key := range []string{"capability_id", "definition_id", "source_revision", "parent_id", "root_id", "thread_id"} {
+		if value, ok := checkpoint[key]; ok && value != nil { planResult[key] = value }
 	}
 
 	deps.Note(ctx, "Resuming build from checkpoint", "build", "resume")

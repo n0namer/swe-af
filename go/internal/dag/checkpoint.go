@@ -99,6 +99,12 @@ func initDAGState(planResult map[string]any, repoPath string, gitConfig map[stri
 	levels := coerceLevels(planResult["levels"])
 
 	state := &schemas.DAGState{
+		CapabilityID:       mapGetStr(planResult, "capability_id", ""),
+		DefinitionID:       mapGetStr(planResult, "definition_id", ""),
+		SourceRevision:     mapGetStr(planResult, "source_revision", ""),
+		ParentID:           mapGetStr(planResult, "parent_id", mapGetStr(planResult, "parent_execution_id", "")),
+		RootID:             mapGetStr(planResult, "root_id", mapGetStr(planResult, "root_workflow_id", "")),
+		ThreadID:           mapGetStr(planResult, "thread_id", ""),
 		RepoPath:            repoPath,
 		ArtifactsDir:        artifactsDir,
 		PRDPath:             prdPath,

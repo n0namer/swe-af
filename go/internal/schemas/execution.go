@@ -218,6 +218,15 @@ type ReplanDecision struct {
 // WorkspaceManifest is a serialised dict|None (kept as map[string]any for JSON
 // checkpoint compatibility).
 type DAGState struct {
+	// Optional G8 provenance/correlation binding. Empty values preserve legacy
+	// checkpoint compatibility while allowing resume to reject mixed runs.
+	CapabilityID   string `json:"capability_id,omitempty"`
+	DefinitionID   string `json:"definition_id,omitempty"`
+	SourceRevision string `json:"source_revision,omitempty"`
+	ParentID       string `json:"parent_id,omitempty"`
+	RootID         string `json:"root_id,omitempty"`
+	ThreadID       string `json:"thread_id,omitempty"`
+
 	// --- Artifact paths ---
 	RepoPath         string `json:"repo_path"`
 	ArtifactsDir     string `json:"artifacts_dir"`
