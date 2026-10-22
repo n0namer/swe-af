@@ -760,3 +760,36 @@ func TestBMADMethodRejectsOversizedStepEnvelope(t *testing.T) {
 		t.Fatalf("error=%v, want envelope size rejection", err)
 	}
 }
+
+func TestRegisterFactoryExposesOneModeAwareBuildEntrypoint(t *testing.T) {
+	t.Setenv("SWE_PRO_ENGINE", "0")
+	t.Setenv("SWE_BMAD_ENABLED", "")
+	t.Setenv("SWE_FURROW_ENABLED", "")
+	t.Setenv("FURROW_PUBLIC_ADDR", "")
+	n, err := BuildAgent("swe-factory-30", "8007", "factory test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n.RegisterFactory()
+
+	names := n.RegisteredNames()
+	seen := map[string]bool{}
+	for _, name := range names {
+		if seen[name] {
+			t.Fatalf("duplicate reasoner registration %q", name)
+		}
+		seen[name] = true
+	}
+	for _, name := range []string{"build", "plan", "execute", "resume_build", "fast_plan_tasks", "fast_execute_tasks", "fast_verify", "implement_issue"} {
+		if !seen[name] {
+			t.Errorf("factory executor missing reasoner %q", name)
+		}
+	}
+	if seen["build_fast"] || seen["build_full"] {
+		t.Fatal("factory must expose one build entrypoint, not separate full/fast build products")
+	}
+	meta := n.RegisteredMeta()["build"]
+	if !strings.Contains(meta.Description, "Full mode is the default") {
+		t.Fatalf("build discovery description must state Full default, got %q", meta.Description)
+	}
+}

@@ -10,6 +10,7 @@
 #
 #     swe-agent-go  ->  node id "swe-planner-go", :8005
 #     swe-fast-go   ->  node id "swe-fast-go",    :8006
+#     swe-factory-30 -> node id "swe-factory-30", :8010
 #
 # Run story (two commands, Python stack first):
 #
@@ -126,6 +127,42 @@ services:
 # Join the Python stack's default network so control-plane / build-db resolve by
 # service name. External => Compose does not create it; the Python stack must be
 # up first (see header caveat on the project-scoped name).
+  swe-factory-30:
+    build:
+      context: .
+      dockerfile: go/Dockerfile
+    command: ["/usr/local/bin/swe-factory-30"]
+    env_file: .env
+    environment:
+      - AGENTFIELD_SERVER=http://control-plane:8080
+      - NODE_ID=swe-factory-30
+      - PORT=8010
+      - AGENT_CALLBACK_URL=http://swe-factory-30:8010
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - GH_TOKEN=${GH_TOKEN:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - INFRON_API_KEY=${INFRON_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - AI_BASE_URL=${AI_BASE_URL:-}
+      - AI_MODEL=${AI_MODEL:-}
+      - OPENCODE_MODEL=${OPENCODE_MODEL:-}
+      - SWE_DEFAULT_RUNTIME=${SWE_DEFAULT_RUNTIME:-}
+      - SWE_DEFAULT_MODEL=${SWE_DEFAULT_MODEL:-}
+      - SWE_CODEX_AUTH_MODE=${SWE_CODEX_AUTH_MODE:-auto}
+      - SWE_PRO_ENGINE=${SWE_PRO_ENGINE:-}
+      - SWE_PRO_PUBLIC_URL=${SWE_PRO_PUBLIC_URL:-http://swe-factory-30:8801}
+      - SWE_PRO_MODELS_HIGH=${SWE_PRO_MODELS_HIGH:-}
+      - SWE_PRO_MODELS_LOW=${SWE_PRO_MODELS_LOW:-}
+      - SWE_PRO_VARIANT=${SWE_PRO_VARIANT:-}
+      - SWE_PRO_MAX_COST=${SWE_PRO_MAX_COST:-}
+      - DATABASE_URL_TEST=${DATABASE_URL_TEST:-postgres://builder:builder@build-db:5432/buildtest}
+    ports:
+      - "8010:8010"
+    volumes:
+      - workspaces:/workspaces
+      - ${HOME}/.codex:/root/.codex
 networks:
   default:
     external: true

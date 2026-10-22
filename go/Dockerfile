@@ -51,7 +51,8 @@ RUN go mod download
 # Copy the rest of the module and build both static binaries.
 COPY go/ /src/SWE-AF/go/
 RUN go build -trimpath -ldflags="-s -w" -o /out/swe-planner ./cmd/swe-planner && \
-    go build -trimpath -ldflags="-s -w" -o /out/swe-fast ./cmd/swe-fast
+    go build -trimpath -ldflags="-s -w" -o /out/swe-fast ./cmd/swe-fast && \
+    go build -trimpath -ldflags="-s -w" -o /out/swe-factory-30 ./cmd/swe-factory-30
 
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime: slim Debian + the same external CLI surface the agents
@@ -154,6 +155,7 @@ RUN git config --global user.name "SWE-AF" && \
 # Application binaries (static, from the builder stage).
 COPY --from=builder /out/swe-planner /usr/local/bin/swe-planner
 COPY --from=builder /out/swe-fast /usr/local/bin/swe-fast
+COPY --from=builder /out/swe-factory-30 /usr/local/bin/swe-factory-30
 
 # Prebuilt pro-engine binary (static, vendored at go/bin). go/bin carries one
 # build per supported platform; this image is linux/amd64 only, so the amd64
@@ -166,7 +168,7 @@ COPY go/bin/swe-pro-linux-amd64 /usr/local/bin/swe-pro
 # (without this, Docker creates it as root read-only on fresh deployments).
 RUN mkdir -p /workspaces && chmod 777 /workspaces
 
-EXPOSE 8005
+EXPOSE 8005 8006 8010
 
 # Defaults register this as "swe-planner" on :8005 — the product's node id, so
 # callers' triggers are the same whichever implementation is serving them. The

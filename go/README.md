@@ -6,13 +6,21 @@ the AgentField control plane, and exposes a byte-compatible HTTP API — so the
 control-plane DAG UI renders identically. The Python package under `swe_af/`
 is untouched; this port lives entirely under `go/`.
 
-Two binaries:
+Three binaries:
 
 | Binary            | Node ID          | Default port | Role                              |
 |-------------------|------------------|--------------|-----------------------------------|
 | `swe-planner`     | `swe-planner`    | `8005`       | Full pipeline (plan → DAG → PR)   |
-| `swe-fast`        | `swe-fast`       | `8006`       | Fast mode (lighter-weight path)   |
+| swe-fast        | swe-fast        | 8006         | Legacy Fast-mode node |
+| swe-factory-30 | swe-factory-30 | 8010         | One executor; Full default, Fast optional |
 
+Use the single swe-factory-30.build entrypoint for mode-aware execution. Omit mode
+or set mode=full for the standard full planning/DAG/recovery/verification path;
+set mode=fast only when the single-pass path is explicitly desired. Mode is
+selected per execution, not by registering a separate executor.
+
+Example: POST /api/v1/execute/async/swe-factory-30.build with input
+{"goal":"...","repo_url":"https://github.com/you/repo"}.
 Module path: `github.com/Agent-Field/SWE-AF/go`.
 
 ## This is the installed node
@@ -132,7 +140,8 @@ Adds:
 | Service        | Port   | Node id          | Notes                                     |
 |----------------|--------|------------------|-------------------------------------------|
 | `swe-agent-go` | `8005` | `swe-planner-go` | full pipeline                             |
-| `swe-fast-go`  | `8006` | `swe-fast-go`    | fast mode (runs the `swe-fast` binary)    |
+| swe-fast        | swe-fast        | 8006         | Legacy Fast-mode node |
+| swe-factory-30 | swe-factory-30 | 8010         | One executor; Full default, Fast optional |
 
 This add-on stack overrides `NODE_ID` to the `-go` ids on purpose: it joins a
 running Python stack on one control plane, and the two would otherwise register
@@ -163,7 +172,8 @@ set; the load-bearing ones:
 | `OPENCODE_ENABLE_EXA` + `EXA_API_KEY`                     | Optional web search for the open runtime             |
 | `AGENTFIELD_SERVER`                                       | Control-plane URL (default `http://localhost:8080`)  |
 | `AGENT_CALLBACK_URL`                                      | Public URL the control plane calls the node back on. **Required for any containerized/remote deploy that isn't this compose file** (compose sets it per service) — without it the CP gets `504 agent_unreachable` |
-| `NODE_ID`                                                 | Node ID (`swe-planner` / `swe-fast`)           |
+| swe-fast        | swe-fast        | 8006         | Legacy Fast-mode node |
+| swe-factory-30 | swe-factory-30 | 8010         | One executor; Full default, Fast optional |
 | `PORT`                                                    | Listen port (`8005` / `8006`)                        |
 | `SWE_PRO_ENGINE`                                          | Route per-issue coding through the bundled high-performance coding engine (beta), vendored for darwin-arm64, darwin-amd64, linux-amd64, and linux-arm64. Windows is not yet supported by the engine; the node logs a warning and falls back to the classic loop there. **Set to `1` for you by `af install` / Desktop; unset (off) everywhere else** — clone, fork, compose, bare binary. `1`/`true`/`yes`/`on` enables, `0`/`false` disables |
 | `SWE_PRO_VARIANT`                                         | Engine reasoning-effort variant (e.g. `low` for fastest turnaround, `high` for depth). Unset keeps the engine's own default |

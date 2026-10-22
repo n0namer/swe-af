@@ -4,6 +4,8 @@
 # produces are ignored individually rather than by ignoring bin/ wholesale.
 bin/swe-planner
 bin/swe-fast
+bin/swe-factory-30
+bin/swe-factory-30.exe
 bin/swe-pro
 
 # Local Go workspace used during SDK-parity development to resolve the

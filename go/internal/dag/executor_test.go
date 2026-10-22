@@ -397,6 +397,34 @@ func TestCheckpointWrittenAndRoundTrips(t *testing.T) {
 	}
 }
 
+func TestResumeRejectsInvalidCheckpointWithoutExecutingIssues(t *testing.T) {
+	dir := t.TempDir()
+	execDir := filepath.Join(dir, "execution")
+	if err := os.MkdirAll(execDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := filepath.Join(execDir, "checkpoint.json")
+	if err := os.WriteFile(checkpoint, []byte(`{"current_level":"not-an-integer"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plan := makePlan([]map[string]any{issue("must-not-repeat")}, [][]string{{"must-not-repeat"}})
+	plan["artifacts_dir"] = dir
+	called := false
+	execute := func(context.Context, map[string]any, *schemas.DAGState) (map[string]any, error) {
+		called = true
+		return map[string]any{"complete": true, "summary": "unexpected execution"}, nil
+	}
+	_, err := RunDAG(context.Background(), plan, "/repo", newMock().fn, "swe-planner", testCfg(t, nil),
+		WithResume(true), WithExecuteFn(execute))
+	if err == nil {
+		t.Fatal("RunDAG accepted an invalid checkpoint and silently started a fresh execution")
+	}
+	if called {
+		t.Fatal("RunDAG executed an issue after checkpoint restoration failed")
+	}
+}
+
 func TestLoadPythonGoldenCheckpoint(t *testing.T) {
 	dir := t.TempDir()
 	execDir := filepath.Join(dir, "execution")
@@ -405,9 +433,15 @@ func TestLoadPythonGoldenCheckpoint(t *testing.T) {
 	}
 	// A realistic Python-shaped checkpoint (DAGState.model_dump()). Note:
 	// max_replans is intentionally absent to exercise UnmarshalJSON default (=2).
+	// Marshal the temp path separately because Windows paths contain backslashes,
+	// which must be escaped when embedded in JSON.
+	dirJSON, err := json.Marshal(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	golden := `{
   "repo_path": "/tmp/repo",
-  "artifacts_dir": "` + dir + `",
+  "artifacts_dir": ` + string(dirJSON) + `,
   "prd_path": "/tmp/repo/.artifacts/plan/prd.md",
   "architecture_path": "",
   "issues_dir": "",

@@ -116,6 +116,24 @@ func (n *Node) RegisterFast() {
 }
 
 // ---------------------------------------------------------------------------
+// RegisterFactory exposes one AgentField executor with a mode-aware build entrypoint.
+// Full is the default; Fast is an explicit per-execution alternative. Both paths
+// reuse the existing SWE-AF handlers and share this node's registered role surface.
+func (n *Node) RegisterFactory() {
+	n.registerRoles()
+	n.registerBMADWorkflows()
+	if pro.Available() {
+		n.registerProReasoners()
+	}
+	fastDeps := &fast.Deps{Harness: n.App, Call: newCallFn(n.App), Note: n.App, NodeID: n.NodeID}
+	n.registerOrchestratorsWithBuildHandler(factoryBuildHandler(orch.Build, fast.Build, fastDeps))
+	n.registerFastReasonersWithBuild(false)
+	if n.furrowEnabled() {
+		n.registerWorkspaceHandleReasoner()
+	}
+	n.registerIssueReasoner()
+}
+
 // Role reasoners (identical on both nodes)
 // ---------------------------------------------------------------------------
 
@@ -191,6 +209,10 @@ func (n *Node) registerRoles() {
 // build/resolve drive them (RunCIGate / PlanApprovalGate); the approval client
 // provider is wired in BuildAgent.
 func (n *Node) registerOrchestrators() {
+	n.registerOrchestratorsWithBuildHandler(nil)
+}
+
+func (n *Node) registerOrchestratorsWithBuildHandler(buildOverride orch.Handler) {
 	deps := &orch.Deps{
 		App:              n.App,
 		NodeID:           n.NodeID,
@@ -211,6 +233,9 @@ func (n *Node) registerOrchestrators() {
 	}
 
 	handlers := orch.Handlers() // {"build": Build}
+	if buildOverride != nil {
+		handlers["build"] = buildOverride
+	}
 	orch.RegisterPlan(handlers) // adds {"plan": Plan}
 	handlers["execute"] = orch.ExecuteHandler
 	handlers["resolve"] = orch.ResolveHandler
@@ -225,10 +250,14 @@ func (n *Node) registerOrchestrators() {
 		if orchestratorEntrypoints[name] {
 			opts = append(opts, agent.WithReasonerTags(tagEntrypoint))
 		}
-		if d, ok := orchestratorDescriptions[name]; ok {
+		if name == "build" && buildOverride != nil {
+			opts = append(opts, agent.WithDescription("SWE Factory executor. Full mode is the default; set mode=fast only when a lighter single-pass build is explicitly preferred."))
+		} else if d, ok := orchestratorDescriptions[name]; ok {
 			opts = append(opts, agent.WithDescription(d))
 		}
-		if s, ok := orchestratorSchemas[name]; ok {
+		if name == "build" && buildOverride != nil {
+			opts = append(opts, agent.WithInputSchema(factoryBuildSchema))
+		} else if s, ok := orchestratorSchemas[name]; ok {
 			opts = append(opts, agent.WithInputSchema(s))
 		}
 		regHandler(n, name, deps, h, opts...)
@@ -332,6 +361,10 @@ var orchestratorDescriptions = map[string]string{
 
 // registerFastReasoners wires the fast node's four first-class reasoners.
 func (n *Node) registerFastReasoners() {
+	n.registerFastReasonersWithBuild(true)
+}
+
+func (n *Node) registerFastReasonersWithBuild(includeBuild bool) {
 	deps := &fast.Deps{
 		Harness: n.App,
 		Call:    newCallFn(n.App),
@@ -344,6 +377,9 @@ func (n *Node) registerFastReasoners() {
 	// tagged ["entrypoint"] with a routing description. Mirror that exactly.
 	tag := agent.WithReasonerTags(tagFast)
 	for name, h := range fast.Handlers() {
+		if name == "build" && !includeBuild {
+			continue
+		}
 		var opts []agent.ReasonerOption
 		if name == "build" {
 			opts = append(opts,
@@ -874,6 +910,7 @@ func (n *Node) recordMeta(name string, opts []agent.ReasonerOption) {
 func schema(raw string) json.RawMessage { return json.RawMessage(raw) }
 
 // orchestratorSchemas maps the 5 orchestrator names to their input schemas.
+var factoryBuildSchema = schema(`{"type":"object","additionalProperties":true,"required":["goal"],"properties":{"goal":{"type":"string"},"mode":{"type":"string","enum":["full","fast"],"default":"full"},"repo_path":{"type":"string"},"repo_url":{"type":"string"},"artifacts_dir":{"type":"string"},"additional_context":{"type":"string"},"config":{"type":"object"},"execute_fn_target":{"type":"string"},"max_turns":{"type":"integer"},"permission_mode":{"type":"string"},"enable_learning":{"type":"boolean"}}}`)
 var orchestratorSchemas = map[string]json.RawMessage{
 	// build(goal, repo_path="", repo_url="", artifacts_dir=".artifacts",
 	//       additional_context="", config=None, execute_fn_target="",

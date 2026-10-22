@@ -139,18 +139,22 @@ func RunDAG(
 	dagState.WorkspaceManifest = o.workspaceManifest
 	dagState.MaxReplans = cfg.MaxReplans
 
-	// Resume from checkpoint if requested.
+	// Resume from checkpoint if requested. Fail closed if durable state cannot
+	// be restored: silently falling back to a fresh DAG can repeat completed work.
 	if o.resume {
 		artifactsDir := mapGetStr(planResult, "artifacts_dir", "")
-		if artifactsDir != "" {
-			if loaded := loadCheckpoint(artifactsDir); loaded != nil {
-				dagState = loaded
-				if note != nil {
-					note(fmt.Sprintf("Resumed from checkpoint: level=%d, completed=%d, failed=%d",
-						dagState.CurrentLevel, len(dagState.CompletedIssues), len(dagState.FailedIssues)),
-						[]string{"execution", "resume"})
-				}
-			}
+		if artifactsDir == "" {
+			return nil, fmt.Errorf("cannot resume DAG: plan_result.artifacts_dir is empty")
+		}
+		loaded, err := loadCheckpointStrict(artifactsDir)
+		if err != nil {
+			return nil, fmt.Errorf("cannot resume DAG: %w", err)
+		}
+		dagState = loaded
+		if note != nil {
+			note(fmt.Sprintf("Resumed from checkpoint: level=%d, completed=%d, failed=%d",
+				dagState.CurrentLevel, len(dagState.CompletedIssues), len(dagState.FailedIssues)),
+				[]string{"execution", "resume"})
 		}
 	}
 

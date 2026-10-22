@@ -115,7 +115,7 @@ func TestResumeArtifactsDirDefault(t *testing.T) {
 	if err := os.MkdirAll(execDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := json.Marshal(map[string]any{"all_issues": []any{}})
+	raw, _ := json.Marshal(map[string]any{"all_issues": []any{}, "levels": []any{}})
 	if err := os.WriteFile(filepath.Join(execDir, "checkpoint.json"), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -135,5 +135,31 @@ func TestResumeArtifactsDirDefault(t *testing.T) {
 	plan := gotInput["plan_result"].(map[string]any)
 	if got := mapStr(plan, "artifacts_dir", ""); got != wantBase {
 		t.Fatalf("artifacts_dir default = %q, want %q", got, wantBase)
+	}
+}
+
+// Invalid but syntactically valid checkpoint data must be rejected before
+// resume_build dispatches execute; otherwise an empty plan can mask lost state.
+func TestResumeRejectsStructurallyInvalidCheckpointBeforeExecute(t *testing.T) {
+	repo := t.TempDir()
+	execDir := filepath.Join(repo, ".artifacts", "execution")
+	if err := os.MkdirAll(execDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(execDir, "checkpoint.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	deps := &Deps{App: &mockApp{handler: func(context.Context, string, map[string]any) (map[string]any, error) {
+		called = true
+		return map[string]any{"status": "succeeded"}, nil
+	}}, NodeID: "swe-planner"}
+
+	_, err := ResumeBuildHandler(context.Background(), deps, map[string]any{"repo_path": repo})
+	if err == nil {
+		t.Fatal("structurally invalid checkpoint must fail closed")
+	}
+	if called {
+		t.Fatal("execute must not be dispatched when checkpoint state is incomplete")
 	}
 }

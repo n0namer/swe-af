@@ -2,7 +2,7 @@
 # Mirrors the acceptance gate used by every port task and CI (design §10):
 #   go build ./... && go vet ./... && go test ./...
 
-.PHONY: build vet test check lint run-planner run-fast docker-build docker-up docker-down
+.PHONY: build vet test check lint run-planner run-fast run-factory-30 docker-build docker-up docker-down
 
 # Compile every package in the module.
 build:
@@ -32,6 +32,10 @@ run-planner:
 run-fast:
 	go run ./cmd/swe-fast
 
+# Run the single mode-aware factory executor (Full default, Fast optional).
+run-factory-30:
+	go run ./cmd/swe-factory-30
+
 # --- Docker (multi-stage image + Go-node compose stack) -------------------
 # These operate on the repo root (one level up) because the Dockerfile build
 # context is the SWE-AF root (so the go/ module is in context) and the compose
@@ -47,7 +51,7 @@ docker-build:
 		--build-arg AGENTFIELD_SDK_REF=$(AGENTFIELD_SDK_REF) \
 		-t $(IMAGE) ..
 
-# Bring up the Go nodes (swe-agent-go:8005 + swe-fast:8006) as an ADD-ON to
+# Bring up the Go nodes (swe-agent-go:8005 + swe-fast:8006 + swe-factory-30:8010) as an ADD-ON to
 # the Python stack. Start the Python stack first (`docker compose up` — it owns
 # the control plane + shared network); this add-on joins that network as an
 # external reference.
