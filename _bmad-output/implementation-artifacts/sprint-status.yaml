@@ -46,3 +46,6 @@ action_items:
   - id: mvp-runtime-gate
     status: open
     description: 'Spec 1.1 is ready-for-dev; VP49 offline at last device readback, runtime identity and single owner still unverified. Resume from exact on-machine HEAD before E2E.'
+  - id: af-real-code-20261023
+    status: open
+    description: 'SWE Fast wrote actual AgentField UI and Vitest changes in isolated worktree branch 8dd1d2fd-integration, local SHA 52523de5230fd2df3633747f17cb010702c0442e; independently 23/23 Vitest PASS and tsc -b PASS. AgentField exec_20261023_203042_c40hwtwq returned logical success=false (0/2) due to its own unverified test/artifact environment. Do not classify MVP story 03 as DONE; reconcile verifier/runtime on a bounded follow-up and preserve local AgentField dev@44167dc1.'
