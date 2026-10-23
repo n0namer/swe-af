@@ -18,8 +18,8 @@ tracking_system: ai-crew-sync
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
-  epic-1: backlog
-  1-1-exact-runtime-identity: backlog
+  epic-1: in-progress
+  1-1-exact-runtime-identity: ready-for-dev
   1-2-fast-e2e-git-receipt: backlog
   1-3-native-implement-issue-e2e: backlog
   1-4-recovery-invariants: backlog
@@ -45,4 +45,4 @@ action_items:
     description: 'Create six tasks through existing authenticated CrewSync coordinator client once remote desktop quota resumes; do not direct-write its DB or duplicate keys.'
   - id: mvp-runtime-gate
     status: open
-    description: 'Confirm live swe-fast actually loaded 52b3fdd and one owner on port 8004 before E2E.'
+    description: 'Spec 1.1 is ready-for-dev; VP49 offline at last device readback, runtime identity and single owner still unverified. Resume from exact on-machine HEAD before E2E.'
