@@ -2,7 +2,7 @@
 title: 'VP49 SWE-AF exact loaded runtime identity'
 type: 'bugfix'
 created: '2026-10-23'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
 context:
   - 'AGENTS.md'
@@ -59,7 +59,11 @@ context:
 
 ## Spec Change Log
 
+- 2026-10-23: VP49 runtime proof received: single scheduled swe-fast node, listener PID and process CWD verified, no duplicate workers; CrewSync `sweaf:mvp:01-runtime` marked DONE. Subsequent FULL source cutover `swe-planner@543648dd4c8b713b6af0b9bc856f22d6e0f01f3a` also confirmed. This spec covers runtime ownership only, not semantic E2E success.
+
 ## Verification
+
+**Result:** runtime ownership PASS (VP49 source/process readback and CrewSync DONE). Overall North Star remains unaccepted pending autonomous Full and recovery E2E.
 
 **Commands:**
 - Existing `C:\Temp\SWEAF-Before-Switch-Audit.ps1` or equivalent read-only process + AgentField probe — exact ownership and zero active jobs.
