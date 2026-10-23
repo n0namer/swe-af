@@ -2,14 +2,16 @@
 # last_updated: 2026-10-23
 # project: SWE-AF
 # project_key: SWEAF
-# tracking_system: ai-crew-sync (currently unavailable for writes)
+# tracking_system: ai-crew-sync (verified reachable on VP49)
 # story_location: _bmad-output/implementation-artifacts
 #
 # Epic status: backlog -> in-progress -> done
 # Story status: backlog -> ready-for-dev -> in-progress -> review -> done
 # CrewSync task DONE alone is not semantic acceptance.
-# Statuses below are conservative; the 2026-10-23 agent/runtime E2E
-# and exact SHA materialization have NOT been independently accepted.
+# Statuses describe observed implementation progress, not independent DoD acceptance.
+# VP49 CrewSync has six keys: 01 DONE; 02-06 OPEN (read back 2026-10-23).
+# Real Full logical success remains unaccepted; recovery-watch verified by unit
+# tests, but independent crash/restart recovery E2E has not passed.
 generated: 2026-10-23
 last_updated: 2026-10-23
 project: SWE-AF
@@ -19,17 +21,20 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   epic-1: in-progress
-  1-1-exact-runtime-identity: ready-for-dev
-  1-2-fast-e2e-git-receipt: backlog
-  1-3-native-implement-issue-e2e: backlog
-  1-4-recovery-invariants: backlog
-  1-5-two-issue-full-build: backlog
+  1-1-exact-runtime-identity: done
+  1-2-fast-e2e-git-receipt: in-progress
+  1-3-native-implement-issue-e2e: in-progress
+  1-4-recovery-invariants: in-progress
+  1-5-two-issue-full-build: in-progress
   1-6-clean-runtime-mvp-acceptance: backlog
   epic-1-retrospective: optional
 
-# Ordered mapping; CrewSync creation NOT confirmed (Desktop Commander quota).
+# Ordered mapping read back from live VP49 CrewSync on 2026-10-23.
+# Dependency chain is enforced in CrewSync even where work has started out of order.
+# Coordinator CLI has no task edit/defer action; never declare an optional task
+# DONE solely to unblock successors.
 crew_sync:
-  creation_state: blocked
+  creation_state: confirmed
   prefix: 'sweaf:mvp'
   keys:
     1-1-exact-runtime-identity: 'sweaf:mvp:01-runtime'
@@ -40,12 +45,18 @@ crew_sync:
     1-6-clean-runtime-mvp-acceptance: 'sweaf:mvp:06-acceptance'
 
 action_items:
-  - id: mvp-crew-sync-admission
+  - id: north-star-execution-gates
     status: open
-    description: 'Create six tasks through existing authenticated CrewSync coordinator client once remote desktop quota resumes; do not direct-write its DB or duplicate keys.'
-  - id: mvp-runtime-gate
+    description: 'MVP remaining: independent Fast logical PASS; native implement_issue E2E; actual crash/resume no duplicate receipts; two dependent real AgentField Full issues with autonomous verification and repair; three bounded green Full runs with provenance and token/latency evidence. CrewSync 02-06 OPEN. Do not add duplicate tasks.'
+  - id: vp49-verified-runtime
+    status: done
+    description: 'CrewSync 01-runtime DONE. VP49 swe-fast checked exact loaded source and AgentField ownership; swe-planner subsequently restarted with source SHA 543648dd4c8b713b6af0b9bc856f22d6e0f01f3a. Runtime gate not equivalent to end-to-end build.'
+  - id: full-generated-fix-contract
     status: open
-    description: 'Spec 1.1 is ready-for-dev; VP49 offline at last device readback, runtime identity and single owner still unverified. Resume from exact on-machine HEAD before E2E.'
+    description: 'Full exec_20261023_212759_f4p0zgj7 ended failed KeyError name. Local Full repair 543648dd4c8b713b6af0b9bc856f22d6e0f01f3a; 45 targeted tests PASS; loaded in swe-planner on VP49, but no subsequent successful Full E2E. Confirm real-generated fix-issue id/name and acceptance mapping.'
+  - id: vp49-recovery-e2e
+    status: open
+    description: 'VP49-SWE-AF-Full-Recovery-Watch scheduled every minute, last result 0; A55 admission and VP49 adapter 16/16 tests PASS; blocks old Full nontransport failure as intended. Independent crash/restart preserving Git and receipts NOT yet done.'
   - id: af-real-code-20261023
     status: open
-    description: 'SWE Fast wrote actual AgentField UI and Vitest changes in isolated worktree branch 8dd1d2fd-integration, local SHA 52523de5230fd2df3633747f17cb010702c0442e; independently 23/23 Vitest PASS and tsc -b PASS. AgentField exec_20261023_203042_c40hwtwq returned logical success=false (0/2) due to its own unverified test/artifact environment. Do not classify MVP story 03 as DONE; reconcile verifier/runtime on a bounded follow-up and preserve local AgentField dev@44167dc1.'
+    description: 'SWE Fast independently wrote AgentField UI and tests in local branch at SHA 52523de5230fd2df3633747f17cb010702c0442e; independently 23/23 Vitest and tsc PASS after manual repair. Native logical success was false. Do not count as autonomously accepted.'
