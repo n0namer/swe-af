@@ -212,7 +212,7 @@ async def build(
     # Use a minimal PRD dict if the planner didn't produce one (fast path has no PM)
     prd_dict = plan_result.get("prd") or {
         "validated_description": goal,
-        "acceptance_criteria": [],
+        "acceptance_criteria": [goal],
         "must_have": [],
         "nice_to_have": [],
         "out_of_scope": [],
@@ -236,7 +236,11 @@ async def build(
             tags=["fast_build", "verify", "error"],
         )
         verification = {"passed": False, "summary": f"Verification failed: {e}"}
-    success = verification.get("passed", False)
+    task_results = execution_result.get("task_results", [])
+    all_tasks_completed = bool(task_results) and all(
+        item.get("outcome") == "completed" for item in task_results
+    )
+    success = bool(verification.get("passed", False)) and all_tasks_completed
 
     # ── 4. REPO FINALIZE ────────────────────────────────────────────────────
     app.note("Fast build: finalize", tags=["fast_build", "finalize"])
