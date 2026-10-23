@@ -104,3 +104,15 @@ The real Full completed **transport `succeeded`, application `success=false`**. 
 **Loaded runtime proof:** Existing `VP49-AgentField-swe-planner` restarted only with zero active runs; listener PID `21600` loaded this exact source checkout. Isolated new repo `C:/Temp/sweaf-live-native-handoff-20261024` uses native Git init and original planner-generated two-level plan. Real AgentField execution `exec_20261024_024051_od67wi3u` / run `run_20261024_024051_9elzm1iv`: first coder and reviewer passed, native merge SHA `13dd93ac9e4c703ddd07de4ca1aa42ed982dcafa` contains `src/outcome.py` and `tests/test_outcome.py`, checkpoint level=1 completed=1 merge_results=1. Host independent unittest on *exact merged SHA* PASS 4/4. Second dependent issue running with host unittest 4/4 on its pending worktree; no operator code edits.
 
 **Next gate:** accept the terminal outcome for second issue, verify final integration SHA and exact delivered tests. Then controlled native Full recovery watch E2E, with immutable source identity. Task `sweaf:mvp:04-recovery` stays OPEN until actual interrupted AgentField recovery; `05-full-build` remains blocked in CrewSync. No PR/deploy/CI.
+
+## 2026-10-24 exact Git delivery acceptance
+
+Native Git handoff repair is **GREEN as a component, not full recovery GREEN**.
+
+- Verified local framework branch `fix/full-native-issue-git-handoff-20261024` SHA `bf27224d36044b7a809f795edab344dc137aa3d3`, clean VP49 source. `144/144` targeted pytest PASS.
+- Existing scheduled `VP49-AgentField-swe-planner` switched only after zero active runs, PID `21600`, exact checkout readback. Codex remained `workspace-write`.
+- Real AgentField native DAG `swe-planner.execute`: `exec_20261024_024051_od67wi3u` / `run_20261024_024051_9elzm1iv`. Two dependent issues completed, two native issue Git checkpoint commits (`5bfc31e`, `d1bd895`) and two actual merge commits (`13dd93a`, `8967bf1`); no errors/in-flight, checkpoint at terminal level 2.
+- Final delivered repo: `C:/Temp/sweaf-live-native-handoff-20261024`, exact Git HEAD `8967bf11f53daad66a09e479605c426c282431eb`, clean. Independent host Python unittest on this exact SHA: **4/4 PASS**. No duplicate workers, no second plan/coder execution after completion.
+- The component repair uses `git_ops.commit_all` from native SWE-AF, after verifying a registered direct-child build-owned Git worktree and matching branch. No global sandbox bypass, manual task-product fix, PR, deploy, or CI.
+- A separate **terminal** checkpoint resume attempt was inconclusive: its one-shot local script did not produce a receipt or new visible AgentField execution and was terminated after readback. It was not retried. This is not a successful crash recovery test.
+- **CrewSync `sweaf:mvp:04-recovery` remains OPEN**, and `05-full-build` remains dependent on 04. Next required DoD: reproducible interrupted real Full → A55-derived scheduled watcher admission → safe resume on the same exact loaded SHA, plus independent final Git/effect oracle. `execute` E2E is issue-level native evidence; it does not count as the 3/3 full `build` production streak.
