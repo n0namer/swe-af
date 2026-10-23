@@ -78,3 +78,7 @@ action_items:
   - id: af-real-code-20261023
     status: open
     description: 'SWE Fast independently wrote AgentField UI and tests in local branch at SHA 52523de5230fd2df3633747f17cb010702c0442e; independently 23/23 Vitest and tsc PASS after manual repair. Native logical success was false. Do not count as autonomously accepted.'
+
+  - id: native-dag-recovery-20261024
+    status: in-progress
+    description: 'CrewSync sweaf:mvp:04-recovery current DoD batch. On VP49 local Git candidate 044ef82800de580e999ffe0a426de1816b62692a (clean isolated worktree): native atomic checkpoint write, exact fail-closed resume identity, in-flight/merge guards, durable level result before clearing in-flight. RED=4 fail, GREEN=119/119 PASS incl real two-process os._exit(77) then resume without duplicate effects. BMAD spec-1-4-recovery-invariants.md created. Next required proof: positive AgentField Full + scheduled watcher crash/recovery E2E on isolated run, exact loaded SHA and Git/effect receipts. Do not mark 04 DONE yet; no deploy/PR/CI or change to running swe-planner.'
