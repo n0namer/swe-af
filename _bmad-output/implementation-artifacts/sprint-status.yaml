@@ -56,7 +56,7 @@ north_star_scope:
   diagnostic_non_gating_keys:
     - 'sweaf:mvp:02-fast-commit'
     - 'sweaf:mvp:03-issue-e2e'
-  dependency_conflict: 'CrewSync 04 currently depends on 03, and 03 on 02; coordinator CLI exposes no edit/defer action. Do not mark diagnostics done to unblock. Requires supported dependency reconciliation before using CrewSync as a claimable critical-path DAG.'
+  dependency_replan: '2026-10-23 VP49: transactional one-edge migration removed 04-recovery -> 03-issue-e2e; readback via CrewSync shows 04 unblocked, 05 depends only on 04, 06 depends only on 05. Diagnostic 02/03 remain open. Original DB snapshot preserved on VP49 in C:/Temp/SWEAF-Crew-20261023-Dependencies-BEFORE.json; task_events audit recorded.'
   production_acceptance: '3 consecutive independently accepted full Builds on same frozen stack, one interruption recovery, then clean-runtime exact-SHA replay; no operator task-code edits and capture cost/latency/provenance.'
 
 action_items:
@@ -64,8 +64,8 @@ action_items:
     status: open
     description: 'Full production North Star critical gates are CrewSync 04-recovery, 05-full-build, 06-acceptance per dev/PLAN.md; 02 Fast and 03 implement_issue are non-gating diagnostics. Required: actual interruption recovery no duplicate effects, 2 dependent real AgentField issues with autonomous self-repair, 3 consecutive full Builds on frozen stack, clean-runtime replay, exact SHA, provenance/cost/latency.'
   - id: crew-sync-dependency-reconcile
-    status: open
-    description: 'Remove stale 04->03->02 dependencies via supported coordinator edit once available; no task-update command exposed in current VP49 coordinator CLI. Do not create duplicate tasks or fake DONE.'
+    status: done
+    description: 'CrewSync VP49 dependency replanning verified through authenticated coordinator client: 04-recovery no dependencies and blocked=false; 05-full-build depends on 04; 06-acceptance depends on 05; 02 Fast and 03 Issue remain open. Client has no dependency-edit command; one guarded PostgreSQL transaction changed only one edge, with before snapshot, task event and post-readback.'
   - id: vp49-verified-runtime
     status: done
     description: 'CrewSync 01-runtime DONE. VP49 swe-fast checked exact loaded source and AgentField ownership; swe-planner subsequently restarted with source SHA 543648dd4c8b713b6af0b9bc856f22d6e0f01f3a. Runtime gate not equivalent to end-to-end build.'
