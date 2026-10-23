@@ -1,0 +1,48 @@
+# generated: 2026-10-23
+# last_updated: 2026-10-23
+# project: SWE-AF
+# project_key: SWEAF
+# tracking_system: ai-crew-sync (currently unavailable for writes)
+# story_location: _bmad-output/implementation-artifacts
+#
+# Epic status: backlog -> in-progress -> done
+# Story status: backlog -> ready-for-dev -> in-progress -> review -> done
+# CrewSync task DONE alone is not semantic acceptance.
+# Statuses below are conservative; the 2026-10-23 agent/runtime E2E
+# and exact SHA materialization have NOT been independently accepted.
+generated: 2026-10-23
+last_updated: 2026-10-23
+project: SWE-AF
+project_key: SWEAF
+tracking_system: ai-crew-sync
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: backlog
+  1-1-exact-runtime-identity: backlog
+  1-2-fast-e2e-git-receipt: backlog
+  1-3-native-implement-issue-e2e: backlog
+  1-4-recovery-invariants: backlog
+  1-5-two-issue-full-build: backlog
+  1-6-clean-runtime-mvp-acceptance: backlog
+  epic-1-retrospective: optional
+
+# Ordered mapping; CrewSync creation NOT confirmed (Desktop Commander quota).
+crew_sync:
+  creation_state: blocked
+  prefix: 'sweaf:mvp'
+  keys:
+    1-1-exact-runtime-identity: 'sweaf:mvp:01-runtime'
+    1-2-fast-e2e-git-receipt: 'sweaf:mvp:02-fast-commit'
+    1-3-native-implement-issue-e2e: 'sweaf:mvp:03-issue-e2e'
+    1-4-recovery-invariants: 'sweaf:mvp:04-recovery'
+    1-5-two-issue-full-build: 'sweaf:mvp:05-full-build'
+    1-6-clean-runtime-mvp-acceptance: 'sweaf:mvp:06-acceptance'
+
+action_items:
+  - id: mvp-crew-sync-admission
+    status: open
+    description: 'Create six tasks through existing authenticated CrewSync coordinator client once remote desktop quota resumes; do not direct-write its DB or duplicate keys.'
+  - id: mvp-runtime-gate
+    status: open
+    description: 'Confirm live swe-fast actually loaded 52b3fdd and one owner on port 8004 before E2E.'
