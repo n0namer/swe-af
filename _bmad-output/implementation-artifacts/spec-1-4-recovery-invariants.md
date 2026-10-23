@@ -92,3 +92,15 @@ The real Full completed **transport `succeeded`, application `success=false`**. 
 - `ec4797a86c01497b5e0e81473fc85cd9246aee9e` — fail-closed on Git no-op merges and missing issue branch receipts. Actual Git RED reproduced the false-green merge; **101/101 pytest PASS** including real positive merges and revised unit fixtures.
 
 **Next minimum DoD:** reuse existing host-owned deterministic Git commit path to commit the issue worktree's intended changes before merge, rather than asking Codex sandbox to write a shared parent Git index; prove actual integration HEAD includes required files and exact test SHA. Then run one controlled real Full interruption/resume with saved checkpoint and no duplicate effects, followed by independent runtime and Git readback. Avoid new orchestration, PR, deployment and CI until GREEN. Keep CrewSync `sweaf:mvp:04-recovery` OPEN and `05-full-build` BLOCKED.
+
+## 2026-10-24 native Git handoff repair
+
+**Framework defect:** In the first real Full canary, Codex could write `src/outcome.py` and tests to its issue worktree, but `workspace-write` sandbox denied Git `index.lock` in the parent shared Git directory. A false-positive "Already up to date" merge advanced the DAG without delivering code.
+
+**Fix:** Reuse existing `swe_af.issue.git_ops.commit_all()` inside native `_merge_level_branches`, only after checking the exact worktree is a registered, branch-matching direct child of the build-owned `.worktrees` folder. Refresh `issue_by_name` after native workspace setup so the merge uses the canonical enriched path. Keep Codex `permission_mode=workspace-write`; no new Invoker, Git agent, scheduler or global sandbox bypass.
+
+**Exact code:** Local VP49 branch `fix/full-native-issue-git-handoff-20261024` @ `bf27224d36044b7a809f795edab344dc137aa3d3`, clean. RED tested missing native commits/foreign worktree. GREEN: 144/144 pytest, including actual two-level `run_dag` with native worktree setup, first code commit/merge, second dependent tests, and independent unittest. Git diff check PASS.
+
+**Loaded runtime proof:** Existing `VP49-AgentField-swe-planner` restarted only with zero active runs; listener PID `21600` loaded this exact source checkout. Isolated new repo `C:/Temp/sweaf-live-native-handoff-20261024` uses native Git init and original planner-generated two-level plan. Real AgentField execution `exec_20261024_024051_od67wi3u` / run `run_20261024_024051_9elzm1iv`: first coder and reviewer passed, native merge SHA `13dd93ac9e4c703ddd07de4ca1aa42ed982dcafa` contains `src/outcome.py` and `tests/test_outcome.py`, checkpoint level=1 completed=1 merge_results=1. Host independent unittest on *exact merged SHA* PASS 4/4. Second dependent issue running with host unittest 4/4 on its pending worktree; no operator code edits.
+
+**Next gate:** accept the terminal outcome for second issue, verify final integration SHA and exact delivered tests. Then controlled native Full recovery watch E2E, with immutable source identity. Task `sweaf:mvp:04-recovery` stays OPEN until actual interrupted AgentField recovery; `05-full-build` remains blocked in CrewSync. No PR/deploy/CI.
