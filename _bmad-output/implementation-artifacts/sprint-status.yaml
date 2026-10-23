@@ -82,3 +82,10 @@ action_items:
   - id: native-dag-recovery-20261024
     status: in-progress
     description: 'CrewSync 04-recovery in progress. VP49 exact source candidate 4325e159f3e985a1533609cb3a2e60276fa7272e clean: 119/119 native DAG pytest and 19/19 A55-derived watcher unittest PASS. Separate native Python subprocess crash os._exit(77) resumed second issue with no repeated first effect. Watcher positive admission verified using isolated real Git/checkpoint and mocked AgentField API: one exact POST, durable marker; new active run and ambiguous response fail closed. Existing VP49 scheduled watcher updated with backup and source hash, real Windows Task Scheduler result 0, no stderr or dispatch. Full planner still loaded older 543648d. DoD NOT accepted: real AgentField Full crash -> watcher -> resume with exact Git/no duplicate side effects still required. No deploy/PR/CI.'
+
+  - id: native-level-boundary-20261024
+    status: in-progress
+    description: 'Recovery task 04: isolated local repair SHA 40a922582af4c6fece1231be734d4e7383d17262 on VP49; 120/120 native tests PASS including actual process os._exit(77) after durable level=1 checkpoint, then no-duplicate resume. RED proved old checkpoint level=1 with second issue still in-flight. This patch is NOT yet loaded into active planner and no user project touched.'
+  - id: live-agentfield-full-recovery-20261024
+    status: in-progress
+    description: 'Real native Full Build exec_20261024_005304_qeoab5h2 run_20261024_005304_8hgg2st4 on isolated C:/Temp/sweaf-native-full-recovery-20261024 base 3dcb8d3543c0b82b93d17d5a641612cea90ecea9; loaded SWE planner source 4325e159f3e985a1533609cb3a2e60276fa7272e. Planning, issue creation and coder/reviewer are active. Do not manually cancel, restart or claim positive recovery without durable first-level merge checkpoint, terminated old writer and final Git/effect readback. CrewSync 04 remains OPEN.'
