@@ -2,7 +2,7 @@
 title: 'VP49 SWE-AF exact loaded runtime identity'
 type: 'bugfix'
 created: '2026-10-23'
-status: 'draft'
+status: 'ready-for-dev'
 review_loop_iteration: 0
 context:
   - 'AGENTS.md'
