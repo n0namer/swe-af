@@ -1,10 +1,10 @@
 # SWE-AF Project Plan (Source of Truth)
 
-Status: active
-Last reconciled: 2026-09-15
+Status: active (global North Star; historical execution checkpoints preserved)
+Last reconciled: 2026-10-23 (MVP tracking pointer only)
 Canonical GitHub owner: `n0namer/swe-af`
 Canonical branch for project SoT: `dev`
-Canonical project SoT: this file (`PLAN.md`)
+Canonical project SoT: global objectives/invariants in `PLAN.md`; current SWE-AF MVP gates in `_bmad-output/planning-artifacts/epics-sweaf-mvp.md`, sprint tracking in `_bmad-output/implementation-artifacts/sprint-status.yaml`, and active delivery specification in `_bmad-output/implementation-artifacts/spec-1-1-exact-runtime-identity.md`. This plan's older CURRENT sections remain historical evidence, not today's runtime readback.
 Product-code inner loop: CURRENT `/src/swe-af` runtime/exact-source workspace; GitHub is publication/canonicalization only.
 Historical evidence: retained in Git history; old checkpoints do not override the CURRENT section below.
 
