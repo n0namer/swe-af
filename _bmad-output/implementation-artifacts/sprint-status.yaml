@@ -1,5 +1,5 @@
 # generated: 2026-10-23
-# last_updated: 2026-10-23
+# last_updated: 2026-10-24
 # project: SWE-AF
 # project_key: SWEAF
 # tracking_system: ai-crew-sync (verified reachable on VP49)
@@ -13,7 +13,7 @@
 # Real Full logical success remains unaccepted; recovery-watch verified by unit
 # tests, but independent crash/restart recovery E2E has not passed.
 generated: 2026-10-23
-last_updated: 2026-10-23
+last_updated: 2026-10-24
 project: SWE-AF
 project_key: SWEAF
 tracking_system: ai-crew-sync
@@ -81,4 +81,4 @@ action_items:
 
   - id: native-dag-recovery-20261024
     status: in-progress
-    description: 'CrewSync sweaf:mvp:04-recovery current DoD batch. On VP49 local Git candidate 044ef82800de580e999ffe0a426de1816b62692a (clean isolated worktree): native atomic checkpoint write, exact fail-closed resume identity, in-flight/merge guards, durable level result before clearing in-flight. RED=4 fail, GREEN=119/119 PASS incl real two-process os._exit(77) then resume without duplicate effects. BMAD spec-1-4-recovery-invariants.md created. Next required proof: positive AgentField Full + scheduled watcher crash/recovery E2E on isolated run, exact loaded SHA and Git/effect receipts. Do not mark 04 DONE yet; no deploy/PR/CI or change to running swe-planner.'
+    description: 'CrewSync 04-recovery in progress. VP49 exact source candidate 4325e159f3e985a1533609cb3a2e60276fa7272e clean: 119/119 native DAG pytest and 19/19 A55-derived watcher unittest PASS. Separate native Python subprocess crash os._exit(77) resumed second issue with no repeated first effect. Watcher positive admission verified using isolated real Git/checkpoint and mocked AgentField API: one exact POST, durable marker; new active run and ambiguous response fail closed. Existing VP49 scheduled watcher updated with backup and source hash, real Windows Task Scheduler result 0, no stderr or dispatch. Full planner still loaded older 543648d. DoD NOT accepted: real AgentField Full crash -> watcher -> resume with exact Git/no duplicate side effects still required. No deploy/PR/CI.'
