@@ -67,6 +67,7 @@ context:
 
 - 2026-10-24: Edge-case review added fail-closed handling for pending/unmerged Git branches; no change to normal Full planning architecture.
 - 2026-10-24 watcher-positive-20261024: adversarial review found activity-to-POST race and ambiguous acceptance response. Existing A55 watcher was preserved in the SWE repo, guarded by a final activity read and durable ambiguous marker; no new scheduler or orchestration. Positive mocked API route tested against a real isolated Git repository with exact checkpoint.
+- 2026-10-24 level-barrier-20261024: RED test showed checkpoint level=1 but in_flight=['second'] after merge; added atomic checkpoint after current_level advances, before next issue dispatch. Real subprocess crash at published level=1 then resume executes each issue exactly once. Isolated candidate `40a922582af4c6fece1231be734d4e7383d17262`; 120/120 targeted pytest PASS; does not change active Full's loaded source.
 
 ## Verification
 
@@ -77,4 +78,5 @@ context:
 - Added `ops/swe-af-local-ops/test_safe_resume_admission.py` and `test_vp49_full_recovery_watch.py`: **19/19 unittest PASS**, including one positive eligible resume to mock API, new-active-job block and ambiguous POST protection; `119/119` native pytest still PASS.
 - Final local Git candidate `4325e159f3e985a1533609cb3a2e60276fa7272e`, clean on VP49 in `swe-af-recovery-e2e-20261024`; predecessor `044ef82800de580e999ffe0a426de1816b62692a` retains native DAG checkpoint repairs.
 - Existing scheduled `VP49-SWE-AF-Full-Recovery-Watch` active source updated with exact SHA256 match/backup and independent Windows Task Scheduler readback: result `0`, no stderr, no dispatch markers, old logically failed Full safely blocked.
-- The running `swe-planner` still has prior `543648d` code and **has not been switched to the checkpoint candidate**; real AgentField Full → crash → watch → exact resume is still unproven. Do not mark CrewSync 04 DONE before this gate.
+- Runtime cutover for E2E: VP49 scheduled `swe-planner` PID 17808 was explicitly restarted on verified `4325e159f3e985a1533609cb3a2e60276fa7272e`, without other active executions. A new real Full started on an isolated repo as `exec_20261024_005304_qeoab5h2` / run `run_20261024_005304_8hgg2st4`. Product Manager, Architect, Tech Lead, Sprint Planner and issue writing ran; coder/reviewer entered the repair loop. The newer barrier fix `40a9225` remains an un-loaded isolated candidate; do not restart the active execution to pick it up.
+- Pending positive **live** recovery E2E: after a first level has durable merge receipts and no ambiguous in-flight writer, safely interrupt/resume and prove no duplicated effects; if the window cannot be proven, do not force interruption. CrewSync 04 remains OPEN until that evidence is obtained.
