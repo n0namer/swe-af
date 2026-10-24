@@ -101,3 +101,10 @@ action_items:
   - id: full-resume-observation-20261024
     status: open
     description: 'Follow-up after successful native Git handoff: optional terminal checkpoint resume probe from new AgentField execution was not accepted. Local one-shot probe hung without receipt or visible new execution; operator terminated only own standalone PowerShell process after readback; no automatic retry sent. CrewSync 04-recovery still needs genuine crash -> watcher -> resume proof with same task/source and no duplicates.'
+
+  - id: real-crash-real-agentfield-resume-20261024
+    status: in-progress
+    description: 'CrewSync 04 recovery positive partial DoD on VP49. A real isolated native DAG subprocess wrote+merged first issue (SHA 5786d1765c0d0bc29cb486d0c7fd0d56aa64322e), wrote level=1 durable checkpoint then os._exit(77). Unique marked one-shot real AgentField swe-planner.execute(resume=True) exec_20261024_121954_gpoj388w executed only second issue; final level=2 2 completed/0 failed/2 merge receipts; HEAD 8f8713991fca522dfb08660761ba9d71b131889c, clean, unittest 2/2 PASS, first effect exactly once. BMad spec-1-4 updated. CrewSync 04 stays OPEN because automatic positive Windows watcher against real failed Full transport has not passed.'
+  - id: full-build-from-goal-20261024
+    status: in-progress
+    description: 'Real autonomous swe-planner.build started from fresh user goal with real PM/Architect/Planner and two dependent Python issues, isolated C:/Temp/sweaf-full-green-20261024-2 base 768ecc885d5de53221d5a6579ee840aca3a061dd, source bf27224d36044b7a809f795edab344dc137aa3d3, root exec_20261024_122809_ibilsknz run run_20261024_122809_fyaqc1cy. No PR/deploy. Transport succeeded alone is not logical acceptance. CrewSync 05 remains blocked by 04.'
