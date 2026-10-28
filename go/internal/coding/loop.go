@@ -18,8 +18,12 @@ package coding
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -146,6 +150,7 @@ func RunCodingLoop(
 	// reviewResult persists past the loop for the exhaustion check (Python:
 	// `review_result if 'review_result' in dir() else None`).
 	var reviewResult map[string]any
+	lastCoderFailed := false
 
 	for iteration := startIteration; iteration <= maxIterations; iteration++ {
 		// Honor cancellation between iterations.
@@ -166,6 +171,7 @@ func RunCodingLoop(
 		memoryContext := readMemoryContext(memoryFn, issue)
 
 		// --- 1. CODER ---
+		beforeCoder, beforeCoderErr := worktreeSnapshot(worktreePath)
 		coderResult, cerr := callWithTimeout(ctx, timeout, fmt.Sprintf("coder:%s:iter%d", issueName, iteration),
 			func(c context.Context) (map[string]any, error) {
 				return callFn(c, nodeID+".run_coder", map[string]any{
@@ -188,6 +194,28 @@ func RunCodingLoop(
 			if errors.As(cerr, &fhe) || errors.Is(cerr, context.Canceled) {
 				return schemas.IssueResult{}, cerr // propagate (FatalHarnessError / cancellation)
 			}
+			afterCoder, afterCoderErr := worktreeSnapshot(worktreePath)
+			if beforeCoderErr == nil && afterCoderErr == nil && beforeCoder != afterCoder && iteration < maxIterations {
+				for _, f := range toStringSlice(coderResult["files_changed"]) {
+					if !contains(filesChanged, f) {
+						filesChanged = append(filesChanged, f)
+					}
+				}
+				summary := fmt.Sprintf("Coder failed after making worktree progress: %v", cerr)
+				note(fmt.Sprintf("%s; retrying the same worktree", summary), []string{"coding_loop", "coder_error", "progress", issueName})
+				iterationHistory = append(iterationHistory, map[string]any{
+					"iteration": iteration, "action": "fix", "summary": summary,
+					"review_approved": false, "review_blocking": false, "path": pathName(needsDeeperQA),
+				})
+				saveIterationState(dagState.ArtifactsDir, issueName, map[string]any{
+					"iteration": iteration, "feedback": summary, "files_changed": filesChanged,
+					"iteration_history": iterationHistory,
+				}, dagState.BuildID)
+				feedback = summary
+				reviewResult = nil
+				lastCoderFailed = true
+				continue
+			}
 			note(
 				fmt.Sprintf("Coder agent failed: %s iter %d: %v", issueName, iteration, cerr),
 				[]string{"coding_loop", "coder_error", issueName},
@@ -203,6 +231,7 @@ func RunCodingLoop(
 				IterationHistory: iterationHistory,
 			}, nil
 		}
+		lastCoderFailed = false
 
 		// Track files changed across iterations.
 		for _, f := range toStringSlice(coderResult["files_changed"]) {
@@ -246,6 +275,33 @@ func RunCodingLoop(
 			saveArtifact(dagState.ArtifactsDir, iterationID, "review", reviewResult)
 
 			stuck = false
+		}
+
+		// Neither reviewer approval nor synthesis approval can accept changes
+		// that Git will not carry when the worktree branch is merged.
+		if action == "approve" {
+			dirty, gitStatus, gitErr := worktreeHasUncommittedChanges(worktreePath)
+			if gitErr != nil {
+				if _, statErr := os.Stat(worktreePath); statErr == nil {
+					action = "block"
+					summary = "Approval rejected: cannot verify worktree cleanliness: " + gitErr.Error()
+					if reviewResult == nil {
+						reviewResult = map[string]any{}
+					}
+					reviewResult["approved"] = false
+					reviewResult["blocking"] = true
+					note(summary, []string{"coding_loop", "git_commit_gate", "blocking", issueName})
+				}
+			} else if dirty {
+				action = "fix"
+				summary = "Approval rejected: worktree has uncommitted changes that must be committed before completion: " + truncate(gitStatus, 300)
+				if reviewResult == nil {
+					reviewResult = map[string]any{}
+				}
+				reviewResult["approved"] = false
+				reviewResult["blocking"] = true
+				note(summary, []string{"coding_loop", "git_commit_gate", "blocking", issueName})
+			}
 		}
 
 		// Record iteration for history.
@@ -403,7 +459,7 @@ func RunCodingLoop(
 	lastReview := reviewResult // nil if the loop body never ran
 	lastBlocking := isTruthy(lastReview) && mapGetBool(lastReview, "blocking", false)
 
-	if !lastBlocking && len(filesChanged) > 0 {
+	if !lastCoderFailed && !lastBlocking && len(filesChanged) > 0 {
 		// Reviewer was never blocking and coder produced changes — accept with
 		// debt rather than failing entirely.
 		note(
@@ -448,8 +504,8 @@ func RunCodingLoop(
 
 // runDefaultPath ports _run_default_path: reviewer only (2 role calls including
 // the coder). Returns (action, summary, review_result). A fatal harness error is
-// returned as err (propagated); any other reviewer failure degrades to an
-// approving fallback so the loop continues.
+// returned as err (propagated); transport errors and empty reviewer output
+// fail closed so missing evidence cannot approve a change.
 func runDefaultPath(
 	ctx context.Context,
 	callFn CallFn,
@@ -488,11 +544,15 @@ func runDefaultPath(
 		if errors.As(rerr, &fhe) || errors.Is(rerr, context.Canceled) {
 			return "", "", nil, rerr // raise
 		}
-		note(
-			fmt.Sprintf("Reviewer failed: %s: %v", issueName, rerr),
-			[]string{"coding_loop", "review_error", issueName},
-		)
-		reviewResult = map[string]any{"approved": true, "blocking": false, "summary": fmt.Sprintf("Review unavailable: %v", rerr)}
+		summary := fmt.Sprintf("Review unavailable: %v", rerr)
+		note(fmt.Sprintf("Reviewer failed closed: %s: %v", issueName, rerr), []string{"coding_loop", "review_error", "blocking", issueName})
+		reviewResult = map[string]any{"approved": false, "blocking": true, "summary": summary}
+		return "block", summary, reviewResult, nil
+	}
+	if len(reviewResult) == 0 {
+		summary := "Review unavailable: reviewer returned empty output"
+		note(summary, []string{"coding_loop", "review_error", "blocking", issueName})
+		return "block", summary, map[string]any{"approved": false, "blocking": true, "summary": summary}, nil
 	}
 
 	note(
@@ -518,9 +578,9 @@ func runDefaultPath(
 
 // runFlaggedPath ports _run_flagged_path: QA + reviewer concurrently -> synthesizer
 // (4 role calls). Returns (action, summary, review, qa, synthesis). Mirroring
-// Python's asyncio.gather(return_exceptions=True), a QA or reviewer failure (even
-// a fatal one) degrades to a fallback here; only a synthesizer FatalHarnessError
-// is propagated via err.
+// Python's asyncio.gather(return_exceptions=True), QA failures degrade to a QA
+// fallback while reviewer failures fail closed. Synthesizer fatal errors are
+// propagated via err.
 func runFlaggedPath(
 	ctx context.Context,
 	callFn CallFn,
@@ -591,12 +651,15 @@ func runFlaggedPath(
 		)
 		qaResult = map[string]any{"passed": false, "summary": fmt.Sprintf("QA agent failed: %v", qaErr)}
 	}
+	reviewUnavailable := reviewErr != nil || len(reviewResult) == 0
 	if reviewErr != nil {
 		note(
 			fmt.Sprintf("Review agent failed: %s: %v", issueName, reviewErr),
 			[]string{"coding_loop", "review_error", issueName},
 		)
-		reviewResult = map[string]any{"approved": true, "blocking": false, "summary": fmt.Sprintf("Review unavailable: %v", reviewErr)}
+		reviewResult = map[string]any{"approved": false, "blocking": true, "summary": fmt.Sprintf("Review unavailable: %v", reviewErr)}
+	} else if len(reviewResult) == 0 {
+		reviewResult = map[string]any{"approved": false, "blocking": true, "summary": "Review unavailable: reviewer returned empty output"}
 	}
 
 	note(
@@ -653,6 +716,10 @@ func runFlaggedPath(
 
 	action = mapGetStr(synthesisResult, "action", "fix")
 	summary = mapGetStr(synthesisResult, "summary", "")
+	if reviewUnavailable {
+		action = "block"
+		summary = mapGetStr(reviewResult, "summary", "Review unavailable")
+	}
 
 	return action, summary, reviewResult, qaResult, synthesisResult, nil
 }
@@ -671,6 +738,64 @@ func DetectStuckLoop(iterationHistory []map[string]any, window int) bool {
 		}
 	}
 	return true
+}
+
+func worktreeHasUncommittedChanges(worktreePath string) (bool, string, error) {
+	out, err := exec.Command("git", "-C", worktreePath, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
+	if err != nil {
+		return false, "", fmt.Errorf("git status failed: %w", err)
+	}
+	status := strings.TrimSpace(string(out))
+	return status != "", status, nil
+}
+
+// worktreeSnapshot identifies committed, tracked, staged and untracked state.
+// Comparing before and after coder calls avoids retrying errors that made no
+// repository progress while recognizing both commits and dirty edits.
+func worktreeSnapshot(worktreePath string) (string, error) {
+	run := func(args ...string) ([]byte, error) {
+		cmdArgs := append([]string{"-C", worktreePath}, args...)
+		out, err := exec.Command("git", cmdArgs...).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("git %v failed: %w: %s", args, err, strings.TrimSpace(string(out)))
+		}
+		return out, nil
+	}
+	head, err := run("rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	status, err := run("status", "--porcelain=v1", "--untracked-files=all")
+	if err != nil {
+		return "", err
+	}
+	diff, err := run("diff", "--binary", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	untracked, err := run("ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	for _, part := range [][]byte{head, status, diff, untracked} {
+		_, _ = h.Write(part)
+		_, _ = h.Write([]byte{0})
+	}
+	for _, name := range strings.Split(string(untracked), "\x00") {
+		if name == "" {
+			continue
+		}
+		contents, err := os.ReadFile(filepath.Join(worktreePath, filepath.FromSlash(name)))
+		if err != nil {
+			return "", fmt.Errorf("read untracked file %q: %w", name, err)
+		}
+		_, _ = h.Write([]byte(name))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(contents)
+		_, _ = h.Write([]byte{0})
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
 // callWithTimeout ports _call_with_timeout: run fn under an

@@ -27,6 +27,8 @@ package coding
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Agent-Field/agentfield/sdk/go/ai"
@@ -92,6 +94,84 @@ var codingTools = []string{"Read", "Write", "Edit", "Bash", "Glob", "Grep"}
 // differs from codingTools (Bash last) — kept verbatim from the Python call.
 var reviewerTools = []string{"Read", "Write", "Glob", "Grep", "Bash"}
 
+var coderProjectMarkers = []string{"go.mod", "package.json", "pyproject.toml", "Cargo.toml"}
+
+// resolveCoderCwd lets a coder working in a nested module start at the nearest
+// project root containing all declared issue files. Paths remain constrained to
+// the supplied worktree; issues without declared files keep the original cwd.
+func resolveCoderCwd(worktreePath string, issue map[string]any) string {
+	root := filepath.Clean(worktreePath)
+	paths := declaredCoderPaths(issue)
+	if len(paths) == 0 {
+		return worktreePath
+	}
+	first := filepath.Join(root, filepath.FromSlash(paths[0]))
+	for dir := filepath.Dir(first); pathWithin(root, dir); dir = filepath.Dir(dir) {
+		if hasCoderProjectMarker(dir) {
+			allInside := true
+			for _, rel := range paths {
+				if !pathWithin(dir, filepath.Join(root, filepath.FromSlash(rel))) {
+					allInside = false
+					break
+				}
+			}
+			if allInside {
+				return dir
+			}
+		}
+		if dir == root {
+			break
+		}
+	}
+	return worktreePath
+}
+
+func declaredCoderPaths(issue map[string]any) []string {
+	var paths []string
+	seen := map[string]struct{}{}
+	for _, key := range []string{"files_to_modify", "files_to_create"} {
+		switch values := issue[key].(type) {
+		case []any:
+			for _, value := range values {
+				if s, ok := value.(string); ok {
+					addCoderPath(&paths, seen, s)
+				}
+			}
+		case []string:
+			for _, value := range values {
+				addCoderPath(&paths, seen, value)
+			}
+		}
+	}
+	return paths
+}
+
+func addCoderPath(paths *[]string, seen map[string]struct{}, raw string) {
+	p := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+	if p == "." || p == "" || strings.HasPrefix(p, "../") || filepath.IsAbs(raw) {
+		return
+	}
+	if _, ok := seen[p]; ok {
+		return
+	}
+	seen[p] = struct{}{}
+	*paths = append(*paths, p)
+}
+
+func pathWithin(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+}
+
+func hasCoderProjectMarker(dir string) bool {
+	for _, name := range coderProjectMarkers {
+		if info, err := os.Stat(filepath.Join(dir, name)); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
 // ---------------------------------------------------------------------------
 // run_coder
 // ---------------------------------------------------------------------------
@@ -156,47 +236,29 @@ func RunCoder(ctx context.Context, deps *Deps, input map[string]any) (any, error
 		Tools:          codingTools,
 		PermissionMode: in.PermissionMode,
 		SystemPrompt:   tools.MaybeApplyCoderGuardrail(prompts.CoderSystemPrompt),
-		Cwd:            in.WorktreePath,
+		Cwd:            resolveCoderCwd(in.WorktreePath, in.Issue),
 	}.ToOptions()
 
-	harnessError := ""
 	parsed, result, hErr := harnessx.Run[schemas.CoderResult](ctx, deps.Harness, taskPrompt, opts)
-	switch {
-	case hErr != nil:
+	if hErr != nil {
 		if isFatal(hErr) {
 			return nil, hErr // Non-retryable — propagate immediately.
 		}
-		harnessError = hErr.Error()
-		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, harnessError), "coder", "error")
-	case result != nil && result.Parsed != nil:
-		deps.Note.Note(ctx, fmt.Sprintf("Coder complete: %s, files=%d, complete=%s",
-			issueName, len(parsed.FilesChanged), pyBool(parsed.Complete)), "coder", "complete")
-		parsed.IterationID = in.IterationID
-		return parsed, nil
-	default:
-		// Harness returned but produced no parseable CoderResult. Surface the
-		// underlying error so the empty result carries *why*.
-		if result != nil {
-			harnessError = result.ErrorMessage
-		}
-		if harnessError == "" {
-			harnessError = "no structured output returned"
-		}
-		deps.Note.Note(ctx, fmt.Sprintf("Coder produced no result: %s: %s", issueName, harnessError), "coder", "error")
+		deps.Note.Note(ctx, fmt.Sprintf("Coder agent failed: %s: %s", issueName, hErr.Error()), "coder", "error")
+		return nil, fmt.Errorf("coder agent failed for %s: %w", issueName, hErr)
 	}
-
-	summary := fmt.Sprintf("Coder agent failed for %s", issueName)
-	if harnessError != "" {
-		summary += ": " + harnessError
+	if result == nil || result.Parsed == nil {
+		detail := "no structured output returned"
+		if result != nil && result.ErrorMessage != "" {
+			detail = result.ErrorMessage
+		}
+		deps.Note.Note(ctx, fmt.Sprintf("Coder produced no result: %s: %s", issueName, detail), "coder", "error")
+		return nil, fmt.Errorf("coder produced no structured result for %s: %s", issueName, detail)
 	}
-	return &schemas.CoderResult{
-		FilesChanged:      []string{},
-		Summary:           summary,
-		Complete:          false,
-		IterationID:       in.IterationID,
-		CodebaseLearnings: []string{},
-		AgentRetro:        map[string]any{},
-	}, nil
+	deps.Note.Note(ctx, fmt.Sprintf("Coder complete: %s, files=%d, complete=%s",
+		issueName, len(parsed.FilesChanged), pyBool(parsed.Complete)), "coder", "complete")
+	parsed.IterationID = in.IterationID
+	return parsed, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -370,13 +432,15 @@ func RunCodeReviewer(ctx context.Context, deps *Deps, input map[string]any) (any
 		return parsed, nil
 	}
 
-	return &schemas.CodeReviewResult{
-		Approved:    true, // don't block on reviewer failure
-		Summary:     fmt.Sprintf("Code reviewer agent failed for %s — not blocking", issueName),
-		Blocking:    false,
-		DebtItems:   []map[string]any{},
-		IterationID: in.IterationID,
-	}, nil
+	if hErr != nil {
+		return nil, fmt.Errorf("code reviewer agent failed for %s: %w", issueName, hErr)
+	}
+	detail := "no structured output returned"
+	if result != nil && result.ErrorMessage != "" {
+		detail = result.ErrorMessage
+	}
+	deps.Note.Note(ctx, fmt.Sprintf("Code reviewer produced no result: %s: %s", issueName, detail), "code_reviewer", "error")
+	return nil, fmt.Errorf("code reviewer produced no structured result for %s: %s", issueName, detail)
 }
 
 // ---------------------------------------------------------------------------

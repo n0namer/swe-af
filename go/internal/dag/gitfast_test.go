@@ -6,6 +6,7 @@ package dag
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -140,22 +141,144 @@ func TestFastCleanupWorktrees(t *testing.T) {
 	repo := initFastRepo(t)
 	wtDir := filepath.Join(repo, ".worktrees")
 	if _, err := fastSetupWorktrees(repo, "integration",
-		[]map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, ""); err != nil {
+		[]map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, "ab12cd34"); err != nil {
 		t.Fatal(err)
 	}
-	result, err := fastCleanupWorktrees(repo, wtDir, []string{"issue/01-a"})
+	worktree := filepath.Join(wtDir, "issue-ab12cd34-01-a")
+	if err := os.WriteFile(filepath.Join(worktree, "change.txt"), []byte("merged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitfastT(t, worktree, "add", "change.txt")
+	gitfastT(t, worktree, "commit", "-q", "-m", "issue work")
+	gitfastT(t, repo, "merge", "--no-ff", "-q", "issue/ab12cd34-01-a", "-m", "integrate issue")
+	result, err := fastCleanupWorktrees(repo, wtDir, []string{"issue/ab12cd34-01-a"}, "ab12cd34")
 	if err != nil {
 		t.Fatalf("fastCleanupWorktrees: %v", err)
 	}
 	if got := asStringSlice(result["cleaned"]); len(got) != 1 {
 		t.Errorf("cleaned = %v", got)
 	}
-	if got := gitfastT(t, repo, "branch", "--list", "issue/01-a"); got != "" {
+	if got := gitfastT(t, repo, "branch", "--list", "issue/ab12cd34-01-a"); got != "" {
 		t.Errorf("branch survived cleanup: %q", got)
 	}
 	// Non-repo path errors so the caller can fall back to the agent.
-	if _, err := fastCleanupWorktrees(t.TempDir(), wtDir, []string{"x"}); err == nil {
+	if _, err := fastCleanupWorktrees(t.TempDir(), wtDir, []string{"issue/ab12cd34-01-x"}, "ab12cd34"); err == nil {
 		t.Error("expected error for non-repo path")
+	}
+}
+
+func TestFastCleanupRefusesUnsafeWorktrees(t *testing.T) {
+	tests := []struct {
+		name   string
+		branch string
+		setup  func(*testing.T, string, string)
+	}{
+		{
+			name:   "dirty worktree",
+			branch: "issue/ab12cd34-01-a",
+			setup: func(t *testing.T, repo, wtDir string) {
+				t.Helper()
+				if _, err := fastSetupWorktrees(repo, "integration", []map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, "ab12cd34"); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(wtDir, "issue-ab12cd34-01-a", "untracked.txt"), []byte("keep"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name:   "unmerged branch",
+			branch: "issue/ab12cd34-01-a",
+			setup: func(t *testing.T, repo, wtDir string) {
+				t.Helper()
+				if _, err := fastSetupWorktrees(repo, "integration", []map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, "ab12cd34"); err != nil {
+					t.Fatal(err)
+				}
+				path := filepath.Join(wtDir, "issue-ab12cd34-01-a")
+				if err := os.WriteFile(filepath.Join(path, "change.txt"), []byte("change\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				gitfastT(t, path, "add", "change.txt")
+				gitfastT(t, path, "commit", "-q", "-m", "unmerged")
+			},
+		},
+		{
+			name:   "foreign build",
+			branch: "issue/cdef1234-01-a",
+			setup: func(t *testing.T, repo, wtDir string) {
+				t.Helper()
+				if _, err := fastSetupWorktrees(repo, "integration", []map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, "cdef1234"); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := initFastRepo(t)
+			wtDir := filepath.Join(repo, ".worktrees")
+			tt.setup(t, repo, wtDir)
+			_, err := fastCleanupWorktrees(repo, wtDir, []string{tt.branch}, "ab12cd34")
+			var unsafe *unsafeCleanupError
+			if !errors.As(err, &unsafe) {
+				t.Fatalf("expected unsafe cleanup refusal, got %v", err)
+			}
+			path := filepath.Join(wtDir, strings.ReplaceAll(tt.branch, "/", "-"))
+			if _, statErr := os.Stat(path); statErr != nil {
+				t.Errorf("worktree was removed despite refusal: %v", statErr)
+			}
+			if got := gitfastT(t, repo, "branch", "--list", tt.branch); got == "" {
+				t.Error("branch was removed despite refusal")
+			}
+		})
+	}
+}
+
+func TestCleanupSingleRepoUnsafeOwnershipDoesNotFallback(t *testing.T) {
+	repo := initFastRepo(t)
+	callFn, targets, _ := recordingCallFn(map[string]any{"success": true})
+	err := cleanupSingleRepo(context.Background(), callFn, "node", repo, filepath.Join(repo, ".worktrees"),
+		[]string{"issue/01-a"}, "", "", 0, "", "", true, nil)
+	var unsafe *unsafeCleanupError
+	if !errors.As(err, &unsafe) {
+		t.Fatalf("expected unsafe cleanup refusal, got %v", err)
+	}
+	if len(*targets) != 0 {
+		t.Fatalf("unsafe cleanup was delegated to agent: %v", *targets)
+	}
+}
+
+func TestCleanupSingleRepoUsesTrustedBuildID(t *testing.T) {
+	repo := initFastRepo(t)
+	wtDir := filepath.Join(repo, ".worktrees")
+	branch := "issue/cdef1234-01-a"
+	if _, err := fastSetupWorktrees(repo, "integration",
+		[]map[string]any{{"name": "a", "sequence_number": 1}}, wtDir, "cdef1234"); err != nil {
+		t.Fatal(err)
+	}
+	worktree := filepath.Join(wtDir, "issue-cdef1234-01-a")
+	if err := os.WriteFile(filepath.Join(worktree, "change.txt"), []byte("merged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitfastT(t, worktree, "add", "change.txt")
+	gitfastT(t, worktree, "commit", "-q", "-m", "issue work")
+	gitfastT(t, repo, "merge", "--no-ff", "-q", branch, "-m", "integrate issue")
+
+	callFn, targets, _ := recordingCallFn(map[string]any{"success": true})
+	err := cleanupSingleRepo(context.Background(), callFn, "node", repo, wtDir,
+		[]string{branch}, "ab12cd34", "", 0, "", "", true, nil)
+	var unsafe *unsafeCleanupError
+	if !errors.As(err, &unsafe) {
+		t.Fatalf("expected ownership refusal, got %v", err)
+	}
+	if len(*targets) != 0 {
+		t.Fatalf("foreign-build cleanup was delegated to agent: %v", *targets)
+	}
+	if _, statErr := os.Stat(worktree); statErr != nil {
+		t.Errorf("foreign worktree was removed: %v", statErr)
+	}
+	if got := gitfastT(t, repo, "branch", "--list", branch); got == "" {
+		t.Error("foreign branch was removed")
 	}
 }
 

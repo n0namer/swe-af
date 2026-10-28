@@ -63,6 +63,21 @@ def _make_local_remote(
     return remote
 
 
+@pytest.mark.parametrize(
+    ("repo_url", "expected"),
+    [
+        (r"C:\Temp\org\remote.git", "remote"),
+        ("https://github.com/org/remote.git", "remote"),
+        ("ssh://git@github.com/org/remote.git", "remote"),
+        ("git@github.com:org/remote.git", "remote"),
+    ],
+)
+def test_repo_name_from_git_remote_forms(repo_url: str, expected: str) -> None:
+    import swe_af.fast.app as fast_app
+
+    assert fast_app._repo_name_from_url(repo_url) == expected
+
+
 @pytest.fixture
 def local_remote(tmp_path: Path) -> Path:
     return _make_local_remote(tmp_path)
@@ -256,7 +271,7 @@ async def test_vc5_clone_failure_raises_with_git_stderr(
 
     message = str(exc_info.value)
     assert "git clone failed (exit" in message
-    assert "does not exist" in message
+    assert "repository exists" in message or "does not exist" in message
     assert stub.calls == []
     assert not (workspace / "does-not-exist").exists()
 
@@ -462,6 +477,29 @@ async def test_vcj_stale_derived_workspace_without_git_is_replaced(
             "remote_url": str(local_remote),
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_vcl_readonly_derived_workspace_is_removed_before_clone(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    local_remote: Path,
+) -> None:
+    """A readonly leftover cannot silently block replacing an owned workspace."""
+    import swe_af.fast.app as fast_app
+
+    workspace = tmp_path / "workspace"
+    stale = workspace / "remote"
+    stale.mkdir(parents=True)
+    leftover = stale / "readonly.txt"
+    leftover.write_text("stale", encoding="utf-8")
+    leftover.chmod(0o400)
+    monkeypatch.setenv("SWE_WORKSPACE_ROOT", str(workspace))
+
+    await _build(fast_app, BuildStub(), repo_url=str(local_remote))
+
+    assert not leftover.exists()
+    assert (stale / "tracked.txt").read_text(encoding="utf-8") == "from remote\n"
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -178,6 +179,30 @@ func run(t *testing.T, issue map[string]any, ds *schemas.DAGState, callFn CallFn
 	return res
 }
 
+func initCodingTestRepo(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	commands := [][]string{
+		{"init", repo},
+		{"-C", repo, "config", "user.email", "coding-loop-test@example.invalid"},
+		{"-C", repo, "config", "user.name", "Coding Loop Test"},
+	}
+	for _, args := range commands {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "base.go"), []byte("package base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"-C", repo, "add", "base.go"}, {"-C", repo, "commit", "-m", "base"}} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	return repo
+}
+
 // ---------------------------------------------------------------------------
 // DetectStuckLoop unit tests (port of TestDetectStuckLoop)
 // ---------------------------------------------------------------------------
@@ -337,6 +362,176 @@ func TestCoderExceptionFailsUnrecoverable(t *testing.T) {
 	}
 	if !strings.Contains(res.ErrorMessage, "Coder agent failed") {
 		t.Errorf("error_message = %q, want to contain 'Coder agent failed'", res.ErrorMessage)
+	}
+}
+
+func TestCoderErrorWithProgressRetriesSameWorktree(t *testing.T) {
+	repo := initCodingTestRepo(t)
+	cfg := makeConfig(t, map[string]any{"max_coding_iterations": 2})
+	issue := makeIssue("ISSUE-PARTIAL", false)
+	issue["worktree_path"] = repo
+	var coderCalls int
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		switch {
+		case strings.HasSuffix(target, ".run_coder"):
+			coderCalls++
+			if coderCalls == 1 {
+				if err := os.WriteFile(filepath.Join(repo, "partial.go"), []byte("package partial\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return nil, errors.New("coder timed out after writing")
+			}
+			if got := kwargs["worktree_path"]; got != repo {
+				t.Fatalf("retry worktree=%v, want %s", got, repo)
+			}
+			for _, args := range [][]string{{"-C", repo, "add", "partial.go"}, {"-C", repo, "commit", "-m", "finish partial work"}} {
+				if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+					t.Fatalf("git %v: %v: %s", args, err, out)
+				}
+			}
+			return map[string]any{"files_changed": []string{"partial.go"}}, nil
+		case strings.HasSuffix(target, ".run_code_reviewer"):
+			return map[string]any{"approved": true, "blocking": false, "summary": "LGTM"}, nil
+		default:
+			t.Fatalf("unexpected target %s", target)
+			return nil, nil
+		}
+	}
+	res := run(t, issue, makeDAGState(t.TempDir()), callFn, cfg, nil)
+	if res.Outcome != schemas.IssueOutcomeCompleted || res.Attempts != 2 || coderCalls != 2 {
+		t.Fatalf("outcome=%s attempts=%d coderCalls=%d, want completed/2/2", res.Outcome, res.Attempts, coderCalls)
+	}
+}
+
+func TestCoderErrorWithoutProgressDoesNotRetry(t *testing.T) {
+	repo := initCodingTestRepo(t)
+	issue := makeIssue("ISSUE-NO-PROGRESS", false)
+	issue["worktree_path"] = repo
+	calls := 0
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		if strings.HasSuffix(target, ".run_coder") {
+			calls++
+			return nil, errors.New("temporary error without changes")
+		}
+		t.Fatalf("unexpected target %s", target)
+		return nil, nil
+	}
+	res := run(t, issue, makeDAGState(t.TempDir()), callFn, makeConfig(t, map[string]any{"max_coding_iterations": 3}), nil)
+	if res.Outcome != schemas.IssueOutcomeFailedUnrecoverable || calls != 1 {
+		t.Fatalf("outcome=%s coderCalls=%d, want failed_unrecoverable/1", res.Outcome, calls)
+	}
+}
+
+func TestReviewerFailureAndEmptyOutputCannotApprove(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "transport failure", err: errors.New("review service unavailable")},
+		{name: "empty output"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			issue := makeIssue("ISSUE-REVIEW-FAIL", false)
+			callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+				if strings.HasSuffix(target, ".run_code_reviewer") {
+					return nil, tc.err
+				}
+				if strings.HasSuffix(target, ".run_coder") {
+					return map[string]any{"files_changed": []string{"done.go"}}, nil
+				}
+				t.Fatalf("unexpected target %s", target)
+				return nil, nil
+			}
+			res := run(t, issue, makeDAGState(t.TempDir()), callFn, makeConfig(t, map[string]any{"max_coding_iterations": 3}), nil)
+			if res.Outcome != schemas.IssueOutcomeFailedUnrecoverable || res.Attempts != 1 {
+				t.Fatalf("outcome=%s attempts=%d, want failed_unrecoverable/1", res.Outcome, res.Attempts)
+			}
+			if got := res.IterationHistory[0]["action"]; got != "block" {
+				t.Fatalf("review failure action=%v, want block", got)
+			}
+		})
+	}
+}
+
+func TestFlaggedSynthesizerCannotApproveWithoutReviewerEvidence(t *testing.T) {
+	issue := makeIssue("ISSUE-FLAGGED-EMPTY-REVIEW", true)
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		switch {
+		case strings.HasSuffix(target, ".run_coder"):
+			return map[string]any{"files_changed": []string{"done.go"}}, nil
+		case strings.HasSuffix(target, ".run_qa"):
+			return map[string]any{"passed": true, "summary": "passed"}, nil
+		case strings.HasSuffix(target, ".run_code_reviewer"):
+			return map[string]any{}, nil
+		case strings.HasSuffix(target, ".run_qa_synthesizer"):
+			return map[string]any{"action": "approve", "summary": "approved", "stuck": false}, nil
+		default:
+			t.Fatalf("unexpected target %s", target)
+			return nil, nil
+		}
+	}
+	res := run(t, issue, makeDAGState(t.TempDir()), callFn, makeConfig(t, map[string]any{"max_coding_iterations": 2}), nil)
+	if res.Outcome != schemas.IssueOutcomeFailedUnrecoverable || res.IterationHistory[0]["action"] != "block" {
+		t.Fatalf("outcome=%s history=%v, want failed_unrecoverable/block", res.Outcome, res.IterationHistory)
+	}
+}
+
+func TestDirtyWorktreeCannotBeApproved(t *testing.T) {
+	repo := initCodingTestRepo(t)
+	issue := makeIssue("ISSUE-DIRTY", false)
+	issue["worktree_path"] = repo
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		if strings.HasSuffix(target, ".run_coder") {
+			if err := os.WriteFile(filepath.Join(repo, "uncommitted.go"), []byte("package dirty\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return map[string]any{"files_changed": []string{"uncommitted.go"}}, nil
+		}
+		if strings.HasSuffix(target, ".run_code_reviewer") {
+			return map[string]any{"approved": true, "blocking": false, "summary": "LGTM"}, nil
+		}
+		t.Fatalf("unexpected target %s", target)
+		return nil, nil
+	}
+	notes := &noteCapture{}
+	res := run(t, issue, makeDAGState(t.TempDir()), callFn, makeConfig(t, map[string]any{"max_coding_iterations": 1}), notes.fn())
+	if res.Outcome != schemas.IssueOutcomeFailedUnrecoverable {
+		t.Fatalf("outcome=%s, want failed_unrecoverable", res.Outcome)
+	}
+	entry := res.IterationHistory[0]
+	if entry["action"] != "fix" || entry["review_approved"] != false || entry["review_blocking"] != true {
+		t.Fatalf("dirty approval history=%v, want fix/unapproved/blocking", entry)
+	}
+	foundGateNote := false
+	for _, tags := range notes.tags {
+		for _, tag := range tags {
+			if tag == "git_commit_gate" {
+				foundGateNote = true
+			}
+		}
+	}
+	if !foundGateNote {
+		t.Fatalf("missing git_commit_gate note: %v", notes.tags)
+	}
+}
+
+func TestApprovalRequiresInspectableExistingWorktree(t *testing.T) {
+	repo := t.TempDir()
+	issue := makeIssue("ISSUE-NOT-GIT", false)
+	issue["worktree_path"] = repo
+	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		if strings.HasSuffix(target, ".run_coder") {
+			return map[string]any{"files_changed": []string{}}, nil
+		}
+		if strings.HasSuffix(target, ".run_code_reviewer") {
+			return map[string]any{"approved": true, "blocking": false, "summary": "LGTM"}, nil
+		}
+		t.Fatalf("unexpected target %s", target)
+		return nil, nil
+	}
+	res := run(t, issue, makeDAGState(t.TempDir()), callFn, makeConfig(t, map[string]any{"max_coding_iterations": 1}), nil)
+	if res.Outcome != schemas.IssueOutcomeFailedUnrecoverable || res.IterationHistory[0]["action"] != "block" {
+		t.Fatalf("outcome=%s history=%v, want failed_unrecoverable/block", res.Outcome, res.IterationHistory)
 	}
 }
 
@@ -576,7 +771,7 @@ func TestIgnoresLegacyIterationStateWhenBuildIDPresent(t *testing.T) {
 
 	ds := &schemas.DAGState{RepoPath: artifactsDir, ArtifactsDir: artifactsDir, BuildID: "newbuild1"}
 	cfg := makeConfig(t, map[string]any{"max_coding_iterations": 1, "permission_mode": "bypassPermissions"})
-	issue := map[string]any{"name": "create-hello-script", "guidance": map[string]any{"needs_deeper_qa": false}}
+	issue := map[string]any{"name": "create-hello-script", "guidance": map[string]any{"needs_deeper_qa": false}, "worktree_path": initCodingTestRepo(t)}
 
 	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
 		if strings.HasSuffix(target, ".run_coder") {

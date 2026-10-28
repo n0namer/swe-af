@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,7 +14,7 @@ from swe_af.hitl.ask_user import (
     build_form_builder,
     request_user_input_and_pause,
 )
-from swe_af.hitl.wrapper import AskUserBudget, run_with_ask_user
+from swe_af.hitl.wrapper import AskUserBudget, DecisionCase, run_with_ask_user
 
 
 def _approval_result(
@@ -406,3 +406,119 @@ async def test_wrapper_max_iterations_clears_field_after_exhaust():
     # check before pausing and returns the cleared result.
     assert app.pause.await_count == 3
     assert budget.remaining == 10 - 3
+
+
+@pytest.mark.asyncio
+async def test_wrapper_shadow_recommendation_never_skips_human_pause():
+    spec = AskUserForm(
+        title="Choose backend",
+        fields=[AskUserFormField(id="backend", type="input", label="Backend")],
+    )
+    reasoner_fn = AsyncMock(
+        side_effect=[_result("ASKING", ask=spec), _result("FINAL")]
+    )
+    app = _silent_app()
+    app.ctx = MagicMock(run_id="exec-test")
+    app.harness = AsyncMock(
+        return_value=MagicMock(
+            parsed=DecisionCase(
+                recommended_values={"backend": "recommended"},
+                rationale="Repository evidence favors this option.",
+                evidence=["README.md"],
+                confidence=0.91,
+                recommended_mode="AUTO",
+                human_required=False,
+                risk="low",
+            )
+        )
+    )
+    human_response = MagicMock(
+        status="submitted", values={"backend": "human choice"}, feedback=None
+    )
+    with patch(
+        "swe_af.hitl.wrapper.request_user_input_and_pause",
+        new=AsyncMock(return_value=human_response),
+    ) as pause_request:
+        out = await run_with_ask_user(
+            reasoner_fn=reasoner_fn,
+            reasoner_kwargs={},
+            app=app,
+            hax_client=MagicMock(),
+            budget=AskUserBudget(remaining=2),
+            decision_context={"project_id": "project-test", "stage": "planner"},
+        )
+
+    assert out.action == "FINAL"
+    app.harness.assert_awaited_once()
+    assert app.harness.await_args.kwargs["tools"] == ["Read", "Glob", "Grep"]
+    pause_request.assert_awaited_once()
+    assert reasoner_fn.await_args_list[1].kwargs["prior_user_responses"][0]["values"] == {
+        "backend": "human choice"
+    }
+    assert any(
+        "HITL_DECISION_EVENT" in str(call.args[0])
+        for call in app.note.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_wrapper_shadow_failure_still_pauses_for_human():
+    spec = AskUserForm(
+        title="Need decision",
+        fields=[AskUserFormField(id="x", type="input", label="X")],
+    )
+    reasoner_fn = AsyncMock(
+        side_effect=[_result("ASKING", ask=spec), _result("FINAL")]
+    )
+    app = _silent_app()
+    app.harness = AsyncMock(side_effect=RuntimeError("provider unavailable"))
+    human_response = MagicMock(status="cancelled", values={}, feedback="no")
+    with patch(
+        "swe_af.hitl.wrapper.request_user_input_and_pause",
+        new=AsyncMock(return_value=human_response),
+    ) as pause_request:
+        out = await run_with_ask_user(
+            reasoner_fn=reasoner_fn,
+            reasoner_kwargs={},
+            app=app,
+            hax_client=MagicMock(),
+            budget=AskUserBudget(remaining=2),
+            decision_context={"stage": "planner"},
+        )
+
+    assert out.action == "FINAL"
+    pause_request.assert_awaited_once()
+    assert reasoner_fn.await_args_list[1].kwargs["prior_user_responses"][0]["status"] == "cancelled"
+    assert any(
+        "shadow HITL decision resolver failed" in str(call.args[0])
+        for call in app.note.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_wrapper_shadow_context_error_does_not_block_timeout_response():
+    spec = AskUserForm(
+        title="Question",
+        fields=[AskUserFormField(id="x", type="input", label="X")],
+    )
+    reasoner_fn = AsyncMock(
+        side_effect=[_result("ASKING", ask=spec), _result("FINAL")]
+    )
+    app = _silent_app()
+    human_response = MagicMock(status="timeout", values={}, feedback=None)
+    with patch(
+        "swe_af.hitl.wrapper.request_user_input_and_pause",
+        new=AsyncMock(return_value=human_response),
+    ) as pause_request:
+        out = await run_with_ask_user(
+            reasoner_fn=reasoner_fn,
+            reasoner_kwargs={},
+            app=app,
+            hax_client=MagicMock(),
+            budget=AskUserBudget(remaining=2),
+            decision_context={"timeout_seconds": "invalid"},
+        )
+
+    assert out.action == "FINAL"
+    pause_request.assert_awaited_once()
+    assert reasoner_fn.await_args_list[1].kwargs["prior_user_responses"][0]["status"] == "timeout"

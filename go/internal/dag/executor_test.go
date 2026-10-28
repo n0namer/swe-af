@@ -371,11 +371,15 @@ func TestLoadPythonGoldenCheckpoint(t *testing.T) {
 	if err := os.MkdirAll(execDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	artifactsDirJSON, err := json.Marshal(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// A realistic Python-shaped checkpoint (DAGState.model_dump()). Note:
 	// max_replans is intentionally absent to exercise UnmarshalJSON default (=2).
 	golden := `{
   "repo_path": "/tmp/repo",
-  "artifacts_dir": "` + dir + `",
+  "artifacts_dir": ` + string(artifactsDirJSON) + `,
   "prd_path": "/tmp/repo/.artifacts/plan/prd.md",
   "architecture_path": "",
   "issues_dir": "",
@@ -502,7 +506,7 @@ func TestReplanModifyDAGResetsLevel0(t *testing.T) {
 	})
 	cfg := testCfg(t, map[string]any{"enable_issue_advisor": false})
 	plan := makePlan([]map[string]any{issue("a")}, [][]string{{"a"}})
-	state, err := RunDAG(context.Background(), plan, "/repo", m.fn, "swe-planner", cfg)
+	state, err := RunDAG(context.Background(), plan, filepath.Join(t.TempDir(), "repo"), m.fn, "swe-planner", cfg)
 	if err != nil {
 		t.Fatalf("RunDAG: %v", err)
 	}
@@ -640,7 +644,7 @@ func TestCleanupAwaitedBeforeAdvance(t *testing.T) {
 		[][]string{{"a"}, {"b"}},
 	)
 	git := map[string]any{"integration_branch": "integ/main", "original_branch": "main", "mode": "existing"}
-	state, err := RunDAG(context.Background(), plan, "/repo", m.fn, "swe-planner", testCfg(t, nil), WithGitConfig(git))
+	state, err := RunDAG(context.Background(), plan, "/repo", m.fn, "swe-planner", testCfg(t, map[string]any{"deterministic_git": false}), WithGitConfig(git))
 	if err != nil {
 		t.Fatalf("RunDAG: %v", err)
 	}
@@ -760,7 +764,7 @@ func TestMergeGateSingleRepo(t *testing.T) {
 	})
 	plan := makePlan([]map[string]any{issue("a")}, [][]string{{"a"}})
 	git := map[string]any{"integration_branch": "integ/main", "original_branch": "main", "mode": "existing"}
-	state, err := RunDAG(context.Background(), plan, "/repo", m.fn, "swe-planner", testCfg(t, nil), WithGitConfig(git))
+	state, err := RunDAG(context.Background(), plan, "/repo", m.fn, "swe-planner", testCfg(t, map[string]any{"deterministic_git": false}), WithGitConfig(git))
 	if err != nil {
 		t.Fatalf("RunDAG: %v", err)
 	}

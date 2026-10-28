@@ -51,9 +51,29 @@ app.include_router(_issue_router)
 
 
 def _repo_name_from_url(url: str) -> str:
-    """Extract repo name from a GitHub URL."""
-    match = re.search(r"/([^/]+?)(?:\.git)?$", url.rstrip("/"))
-    return match.group(1) if match else "repo"
+    """Extract a repository basename from a Git URL or local path."""
+    path = url.rstrip("/\\")
+    # Git accepts scp-style remotes (user@host:org/repo.git) as well as URLs
+    # and local paths. Keep only the path portion before splitting on either
+    # separator so Windows paths and scp remotes use the same basename logic.
+    if "://" in path:
+        path = path.split("://", 1)[1]
+        path = path.split("/", 1)[1] if "/" in path else ""
+    elif re.match(r"^[^/\\:]+@[^/\\:]+:", path):
+        path = path.split(":", 1)[1]
+    name = re.split(r"[/\\]", path)[-1].removesuffix(".git")
+    return name or "repo"
+
+
+def _remove_owned_workspace(repo_path: str) -> None:
+    """Remove a derived workspace, retrying read-only files and failing loudly."""
+    def make_writable_and_retry(function: object, path: str, _: object) -> None:
+        os.chmod(path, 0o700)
+        function(path)  # type: ignore[operator]
+
+    shutil.rmtree(repo_path, onerror=make_writable_and_retry)
+    if os.path.exists(repo_path):
+        raise OSError(f"Could not remove derived workspace: {repo_path}")
 
 
 def _runtime_to_provider(runtime: str) -> str:
@@ -127,7 +147,7 @@ def _prepare_repo(
                 f"Clearing stale workspace at {repo_path} (no git repo) before cloning",
                 tags=["fast_build", "clone", "reclone"],
             )
-            shutil.rmtree(repo_path, ignore_errors=True)
+            _remove_owned_workspace(repo_path)
         app.note(
             f"Cloning {_redact_credentials(repo_url, repo_url)} → {repo_path}",
             tags=["fast_build", "clone"],
@@ -161,7 +181,7 @@ def _prepare_repo(
                 f"re-cloning",
                 tags=["fast_build", "clone", "reclone"],
             )
-            shutil.rmtree(repo_path, ignore_errors=True)
+            _remove_owned_workspace(repo_path)
             _clone_repo(repo_url, repo_path, reclone=True)
             return
 
@@ -214,7 +234,7 @@ def _prepare_repo(
                 f"Reset to origin/{default_branch} failed — re-cloning",
                 tags=["fast_build", "clone", "reclone"],
             )
-            shutil.rmtree(repo_path, ignore_errors=True)
+            _remove_owned_workspace(repo_path)
             _clone_repo(repo_url, repo_path, reclone=True)
     else:
         os.makedirs(repo_path, exist_ok=True)
@@ -251,9 +271,17 @@ async def build(
     # Auto-derive repo_path from repo_url when not specified
     path_was_derived = not repo_path
     if effective_repo_url and not repo_path:
-        repo_path = os.path.join(
-            _workspace_root(), _repo_name_from_url(effective_repo_url)
-        )
+        workspace_root = os.path.abspath(_workspace_root())
+        repo_name = _repo_name_from_url(effective_repo_url)
+        if (
+            repo_name in {".", ".."}
+            or os.path.isabs(repo_name)
+            or os.path.basename(repo_name) != repo_name
+        ):
+            raise ValueError("Repository URL does not have a safe repository name")
+        repo_path = os.path.abspath(os.path.join(workspace_root, repo_name))
+        if os.path.commonpath([workspace_root, repo_path]) != workspace_root:
+            raise ValueError("Derived repository path escapes the workspace root")
     if not repo_path:
         raise ValueError("Either repo_path or repo_url must be provided")
 

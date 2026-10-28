@@ -550,7 +550,7 @@ func cleanupWorktrees(
 			}
 			repoWorktreesDir := filepath.Join(wsRepo.AbsolutePath, ".worktrees")
 			if err := cleanupSingleRepo(ctx, callFn, nodeID, wsRepo.AbsolutePath, repoWorktreesDir,
-				byRepo[repoName], dagState.ArtifactsDir, level, model, aiProvider, deterministicGit, note); err != nil {
+				byRepo[repoName], dagState.BuildID, dagState.ArtifactsDir, level, model, aiProvider, deterministicGit, note); err != nil {
 				return err
 			}
 		}
@@ -559,7 +559,7 @@ func cleanupWorktrees(
 
 	// --- Single-repo path ---
 	return cleanupSingleRepo(ctx, callFn, nodeID, dagState.RepoPath, dagState.WorktreesDir,
-		branchesToClean, dagState.ArtifactsDir, level, model, aiProvider, deterministicGit, note)
+		branchesToClean, dagState.BuildID, dagState.ArtifactsDir, level, model, aiProvider, deterministicGit, note)
 }
 
 // cleanupSingleRepo cleans up worktrees for a single repo, retrying once on
@@ -570,6 +570,7 @@ func cleanupSingleRepo(
 	callFn coding.CallFn,
 	nodeID, repoPath, worktreesDir string,
 	branchesToClean []string,
+	buildID string,
 	artifactsDir string,
 	level int,
 	model, aiProvider string,
@@ -577,7 +578,7 @@ func cleanupSingleRepo(
 	note noteFunc,
 ) error {
 	if deterministicGit {
-		result, err := fastCleanupWorktrees(repoPath, worktreesDir, branchesToClean)
+		result, err := fastCleanupWorktrees(repoPath, worktreesDir, branchesToClean, buildID)
 		if err == nil {
 			if note != nil {
 				note(fmt.Sprintf("Worktree cleanup complete (deterministic): %s",
@@ -585,6 +586,10 @@ func cleanupSingleRepo(
 					[]string{"execution", "worktree_cleanup", "fast_path"})
 			}
 			return nil
+		}
+		var unsafe *unsafeCleanupError
+		if errors.As(err, &unsafe) {
+			return err
 		}
 		if note != nil {
 			note(fmt.Sprintf("Deterministic cleanup failed (%v) — falling back to the cleanup agent", err),
