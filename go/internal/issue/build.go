@@ -55,6 +55,7 @@ type implementInput struct {
 	Issue             map[string]any `json:"issue"`
 	RepoPath          string         `json:"repo_path"`
 	BaseBranch        string         `json:"base_branch"`
+	ResumeBuildID     string         `json:"resume_build_id"`
 	ArtifactsDir      string         `json:"artifacts_dir"`
 	AdditionalContext string         `json:"additional_context"`
 	Config            map[string]any `json:"config"`
@@ -63,6 +64,29 @@ type implementInput struct {
 var completedOutcomes = map[string]bool{
 	"completed":           true,
 	"completed_with_debt": true,
+}
+
+func declaredScopeViolations(spec *Spec, files []string) []string {
+	allowed := map[string]bool{}
+	for _, paths := range [][]string{spec.FilesToCreate, spec.FilesToModify} {
+		for _, raw := range paths {
+			p := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+			if p != "." && p != "" {
+				allowed[p] = true
+			}
+		}
+	}
+	if len(allowed) == 0 {
+		return nil
+	}
+	var bad []string
+	for _, raw := range files {
+		p := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+		if p != "." && p != "" && !allowed[p] {
+			bad = append(bad, p)
+		}
+	}
+	return bad
 }
 
 func newBuildID() string {
@@ -131,6 +155,16 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 	}
 
 	buildID := newBuildID()
+	resuming := in.ResumeBuildID != ""
+	if resuming {
+		if len(in.ResumeBuildID) != 8 {
+			return nil, fmt.Errorf("implement_issue: invalid resume_build_id %q", in.ResumeBuildID)
+		}
+		if _, err := hex.DecodeString(in.ResumeBuildID); err != nil {
+			return nil, fmt.Errorf("implement_issue: invalid resume_build_id %q", in.ResumeBuildID)
+		}
+		buildID = in.ResumeBuildID
+	}
 	branch := cfg.BranchPrefix + buildID + "-" + plannedName
 	worktreePath := filepath.Join(repoPath, ".worktrees", buildID+"-"+plannedName)
 	var absArtifacts string
@@ -143,7 +177,18 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		return nil, err
 	}
 
-	if err := addWorktree(repoPath, worktreePath, branch, baseSHA); err != nil {
+	if resuming {
+		if info, err := os.Stat(worktreePath); err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("implement_issue: resume worktree missing for build %s", buildID)
+		}
+		gotBranch, err := currentBranch(worktreePath)
+		if err != nil || gotBranch != branch {
+			return nil, fmt.Errorf("implement_issue: resume worktree branch mismatch: got %q, want %q", gotBranch, branch)
+		}
+		if _, _, code := runGit(repoPath, "merge-base", "--is-ancestor", baseSHA, branch); code != 0 {
+			return nil, fmt.Errorf("implement_issue: resume branch %s is not based on %s", branch, baseSHA)
+		}
+	} else if err := addWorktree(repoPath, worktreePath, branch, baseSHA); err != nil {
 		return nil, err
 	}
 	deps.note(ctx,
@@ -157,8 +202,10 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 
 	execCfg, err := config.LoadExecutionConfig(cfg.ToExecutionRaw())
 	if err != nil {
-		removeWorktree(repoPath, worktreePath)
-		deleteBranch(repoPath, branch)
+		if !resuming {
+			removeWorktree(repoPath, worktreePath)
+			deleteBranch(repoPath, branch)
+		}
 		return nil, err
 	}
 	dagState := &schemas.DAGState{
@@ -182,14 +229,36 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 	stat := ""
 
 	noteFn := func(msg string, tags []string) { deps.note(ctx, msg, tags...) }
-	callFn := coding.CallFn(deps.Call)
+	callFn := coding.CallFn(func(callCtx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
+		result, callErr := deps.Call(callCtx, target, kwargs)
+		if callErr != nil || result == nil || callCtx.Err() != nil || !strings.HasSuffix(target, ".run_coder") {
+			return result, callErr
+		}
+		if _, err := scrubTrackedJunk(worktreePath, plannedName); err != nil {
+			return nil, fmt.Errorf("checkpoint coder output: scrub tracked junk: %w", err)
+		}
+		cleanArgs := append([]string{"clean", "-f", "-d", "--"}, junkPathspecs...)
+		if _, detail, code := runGit(worktreePath, cleanArgs...); code != 0 {
+			return nil, gitOpsErrf("checkpoint coder output: remove untracked junk: %s", detail)
+		}
+		if _, err := commitAll(worktreePath, fmt.Sprintf("chore(%s): checkpoint coder output", plannedName)); err != nil {
+			return nil, fmt.Errorf("checkpoint coder output: commit worktree: %w", err)
+		}
+		return result, nil
+	})
 
 	loopResult, loopErr := coding.RunCodingLoop(
 		ctx, planned, dagState, callFn, deps.NodeID, execCfg, noteFn, nil,
 	)
 	if loopErr != nil && ctx.Err() != nil {
-		// Context cancellation propagates (Python does not catch CancelledError).
-		removeWorktree(repoPath, worktreePath)
+		commits = newCommits(repoPath, baseSHA, branch)
+		if len(commits) > 0 || isDirty(worktreePath) {
+			filesChanged = changedFiles(repoPath, baseSHA, branch)
+			return map[string]any{"success": false, "outcome": "interrupted_with_progress", "summary": "Execution interrupted after observable issue progress; resume the same build_id.", "build_id": buildID, "branch": branch, "base_branch": baseRef, "base_sha": baseSHA, "commits": commits, "files_changed": filesChanged, "diff_stat": diffStat(repoPath, baseSHA, branch), "iterations": 0, "iteration_history": []map[string]any{}, "debt_items": []map[string]any{}, "verification": nil, "pr_url": "", "error_message": loopErr.Error(), "effect_observed": true, "worktree_path": worktreePath}, nil
+		}
+		if !resuming {
+			removeWorktree(repoPath, worktreePath)
+		}
 		return nil, loopErr
 	}
 	if loopErr != nil {
@@ -200,6 +269,11 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		commits = newCommits(repoPath, baseSHA, branch)
 		filesChanged = changedFiles(repoPath, baseSHA, branch)
 		stat = diffStat(repoPath, baseSHA, branch)
+		if bad := declaredScopeViolations(spec, filesChanged); len(bad) > 0 {
+			outcomeValue = "failed_unrecoverable"
+			errorMessage = "out-of-scope files changed: " + strings.Join(bad, ", ")
+			loopSummary = errorMessage
+		}
 	} else {
 		outcomeValue = string(loopResult.Outcome)
 		loopSummary = loopResult.ResultSummary
@@ -225,11 +299,16 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		commits = newCommits(repoPath, baseSHA, branch)
 		filesChanged = changedFiles(repoPath, baseSHA, branch)
 		stat = diffStat(repoPath, baseSHA, branch)
+		if bad := declaredScopeViolations(spec, filesChanged); len(bad) > 0 {
+			outcomeValue = "failed_unrecoverable"
+			errorMessage = "out-of-scope files changed: " + strings.Join(bad, ", ")
+			loopSummary = errorMessage
+		}
 
 		codingOK := completedOutcomes[outcomeValue]
 		if cfg.Verify && codingOK && len(commits) > 0 {
 			verification = runVerification(ctx, deps, cfg, execCfg, spec, planned,
-				worktreePath, absArtifacts, loopSummary)
+				worktreePath, absArtifacts, loopSummary, filesChanged)
 		}
 		if cfg.EnableGithubPR && codingOK && len(commits) > 0 {
 			prURL = maybeCreatePR(ctx, deps, cfg, execCfg, spec, planned,
@@ -238,10 +317,10 @@ func ImplementIssue(ctx context.Context, deps *Deps, input map[string]any) (any,
 		}
 	}
 
-	if !cfg.KeepWorktree {
+	if !cfg.KeepWorktree && !resuming {
 		removeWorktree(repoPath, worktreePath)
 	}
-	if len(commits) == 0 {
+	if len(commits) == 0 && !resuming {
 		// A branch with zero commits is pure noise for the caller.
 		deleteBranch(repoPath, branch)
 	}
@@ -325,6 +404,7 @@ func runVerification(
 	spec *Spec,
 	planned map[string]any,
 	worktreePath, artifactsDir, loopSummary string,
+	filesChanged []string,
 ) map[string]any {
 	callCtx, cancel := context.WithTimeout(ctx, time.Duration(cfg.AgentTimeoutSeconds)*time.Second)
 	defer cancel()
@@ -343,6 +423,7 @@ func runVerification(
 		"completed_issues": []any{map[string]any{
 			"issue_name":     planned["name"],
 			"result_summary": loopSummary,
+			"files_changed":  toAnySlice(filesChanged),
 		}},
 		"failed_issues":   []any{},
 		"skipped_issues":  []any{},
