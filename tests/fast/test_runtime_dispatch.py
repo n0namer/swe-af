@@ -24,10 +24,12 @@ async def test_public_fast_build_dispatches_selected_runtime(
     async def offline_call(target, **kwargs):
         calls.append((target, kwargs))
         if target.endswith("fast_plan_tasks"):
-            return {"result": {"tasks": [], "rationale": "offline"}}
+            return {"result": {"tasks": [{"name": "routing-task"}], "rationale": "offline"}}
         if target.endswith("fast_execute_tasks"):
-            return {"result": {"task_results": [], "completed_count": 0,
-                               "failed_count": 0, "timed_out": False}}
+            return {"result": {"task_results": [{"task_name": "routing-task",
+                                                "outcome": "completed"}],
+                               "completed_count": 1, "failed_count": 0,
+                               "timed_out": False}}
         if target.endswith("fast_verify"):
             return {"result": {"passed": True}}
         return {"result": {"success": False}}
