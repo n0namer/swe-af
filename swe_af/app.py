@@ -40,6 +40,7 @@ except ImportError:  # pragma: no cover - exercised only on older agentfield SDK
             self.error_details = error_details
 from swe_af.execution.envelope import unwrap_call_result as _unwrap
 from swe_af.execution.fatal_error import FatalHarnessError
+from swe_af.execution.dag_utils import recompute_levels
 
 try:
     from agentfield.exceptions import ExecutionCancelledError
@@ -73,6 +74,19 @@ app = Agent(
 
 app.include_router(router)
 app.include_router(issue_router)
+
+
+def _generated_fix_issue_levels(fix_issues: list[dict]) -> list[list[str]]:
+    """Return dependency-respecting execution levels for generated fixes."""
+    fix_names = {issue["name"] for issue in fix_issues}
+    for issue in fix_issues:
+        for dependency in issue.get("depends_on", []):
+            if dependency not in fix_names:
+                raise ValueError(
+                    f"Unknown dependency '{dependency}' for generated fix "
+                    f"'{issue['name']}'"
+                )
+    return recompute_levels(fix_issues, completed_names=set())
 
 
 # ---------------------------------------------------------------------------
@@ -1241,7 +1255,7 @@ async def build(
                     "architecture": plan_result.get("architecture", {}),
                     "review": plan_result.get("review", {}),
                     "issues": fix_issues,
-                    "levels": [[fi.get("name", f"fix-{i}") for i, fi in enumerate(fix_issues)]],
+                    "levels": _generated_fix_issue_levels(fix_issues),
                     "file_conflicts": [],
                     "artifacts_dir": plan_result.get("artifacts_dir", artifacts_dir),
                     "rationale": f"Fix issues for verification cycle {cycle + 1}",

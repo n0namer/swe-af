@@ -8,7 +8,25 @@ Canonical project SoT: this file (`PLAN.md`)
 Product-code inner loop: CURRENT `/src/swe-af` runtime/exact-source workspace; GitHub is publication/canonicalization only.
 Historical evidence: retained in Git history; old checkpoints do not override the CURRENT section below.
 
-## CURRENT — upstream-first reconciliation, 2026-10-29
+## CURRENT — upstream-first verification, 2026-10-30
+
+Authority: CrewSync `sweaf:upstream-first:plan:active`; root task `sweaf:mvp:upstream-first-integration-20261028`. This file is a source projection, not a second task scheduler.
+
+- Official upstream remains `da78a77d49a0084bce9283acb565832d083e0945` (fresh GitHub API readback). Remote fork/main is `4d3dfe719e5ce9e2e8cd454722295bbe6512542f`; remote fork/dev is `e93e21a9686a813f735fb736c5246e9a9291d739`. Local origin/main was stale; do not use it as publication truth.
+- Existing candidate base `bc01fb2` and original worktree are preserved. Added only the already-proven missing Fast execution-result truth and generated-fix dependency ordering contracts, plus cross-platform CommandCode tests. Production provider code and upstream SDK/runtime defaults are unchanged.
+- Original r4 Manager `01a188bc-b0cc-7492-9e79-b4d9302ba85d` continued in turn `01a18c3e-892c-7a33-959c-679554368981`; original CommandCode child `01a188bf-dd33-7763-a2c7-6c76be89e1c5` continued in turn `01a18c40-70fe-7252-803f-ebe41f02e2df`. Both reached terminal 429. No duplicate author was launched.
+- The same coordinator/integrator completed only the remaining test assertion after that author failure. Windows stdin and POSIX argv paths are now both explicit test cases; prompt/schema payload, model, permissions, environment and process settings remain checked. Original author evidence is retained in CrewSync.
+- Fresh focused validation: **100 passed, 1 skipped**, 0 failures on the combined Fast/repo-clone/generated-fix/CommandCode suites. Evidence: `C:/Temp/sweaf-focused-20261030-r2.xml` and `.log`. Earlier RED was 98 passed, 1 failed, 1 skipped.
+- Go source is unchanged from the candidate whose isolated Linux `go build ./...`, `go vet ./...`, and `go test -race -count=1 ./...` passed in 31 packages (four without tests); receipt `C:/Temp/sweaf-go-linux-bc01fb2-20261029.readback.json`.
+- Reuse corrected original comparison evidence: Python/upstream `01a1846d-3485-7232-aa79-5b78b0e4cfec`, fork capability inventory `01a1846d-8390-7c80-a253-bd910d3c1856`, Go/SDK scout `01a1846d-d956-7041-8f70-85dbae49841c`. Their initial direction errors were explicitly corrected by exact SHA reads; only corrected conclusions are valid.
+- Remaining gate: full Python validation on the frozen commit, independent integrated SHA-bound QA, then controlled history-preserving main/dev synchronization and CrewSync readback. No runtime E2E, publication, or SERVER_DONE is claimed here.
+- Preserve untracked `.pytest-tmp-retain-green/` as unrelated generated test data; do not commit or delete it as part of source integration.
+
+### Retention boundary
+
+Keep upstream provider routing, SDK dependencies, repo preparation, schema retry and architecture recovery. Keep only unique bounded Go recovery/reviewer/cleanup/BMad capabilities and optional human-preserving HITL shadow behavior; retain the two demonstrated missing Python safety contracts. Old runtime overlays, SDK downgrades, broad prompt churn and unverified timeout patches remain out of scope. Cosmetic finalization retains upstream non-fatal semantics; task success still requires explicit verifier acceptance and complete matching execution results.
+
+## Historical batch — upstream-first reconciliation, 2026-10-29
 
 Goal: existing CrewSync `sweaf:mvp:upstream-first-integration-20261028`, reported CLAIMED by coordinator. No duplicate goal was created. Current local status: CANDIDATE_IN_PROGRESS, not project DONE.
 

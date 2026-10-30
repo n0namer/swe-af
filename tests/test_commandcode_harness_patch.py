@@ -281,12 +281,16 @@ def test_public_runner_resolves_executable(
     assert calls[0][0][0] == expected
 
 
+@pytest.mark.parametrize("platform", ["posix", "nt"])
 def test_public_runner_preserves_structured_output_and_process_options(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, platform
 ):
+    import os
+
     from agentfield.harness import HarnessRunner
     from pydantic import BaseModel
     import agentfield.harness._cli as sdk_cli
+    import swe_af.runtime.commandcode_harness_patch as commandcode_module
 
     class Answer(BaseModel):
         ok: bool
@@ -303,6 +307,9 @@ def test_public_runner_preserves_structured_output_and_process_options(
         )
 
     monkeypatch.setattr(sdk_cli, "run_cli", fake_run_cli)
+    monkeypatch.setattr(
+        commandcode_module, "os", SimpleNamespace(name=platform, environ=os.environ)
+    )
     apply_commandcode_harness_patch()
     result = asyncio.run(
         HarnessRunner().run(
@@ -328,8 +335,21 @@ def test_public_runner_preserves_structured_output_and_process_options(
     assert result.session_id == "session-1"
     cmd, options = calls[0]
     assert cmd[0] == "/custom path/cli"
-    assert cmd[2].startswith("SYSTEM INSTRUCTIONS:\nsystem")
-    assert "prompt with $(shell metacharacters);" in cmd[2]
+    expected_prompt = (
+        "SYSTEM INSTRUCTIONS:\nsystem\n\n---\n\n"
+        "USER REQUEST:\nprompt with $(shell metacharacters);"
+    )
+    if platform == "nt":
+        # Windows uses stdin rather than the command line for the prompt.
+        assert cmd[2] == "--output-format"
+        effective_prompt = options["input_text"]
+    else:
+        effective_prompt = cmd[2]
+        assert options["input_text"] is None
+    # The SDK appends structured-output instructions after the user prompt.
+    assert effective_prompt.startswith(expected_prompt)
+    assert '"ok"' in effective_prompt
+    assert '"properties"' in effective_prompt
     assert "--plan" in cmd
     assert "--yolo" not in cmd
     assert cmd[cmd.index("-m") + 1] == "future/model"
@@ -338,7 +358,7 @@ def test_public_runner_preserves_structured_output_and_process_options(
         "env": {"TEST_TOKEN": "sentinel"},
         "cwd": str(tmp_path),
         "timeout": 15.0,
-        "input_text": None,
+        "input_text": effective_prompt if platform == "nt" else None,
     }
 
 

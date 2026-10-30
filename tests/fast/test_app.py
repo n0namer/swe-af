@@ -281,6 +281,141 @@ class TestBuildSuccessPath:
         assert result["success"] is True
         assert "Success" in result["summary"]
 
+    @pytest.mark.parametrize(
+        "planned_names,result_names",
+        [
+            (["task-1"], []),
+            (["task-1", "task-2"], ["task-1", "task-1"]),
+            ([], []),
+            (["task-1", "task-1"], ["task-1", "task-1"]),
+            (["", "task-2"], ["", "task-2"]),
+            (["task-1"], [""]),
+            (["task-1"], ["task-1", "extra"]),
+        ],
+        ids=["missing", "duplicate-result", "empty-plan", "duplicate-plan", "blank-plan", "blank-result", "extra-result"],
+    )
+    @pytest.mark.asyncio
+    async def test_task_results_must_exactly_cover_nonempty_plan(
+        self, tmp_path, planned_names: list[str], result_names: list[str]
+    ) -> None:
+        """Only a nonempty plan with unique matching completed results can succeed."""
+        import swe_af.fast.app as fast_app  # noqa: PLC0415
+
+        plan = _make_plan_result()
+        plan["tasks"] = [{"name": name} for name in planned_names]
+        execution = {
+            "task_results": [
+                {"task_name": name, "outcome": "completed"} for name in result_names
+            ],
+            "completed_count": len(result_names),
+            "failed_count": 0,
+            "timed_out": False,
+        }
+        responses = {
+            "run_git_init": _make_git_init_result(),
+            "fast_plan_tasks": plan,
+            "fast_execute_tasks": execution,
+            "fast_verify": _make_verification_result(passed=True),
+            "run_repo_finalize": _make_finalize_result(),
+        }
+
+        async def mock_call(target: str, **kwargs):
+            return {"result": next(v for k, v in responses.items() if k in target)}
+
+        with (
+            patch.object(fast_app.app, "call", side_effect=mock_call),
+            patch.object(fast_app.app, "note", return_value=None),
+            patch("swe_af.fast.app._unwrap", side_effect=lambda raw, _name: raw["result"]),
+        ):
+            result = await fast_app.build(goal="Do something", repo_path=str(tmp_path))
+
+        assert result["success"] is False
+
+    @pytest.mark.parametrize(
+        "aggregate_override",
+        [{"completed_count": 0}, {"failed_count": 1}, {"timed_out": True}],
+        ids=["completed-count-zero", "failed-count-one", "timed-out"],
+    )
+    @pytest.mark.asyncio
+    async def test_inconsistent_execution_aggregate_fails_closed(
+        self, tmp_path, aggregate_override: dict
+    ) -> None:
+        """Contradictory execution metadata cannot override a completed result."""
+        import swe_af.fast.app as fast_app  # noqa: PLC0415
+
+        execution = _make_execution_result()
+        execution.update(aggregate_override)
+        responses = {
+            "run_git_init": _make_git_init_result(),
+            "fast_plan_tasks": _make_plan_result(),
+            "fast_execute_tasks": execution,
+            "fast_verify": _make_verification_result(passed=True),
+            "run_repo_finalize": _make_finalize_result(),
+        }
+
+        async def mock_call(target: str, **kwargs):
+            return {"result": next(v for k, v in responses.items() if k in target)}
+
+        with (
+            patch.object(fast_app.app, "call", side_effect=mock_call),
+            patch.object(fast_app.app, "note", return_value=None),
+            patch("swe_af.fast.app._unwrap", side_effect=lambda raw, _name: raw["result"]),
+        ):
+            result = await fast_app.build(goal="Do something", repo_path=str(tmp_path))
+
+        assert result["success"] is False
+
+    @pytest.mark.parametrize("malformed_passed", ["false", 1], ids=["string-false", "integer-one"])
+    @pytest.mark.asyncio
+    async def test_verifier_passed_requires_boolean_true(self, tmp_path, malformed_passed) -> None:
+        """Truthy values other than boolean true cannot claim success."""
+        import swe_af.fast.app as fast_app  # noqa: PLC0415
+
+        responses = {
+            "run_git_init": _make_git_init_result(),
+            "fast_plan_tasks": _make_plan_result(),
+            "fast_execute_tasks": _make_execution_result(),
+            "fast_verify": {"passed": malformed_passed, "summary": "Malformed verification"},
+            "run_repo_finalize": _make_finalize_result(),
+        }
+
+        async def mock_call(target: str, **kwargs):
+            return {"result": next(v for k, v in responses.items() if k in target)}
+
+        with (
+            patch.object(fast_app.app, "call", side_effect=mock_call),
+            patch.object(fast_app.app, "note", return_value=None),
+            patch("swe_af.fast.app._unwrap", side_effect=lambda raw, _name: raw["result"]),
+        ):
+            result = await fast_app.build(goal="Do something", repo_path=str(tmp_path))
+
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_cosmetic_finalize_failure_does_not_change_success(self, tmp_path) -> None:
+        """A failed cosmetic finalizer cannot invalidate a verified build."""
+        import swe_af.fast.app as fast_app  # noqa: PLC0415
+
+        responses = {
+            "run_git_init": _make_git_init_result(),
+            "fast_plan_tasks": _make_plan_result(),
+            "fast_execute_tasks": _make_execution_result(),
+            "fast_verify": _make_verification_result(passed=True),
+            "run_repo_finalize": {"success": False, "summary": "Commit failed"},
+        }
+
+        async def mock_call(target: str, **kwargs):
+            return {"result": next(v for k, v in responses.items() if k in target)}
+
+        with (
+            patch.object(fast_app.app, "call", side_effect=mock_call),
+            patch.object(fast_app.app, "note", return_value=None),
+            patch("swe_af.fast.app._unwrap", side_effect=lambda raw, _name: raw["result"]),
+        ):
+            result = await fast_app.build(goal="Do something", repo_path=str(tmp_path))
+
+        assert result["success"] is True
+
     @pytest.mark.asyncio
     async def test_build_failure_returns_success_false(self, tmp_path) -> None:
         """build() with failed verification returns FastBuildResult(success=False)."""

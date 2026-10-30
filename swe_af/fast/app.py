@@ -429,7 +429,25 @@ async def build(
             tags=["fast_build", "verify", "error"],
         )
         verification = {"passed": False, "summary": f"Verification failed: {e}"}
-    success = verification.get("passed", False)
+    planned_tasks = plan_result.get("tasks", [])
+    task_results = execution_result.get("task_results", [])
+    planned_names = [task.get("name") for task in planned_tasks]
+    result_names = [result.get("task_name") for result in task_results]
+    execution_succeeded = (
+        bool(planned_names)
+        and len(planned_names) == len(result_names)
+        and all(
+            isinstance(name, str) and name.strip()
+            for name in planned_names + result_names
+        )
+        and len(set(planned_names)) == len(planned_names)
+        and set(planned_names) == set(result_names)
+        and all(result.get("outcome") == "completed" for result in task_results)
+        and execution_result.get("completed_count") == len(planned_names)
+        and execution_result.get("failed_count") == 0
+        and execution_result.get("timed_out") is False
+    )
+    success = verification.get("passed") is True and execution_succeeded
 
     # ── 4. REPO FINALIZE ────────────────────────────────────────────────────
     app.note("Fast build: finalize", tags=["fast_build", "finalize"])
