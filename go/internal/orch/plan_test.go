@@ -175,52 +175,7 @@ func runPlan(t *testing.T, deps *Deps, repoPath string, extra map[string]any) (m
 	return m, nil
 }
 
-// --- Contract: planning role calls inherit the configured agent timeout ----
-
-func TestPlanRoleCallsUseAgentTimeout(t *testing.T) {
-	app := &mockApp{handler: func(ctx context.Context, target string, _ map[string]any) (map[string]any, error) {
-		name := target
-		if i := strings.LastIndex(target, "."); i >= 0 {
-			name = target[i+1:]
-		}
-		if _, ok := ctx.Deadline(); !ok {
-			return nil, errors.New(name + " missing deadline")
-		}
-		switch name {
-		case "run_product_manager":
-			return validPRD(), nil
-		case "run_architect":
-			return validArch(), nil
-		case "run_tech_lead":
-			return approvedReview(), nil
-		case "run_sprint_planner":
-			return sprintResult(issue("timeout-check", nil, []any{"thing.py"})), nil
-		default:
-			return map[string]any{}, nil
-		}
-	}}
-	deps := &Deps{App: app, NodeID: "swe-planner"}
-	if _, err := runPlan(t, deps, t.TempDir(), map[string]any{"agent_timeout_seconds": 1}); err != nil {
-		t.Fatalf("planning role timeout contract: %v", err)
-	}
-}
-
 // --- Contract: happy path returns the exact PlanResult key set ------------
-
-func TestPlanRejectsEmptyIssueDAGForNonEmptyRequirements(t *testing.T) {
-	deps, m := planApp(sprintResult())
-	m.responses["run_sprint_planner"] = constResp(map[string]any{"issues": []any{}, "rationale": ""})
-	_, err := runPlan(t, deps, t.TempDir(), nil)
-	if err == nil {
-		t.Fatal("expected empty issue DAG to fail for non-empty PRD requirements")
-	}
-	if !strings.Contains(err.Error(), "sprint planner returned empty issue DAG") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := len(m.callsFor("run_issue_writer")); got != 0 {
-		t.Fatalf("issue writer called %d times after empty DAG failure", got)
-	}
-}
 
 func TestPlanHappyPathKeySet(t *testing.T) {
 	deps, _ := planApp(sprintResult(issue("my-issue", nil, []any{"thing.py"})))

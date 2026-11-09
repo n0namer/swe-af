@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/Agent-Field/agentfield/sdk/go/agent"
 
@@ -41,19 +40,6 @@ import (
 // Handler is the exported reasoner-handler shape every planning role satisfies.
 // The node-wiring wave registers each by its exact Python name via Handlers().
 type Handler func(ctx context.Context, deps *Deps, input map[string]any) (any, error)
-
-const planningRoleTimeoutSeconds = 300
-
-// planningReadOnlyEnv enforces the planning/coding role boundary in OpenCode.
-// Planning roles may emit the structured-output file created by the harness,
-// but must not edit product source or mutate the repository through bash.
-// OpenCode permission rules are last-match-wins, so the narrow output allow
-// follows the catch-all edit deny.
-func planningReadOnlyEnv() map[string]string {
-	return map[string]string{
-		"OPENCODE_CONFIG_CONTENT": `{"permission":{"bash":"deny","edit":{"*":"deny",".agentfield-out-*/*":"allow"}}}`,
-	}
-}
 
 // Deps carries the collaborators a planning handler needs. The concrete
 // *agent.Agent satisfies Harness, App and Pauser; tests supply mocks.
@@ -150,36 +136,20 @@ func RunProductManager(ctx context.Context, deps *Deps, input map[string]any) (a
 			Provider:       provider,
 			Model:          model,
 			MaxTurns:       maxTurns,
-			Timeout:        planningRoleTimeoutSeconds,
 			Tools:          []string{"Read", "Write", "Glob", "Grep", "Bash"},
 			PermissionMode: permissionMode,
 			SystemPrompt:   systemPrompt,
 			Cwd:            repoPath,
-			Env:            planningReadOnlyEnv(),
 		}.ToOptions()
 		parsed, res, err := harnessx.Run[schemas.PRD](ctx, deps.Harness, taskPrompt, opts)
 		if err != nil {
 			return nil, err
 		}
 		if res == nil || res.Parsed == nil {
-			var recoverErr error
-			recoveredOK := false
-			for _, candidate := range []string{paths["prd"], filepath.Join(repoPath, "prd.json")} {
-				recovered, err := harnessx.RecoverFile[schemas.PRD](candidate)
-				if err == nil {
-					parsed = recovered
-					recoverErr = nil
-					recoveredOK = true
-					break
-				}
-				recoverErr = err
+			if res == nil {
+				return nil, errors.New("PM harness diagnostic: nil result")
 			}
-			if !recoveredOK {
-				if res == nil {
-					return nil, errors.New("PM harness diagnostic: nil result")
-				}
-				return nil, fmt.Errorf("PM harness diagnostic: is_error=%v failure=%v err=%q result=%q turns=%d duration_ms=%d messages=%d artifact_recovery=%q", res.IsError, res.FailureType, res.ErrorMessage, res.Result, res.NumTurns, res.DurationMS, len(res.Messages), recoverErr)
-			}
+			return nil, fmt.Errorf("PM harness diagnostic: is_error=%v failure=%v err=%q result=%q turns=%d duration_ms=%d messages=%d", res.IsError, res.FailureType, res.ErrorMessage, res.Result, res.NumTurns, res.DurationMS, len(res.Messages))
 		}
 		prdMap, err := toMap(parsed)
 		if err != nil {
@@ -266,7 +236,6 @@ func RunEnvironmentScout(ctx context.Context, deps *Deps, input map[string]any) 
 			Provider:       provider,
 			Model:          model,
 			MaxTurns:       maxTurns,
-			Timeout:        planningRoleTimeoutSeconds,
 			Tools:          []string{"Read", "Glob", "Grep", "Bash"},
 			PermissionMode: permissionMode,
 			SystemPrompt:   prompts.EnvironmentScoutSystemPrompt,
@@ -396,12 +365,10 @@ func RunArchitect(ctx context.Context, deps *Deps, input map[string]any) (any, e
 		Provider:       provider,
 		Model:          model,
 		MaxTurns:       maxTurns,
-		Timeout:        planningRoleTimeoutSeconds,
 		Tools:          []string{"Read", "Write", "Glob", "Grep", "Bash"},
 		PermissionMode: permissionMode,
 		SystemPrompt:   systemPrompt,
 		Cwd:            repoPath,
-		Env:            planningReadOnlyEnv(),
 	}.ToOptions()
 	parsed, res, err := harnessx.Run[schemas.Architecture](ctx, deps.Harness, taskPrompt, opts)
 	if err != nil {
@@ -411,41 +378,8 @@ func RunArchitect(ctx context.Context, deps *Deps, input map[string]any) (any, e
 		return nil, errors.New("Architect failed to produce a valid architecture")
 	}
 
-	requirementsNonEmpty := len(prdObj.MustHave) > 0 || len(prdObj.AcceptanceCriteria) > 0
-	architectureEmpty := func(a *schemas.Architecture) bool {
-		if a == nil {
-			return true
-		}
-		return strings.TrimSpace(a.Summary) == "" && len(a.Components) == 0 && len(a.Interfaces) == 0 && len(a.Decisions) == 0 && strings.TrimSpace(a.FileChangesOverview) == ""
-	}
-	if requirementsNonEmpty && architectureEmpty(parsed) {
-		deps.App.Note(ctx, "Architect returned an empty architecture for non-empty requirements; retrying once with an explicit content correction", "architect", "retry", "empty_architecture")
-		correctionPrompt := taskPrompt + "\n\n## Required Correction\nYour previous response was schema-valid but semantically empty. The PRD contains mandatory requirements. Return a non-empty architecture with at least one concrete component, explicit interface/behavior contract, architectural decision/rationale, file-change overview, and summary. Do not return until the architecture maps the PRD requirements to executable implementation boundaries."
-		parsed, res, err = harnessx.Run[schemas.Architecture](ctx, deps.Harness, correctionPrompt, opts)
-		if err != nil {
-			return nil, err
-		}
-		if res == nil || res.Parsed == nil {
-			return nil, errors.New("Architect retry failed to produce a valid architecture")
-		}
-		if architectureEmpty(parsed) {
-			return nil, errors.New("Architect returned an empty architecture after bounded retry")
-		}
-	}
-	archMap, err := toMap(parsed)
-	if err != nil {
-		return nil, err
-	}
-	blob, err := json.MarshalIndent(archMap, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(paths["architecture"], blob, 0o644); err != nil {
-		return nil, err
-	}
-
 	deps.App.Note(ctx, "Architect complete", "architect", "complete")
-	return archMap, nil
+	return toMap(parsed)
 }
 
 // ---------------------------------------------------------------------------
@@ -495,12 +429,10 @@ func RunTechLead(ctx context.Context, deps *Deps, input map[string]any) (any, er
 		Provider:       provider,
 		Model:          model,
 		MaxTurns:       maxTurns,
-		Timeout:        planningRoleTimeoutSeconds,
 		Tools:          []string{"Read", "Write", "Glob", "Grep"},
 		PermissionMode: permissionMode,
 		SystemPrompt:   systemPrompt,
 		Cwd:            repoPath,
-		Env:            planningReadOnlyEnv(),
 	}.ToOptions()
 	parsed, res, err := harnessx.Run[schemas.ReviewResult](ctx, deps.Harness, taskPrompt, opts)
 	if err != nil {
@@ -534,7 +466,7 @@ func RunTechLead(ctx context.Context, deps *Deps, input map[string]any) (any, er
 // sprintPlanOutput is the inline schema Python declares inside
 // run_sprint_planner (issues + rationale).
 type sprintPlanOutput struct {
-	Issues    []schemas.PlannedIssue `json:"issues" jsonschema:"minItems=1"`
+	Issues    []schemas.PlannedIssue `json:"issues"`
 	Rationale string                 `json:"rationale"`
 }
 
@@ -609,7 +541,6 @@ func RunSprintPlanner(ctx context.Context, deps *Deps, input map[string]any) (an
 		PermissionMode: permissionMode,
 		SystemPrompt:   systemPrompt,
 		Cwd:            repoPath,
-		Env:            planningReadOnlyEnv(),
 	}.ToOptions()
 	parsed, res, err := harnessx.Run[sprintPlanOutput](ctx, deps.Harness, taskPrompt, opts)
 	if err != nil {
@@ -617,22 +548,6 @@ func RunSprintPlanner(ctx context.Context, deps *Deps, input map[string]any) (an
 	}
 	if res == nil || res.Parsed == nil {
 		return nil, errors.New("Sprint planner failed to produce valid issues")
-	}
-
-	requirementsNonEmpty := len(prdObj.MustHave) > 0 || len(prdObj.AcceptanceCriteria) > 0
-	if requirementsNonEmpty && len(parsed.Issues) == 0 {
-		deps.App.Note(ctx, "Sprint Planner returned an empty DAG for non-empty requirements; retrying once with an explicit coverage correction", "sprint_planner", "retry", "empty_dag")
-		correctionPrompt := taskPrompt + "\n\n## Required Correction\nYour previous response contained zero issues even though the PRD has mandatory requirements/acceptance criteria. Return at least one executable issue. Every PRD acceptance criterion must map to at least one issue acceptance criterion. A non-empty requirement set must never produce an empty issue DAG. Do not return until this coverage invariant is satisfied."
-		parsed, res, err = harnessx.Run[sprintPlanOutput](ctx, deps.Harness, correctionPrompt, opts)
-		if err != nil {
-			return nil, err
-		}
-		if res == nil || res.Parsed == nil {
-			return nil, errors.New("Sprint planner retry failed to produce valid issues")
-		}
-		if len(parsed.Issues) == 0 {
-			return nil, fmt.Errorf("Sprint planner returned empty issue DAG after bounded retry (must_have=%d acceptance_criteria=%d)", len(prdObj.MustHave), len(prdObj.AcceptanceCriteria))
-		}
 	}
 
 	issues := make([]any, 0, len(parsed.Issues))

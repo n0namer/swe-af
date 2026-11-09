@@ -171,7 +171,6 @@ func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 		"issue_writer_model":    resolved["issue_writer_model"],
 		"permission_mode":       cfg.PermissionMode,
 		"ai_provider":           cfg.AIProvider(),
-		"agent_timeout_seconds": cfg.AgentTimeoutSeconds,
 		"workspace_manifest":    manifestMap,
 	}
 
@@ -198,78 +197,71 @@ func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	var rawPlan callRes
 	planReceived := false
 
-	if deterministic, ok := deterministicExistingGitInit(ctx, repoPath, in.Goal, buildID); ok {
-		gitInit = deterministic
-		rawPlan = <-planCh
-		planReceived = true
-		deps.Note(ctx, "Existing repository initialized deterministically without an LLM", "build", "git_init", "deterministic")
-	} else {
-		for attempt := 1; attempt <= maxGitInitRetries; attempt++ {
-			note := fmt.Sprintf("Git init attempt %d/%d", attempt, maxGitInitRetries)
-			if s, ok := previousError.(string); ok && s != "" {
-				note += fmt.Sprintf(" (previous error: %s)", s)
-			}
-			deps.Note(ctx, note, "build", "git_init", "retry")
+	for attempt := 1; attempt <= maxGitInitRetries; attempt++ {
+		note := fmt.Sprintf("Git init attempt %d/%d", attempt, maxGitInitRetries)
+		if s, ok := previousError.(string); ok && s != "" {
+			note += fmt.Sprintf(" (previous error: %s)", s)
+		}
+		deps.Note(ctx, note, "build", "git_init", "retry")
 
-			gitKwargs := map[string]any{
-				"repo_path":       repoPath,
-				"goal":            in.Goal,
-				"artifacts_dir":   absArtifactsDir,
-				"model":           resolved["git_model"],
-				"permission_mode": cfg.PermissionMode,
-				"ai_provider":     cfg.AIProvider(),
-				"previous_error":  previousError,
-				"build_id":        buildID,
-			}
+		gitKwargs := map[string]any{
+			"repo_path":       repoPath,
+			"goal":            in.Goal,
+			"artifacts_dir":   absArtifactsDir,
+			"model":           resolved["git_model"],
+			"permission_mode": cfg.PermissionMode,
+			"ai_provider":     cfg.AIProvider(),
+			"previous_error":  previousError,
+			"build_id":        buildID,
+		}
 
-			rawGit, gerr := deps.CallRawTimeout(ctx, cfg.AgentTimeoutSeconds, "run_git_init", gitKwargs)
-			if attempt == 1 {
-				rawPlan = <-planCh // gather: wait for both
-				planReceived = true
-			}
-			if gerr != nil {
-				return nil, gerr // transport error propagates (Python: gather raises)
-			}
+		rawGit, gerr := deps.CallRaw(ctx, "run_git_init", gitKwargs)
+		if attempt == 1 {
+			rawPlan = <-planCh // gather: wait for both
+			planReceived = true
+		}
+		if gerr != nil {
+			return nil, gerr // transport error propagates (Python: gather raises)
+		}
 
-			// git_init failures are non-fatal — unwrap but don't propagate.
-			gi, uerr := envelope.UnwrapCallResult(rawGit, "run_git_init")
-			if uerr != nil {
-				gi = rawGit // except RuntimeError: git_init = raw_git (the envelope dict)
-			}
-			gitInit = gi
+		// git_init failures are non-fatal — unwrap but don't propagate.
+		gi, uerr := envelope.UnwrapCallResult(rawGit, "run_git_init")
+		if uerr != nil {
+			gi = rawGit // except RuntimeError: git_init = raw_git (the envelope dict)
+		}
+		gitInit = gi
 
-			if asBool(gitInit["success"]) {
-				deps.Note(ctx, fmt.Sprintf("Git init succeeded on attempt %d", attempt),
-					"build", "git_init", "success")
-				// The agent branches by hand; make sure it branched from where this
-				// run actually started, or the issue it was asked to fix may not
-				// even be present on the branch the work merges into.
-				if integrationBranchBase(
-					ctx, repoPath, mapStr(gitInit, "integration_branch", ""), buildBaseSHA,
-				) {
-					deps.Note(ctx, fmt.Sprintf(
-						"Integration branch %s did not descend from the run's starting commit %s — re-cut from it",
-						mapStr(gitInit, "integration_branch", ""), buildBaseSHA),
-						"build", "git_init", "rebased")
-				}
-				// git_init is told to create .worktrees/ and may rewrite
-				// .gitignore; re-assert the exclusions and drop anything it staged.
-				excludeHarnessMetadata(ctx, repoPath)
-				break
-			}
-
-			previousError = mapStr(gitInit, "error_message", "unknown error")
-			deps.Note(ctx, fmt.Sprintf("Git init attempt %d failed: %s", attempt, previousError),
-				"build", "git_init", "failed")
-
-			if attempt == maxGitInitRetries {
+		if asBool(gitInit["success"]) {
+			deps.Note(ctx, fmt.Sprintf("Git init succeeded on attempt %d", attempt),
+				"build", "git_init", "success")
+			// The agent branches by hand; make sure it branched from where this
+			// run actually started, or the issue it was asked to fix may not
+			// even be present on the branch the work merges into.
+			if integrationBranchBase(
+				ctx, repoPath, mapStr(gitInit, "integration_branch", ""), buildBaseSHA,
+			) {
 				deps.Note(ctx, fmt.Sprintf(
-					"Git init failed after %d attempts — proceeding without git workflow",
-					maxGitInitRetries), "build", "git_init", "exhausted")
+					"Integration branch %s did not descend from the run's starting commit %s — re-cut from it",
+					mapStr(gitInit, "integration_branch", ""), buildBaseSHA),
+					"build", "git_init", "rebased")
 			}
-			if attempt < maxGitInitRetries {
-				sleepFn(ctx, time.Duration(cfg.GitInitRetryDelay*float64(time.Second)))
-			}
+			// git_init is told to create .worktrees/ and may rewrite
+			// .gitignore; re-assert the exclusions and drop anything it staged.
+			excludeHarnessMetadata(ctx, repoPath)
+			break
+		}
+
+		previousError = mapStr(gitInit, "error_message", "unknown error")
+		deps.Note(ctx, fmt.Sprintf("Git init attempt %d failed: %s", attempt, previousError),
+			"build", "git_init", "failed")
+
+		if attempt == maxGitInitRetries {
+			deps.Note(ctx, fmt.Sprintf(
+				"Git init failed after %d attempts — proceeding without git workflow",
+				maxGitInitRetries), "build", "git_init", "exhausted")
+		}
+		if attempt < maxGitInitRetries {
+			sleepFn(ctx, time.Duration(cfg.GitInitRetryDelay*float64(time.Second)))
 		}
 	}
 
@@ -363,7 +355,7 @@ func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	var verification map[string]any
 	for cycle := 0; cycle <= cfg.MaxVerifyFixCycles; cycle++ {
 		deps.Note(ctx, fmt.Sprintf("Verification cycle %d", cycle), "build", "verify")
-		verification, err = deps.CallTimeout(ctx, cfg.AgentTimeoutSeconds, "run_verifier", map[string]any{
+		verification, err = deps.Call(ctx, "run_verifier", map[string]any{
 			"prd":                planResult["prd"],
 			"repo_path":          repoPath,
 			"artifacts_dir":      planArtifactsDir,
@@ -392,7 +384,7 @@ func Build(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 		deps.Note(ctx, fmt.Sprintf("Verification failed (%d criteria), %d fix cycles remaining",
 			len(failedCriteria), cfg.MaxVerifyFixCycles-cycle), "build", "verify", "retry")
 
-		fixResult, ferr := deps.CallTimeout(ctx, cfg.AgentTimeoutSeconds, "generate_fix_issues", map[string]any{
+		fixResult, ferr := deps.Call(ctx, "generate_fix_issues", map[string]any{
 			"failed_criteria":    failedCriteria,
 			"dag_state":          dagResult,
 			"prd":                planResult["prd"],
@@ -592,7 +584,7 @@ func finalizeRepos(ctx context.Context, deps *Deps, cfg *config.BuildConfig,
 		if repoName != "" {
 			label = fmt.Sprintf("run_repo_finalize (%s)", repoName)
 		}
-		res, ferr := deps.CallTimeout(ctx, cfg.AgentTimeoutSeconds, "run_repo_finalize", map[string]any{
+		res, ferr := deps.Call(ctx, "run_repo_finalize", map[string]any{
 			"repo_path":       path,
 			"artifacts_dir":   artifactsDir,
 			"model":           resolved["git_model"],

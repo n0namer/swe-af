@@ -246,46 +246,6 @@ func TestResumeBuildIDReusesExistingIssueWorktree(t *testing.T) {
 	}
 }
 
-func TestVerifierReceivesActualChangedFiles(t *testing.T) {
-	repo := initRepo(t)
-	callFn := func(ctx context.Context, target string, kwargs map[string]any) (map[string]any, error) {
-		name := target[strings.LastIndex(target, ".")+1:]
-		switch name {
-		case "run_coder":
-			worktree, _ := kwargs["worktree_path"].(string)
-			if err := os.WriteFile(filepath.Join(worktree, "feature.py"), []byte("VALUE = 1\n"), 0o644); err != nil {
-				return nil, err
-			}
-			gitT(t, worktree, "add", "feature.py")
-			gitT(t, worktree, "commit", "-q", "-m", "feat: verifier evidence")
-			return map[string]any{"files_changed": []any{"feature.py"}, "summary": "done", "complete": true}, nil
-		case "run_code_reviewer":
-			return map[string]any{"approved": true, "blocking": false, "summary": "LGTM"}, nil
-		case "run_verifier":
-			completed, ok := kwargs["completed_issues"].([]any)
-			if !ok || len(completed) != 1 {
-				return nil, fmt.Errorf("completed_issues = %#v, want one issue", kwargs["completed_issues"])
-			}
-			issue, ok := completed[0].(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("completed issue type = %T", completed[0])
-			}
-			files, ok := issue["files_changed"].([]any)
-			if !ok || len(files) != 1 || files[0] != "feature.py" {
-				return nil, fmt.Errorf("verifier files_changed = %#v, want [feature.py]", issue["files_changed"])
-			}
-			return map[string]any{"passed": true, "summary": "verified"}, nil
-		default:
-			return nil, fmt.Errorf("unexpected call target: %s", target)
-		}
-	}
-
-	result := runImplement(t, repo, callFn, nil)
-	if result["success"] != true {
-		t.Fatalf("success = %v (result: %v)", result["success"], result["summary"])
-	}
-}
-
 // ---------------------------------------------------------------------------
 // C1 — happy path
 // ---------------------------------------------------------------------------
@@ -379,15 +339,15 @@ func TestDeclaredFileScopeRejectsOutOfScopeMutation(t *testing.T) {
 	}
 }
 
-func TestUncommittedCoderWorkIsCheckpointedButFailsClosed(t *testing.T) {
+func TestUncommittedCoderWorkGetsCheckpointCommit(t *testing.T) {
 	repo := initRepo(t)
 	rec := &recorder{}
 	result := runImplement(t, repo,
 		scriptedCallFn(t, rec, scriptOpts{coderCommits: false, coderWrites: true}),
 		map[string]any{"config": map[string]any{"verify": false}})
 
-	if result["success"] != false || result["outcome"] != "failed_unrecoverable" {
-		t.Fatalf("uncommitted coder work must fail closed: success=%v outcome=%v", result["success"], result["outcome"])
+	if result["success"] != true {
+		t.Fatalf("success = %v", result["success"])
 	}
 	branch := result["branch"].(string)
 	msg := gitT(t, repo, "log", "-1", "--format=%s", branch)
@@ -396,7 +356,7 @@ func TestUncommittedCoderWorkIsCheckpointedButFailsClosed(t *testing.T) {
 	}
 }
 
-func TestBytecodeJunkNeverLandsOnCheckpointedFailedBranch(t *testing.T) {
+func TestBytecodeJunkNeverLandsOnBranch(t *testing.T) {
 	// The real coder runs tests in the worktree, generating __pycache__, and
 	// a sloppy model may even commit it. Neither may reach the branch.
 	repo := initRepo(t)
@@ -418,8 +378,8 @@ func TestBytecodeJunkNeverLandsOnCheckpointedFailedBranch(t *testing.T) {
 	result := runImplement(t, repo, callFn,
 		map[string]any{"config": map[string]any{"verify": false}})
 
-	if result["success"] != false || result["outcome"] != "failed_unrecoverable" {
-		t.Fatalf("dirty coder work must fail closed after safe checkpoint: success=%v outcome=%v", result["success"], result["outcome"])
+	if result["success"] != true {
+		t.Fatalf("success = %v", result["success"])
 	}
 	for _, f := range result["files_changed"].([]string) {
 		if strings.Contains(f, "__pycache__") || strings.HasSuffix(f, ".pyc") {
