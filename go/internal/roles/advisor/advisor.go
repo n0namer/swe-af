@@ -2,12 +2,10 @@ package advisor
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/config"
 	"github.com/Agent-Field/SWE-AF/go/internal/fatal"
@@ -159,16 +157,7 @@ func RunIssueAdvisor(ctx context.Context, deps *Deps, input map[string]any) (any
 	}
 
 	cwd := in.WorktreePath
-	if artifactsDir := getStr(in.DAGStateSummary, "artifacts_dir", ""); artifactsDir != "" {
-		issueDir := base64.RawURLEncoding.EncodeToString([]byte(issueName))
-		if issueDir == "" {
-			issueDir = "unknown"
-		}
-		cwd = filepath.Join(artifactsDir, "runtime", "issue-advisor", issueDir, strconv.Itoa(in.AdvisorInvocation))
-		if err := os.MkdirAll(cwd, 0o755); err != nil {
-			return nil, fmt.Errorf("create issue advisor runtime dir: %w", err)
-		}
-	} else if cwd == "" {
+	if cwd == "" {
 		cwd = getStr(in.DAGStateSummary, "repo_path", ".")
 	}
 	provider, err := runtimex.RuntimeToHarnessAdapter(in.AIProvider)

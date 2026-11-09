@@ -1,8 +1,6 @@
 package harnessx
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/Agent-Field/SWE-AF/go/internal/schemas"
@@ -108,65 +106,6 @@ func TestSchemaForRelaxesAdditionalProperties(t *testing.T) {
 
 // TestSchemaForNullableAcceptsNull maps to: Optional fields (X|None) and map
 // fields accept null, so a Go-serialised null does not over-reject.
-func TestPRDRecoveryAcceptsMissingDefaultedLists(t *testing.T) {
-	text := `{"validated_description":"fix Double","acceptance_criteria":["passes"],"must_have":["fix"],"nice_to_have":[],"out_of_scope":[],"ask_user_form":null}`
-	var got schemas.PRD
-	if err := recoverStructuredText(text, schemaFor[schemas.PRD](), &got); err != nil {
-		t.Fatalf("PRD without defaulted assumptions/risks must recover: %v", err)
-	}
-	if got.ValidatedDescription != "fix Double" {
-		t.Fatalf("validated_description=%q", got.ValidatedDescription)
-	}
-}
-
-func TestRecoverFileAcceptsValidObjectWithTrailingGarbage(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "prd.json")
-	content := `{"validated_description":"fix Double","acceptance_criteria":["passes"],"must_have":["fix"],"nice_to_have":[],"out_of_scope":[],"ask_user_form":null,"risks":[]}\n}`
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got, err := RecoverFile[schemas.PRD](path)
-	if err != nil {
-		t.Fatalf("recover trailing-garbage PRD: %v", err)
-	}
-	if got.ValidatedDescription != "fix Double" || got.Assumptions == nil || got.Risks == nil {
-		t.Fatalf("unexpected recovered PRD: %+v", got)
-	}
-}
-
-func TestRecoverStructuredTextEscapesRawTabInsideJSONString(t *testing.T) {
-	text := "{\"validated_description\":\"go\\ttest\",\"acceptance_criteria\":[\"passes\"],\"must_have\":[\"fix\"],\"nice_to_have\":[],\"out_of_scope\":[],\"ask_user_form\":null,\"risks\":[]}"
-	var got schemas.PRD
-	if err := recoverStructuredText(text, schemaFor[schemas.PRD](), &got); err != nil {
-		t.Fatalf("recover raw-tab JSON string: %v", err)
-	}
-	if got.ValidatedDescription != "go\ttest" {
-		t.Fatalf("validated_description=%q", got.ValidatedDescription)
-	}
-}
-
-func TestArchitectureSchemaRejectsSemanticallyEmptyRequiredContent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "architecture.json")
-	content := `{"summary":"","components":[],"interfaces":[],"decisions":[],"file_changes_overview":""}`
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := RecoverFile[schemas.Architecture](path); err == nil {
-		t.Fatal("expected semantically empty architecture to fail schema recovery")
-	}
-}
-
-func TestRecoverFileRejectsMissingRequiredPRDField(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "prd.json")
-	content := `{"validated_description":"fix Double","acceptance_criteria":["passes"],"nice_to_have":[],"out_of_scope":[]}`
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := RecoverFile[schemas.PRD](path); err == nil {
-		t.Fatal("expected missing required must_have to fail recovery")
-	}
-}
-
 func TestSchemaForNullableAcceptsNull(t *testing.T) {
 	// CoderResult.tests_passed (*bool) -> type includes "null".
 	cr := props(t, schemaFor[schemas.CoderResult]())

@@ -332,16 +332,40 @@ func (s *server) runChild(conn net.Conn, input io.Reader, entry registryRow, nam
 	go func() { _, err := io.Copy(conn, stdout); done <- err }()
 	_, copyErr := io.Copy(stdin, input)
 	_ = stdin.Close()
+
+	// StdoutPipe requires reads to finish before Wait. Concurrent Wait can
+	// close the pipe before a fast child response is drained.
+	deadline := time.Now().Add(time.Second)
+	timer := time.NewTimer(time.Until(deadline))
+	var outputErr error
+	select {
+	case outputErr = <-done:
+		if !timer.Stop() {
+			<-timer.C
+		}
+	case <-timer.C:
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		outputErr = <-done
+	}
 	wait := make(chan error, 1)
 	go func() { wait <- cmd.Wait() }()
 	var waitErr error
-	select {
-	case waitErr = <-wait:
-	case <-time.After(time.Second):
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		waitErr = <-wait
+	} else {
+		timer = time.NewTimer(remaining)
+		select {
+		case waitErr = <-wait:
+			if !timer.Stop() {
+				<-timer.C
+			}
+		case <-timer.C:
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			waitErr = <-wait
+		}
 	}
-	outputErr := <-done
 	if waitErr != nil {
 		log.Printf("furrowd: furrow child exited non-zero: %v", waitErr)
 	}

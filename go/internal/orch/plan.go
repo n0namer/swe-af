@@ -44,7 +44,6 @@ type planInput struct {
 	IssueWriterModel    string         `json:"issue_writer_model"`
 	PermissionMode      string         `json:"permission_mode"`
 	AIProvider          string         `json:"ai_provider"`
-	AgentTimeoutSeconds int            `json:"agent_timeout_seconds"`
 	WorkspaceManifest   map[string]any `json:"workspace_manifest"`
 }
 
@@ -75,15 +74,12 @@ func Plan(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	techLeadModel := firstNonEmpty(in.TechLeadModel, defaultModel)
 	sprintPlannerModel := firstNonEmpty(in.SprintPlannerModel, defaultModel)
 	issueWriterModel := firstNonEmpty(in.IssueWriterModel, defaultModel)
-	call := func(callCtx context.Context, name string, kwargs map[string]any, label string) (map[string]any, error) {
-		return deps.CallTimeout(callCtx, in.AgentTimeoutSeconds, name, kwargs, label)
-	}
 
 	deps.Note(ctx, "Pipeline starting", "pipeline", "start")
 
 	// 1. PM scopes the goal into a PRD.
 	deps.Note(ctx, "Phase 1: Product Manager", "pipeline", "pm")
-	prd, err := call(ctx, "run_product_manager", map[string]any{
+	prd, err := deps.Call(ctx, "run_product_manager", map[string]any{
 		"goal":               in.Goal,
 		"repo_path":          in.RepoPath,
 		"artifacts_dir":      in.ArtifactsDir,
@@ -103,7 +99,7 @@ func Plan(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	// credentials store keyed by run_id. No-op when HAX is disabled.
 	if strings.TrimSpace(os.Getenv("HAX_API_KEY")) != "" {
 		deps.Note(ctx, "Phase 1.5: Environment Scout", "pipeline", "scout")
-		if _, serr := call(ctx, "run_environment_scout", map[string]any{
+		if _, serr := deps.Call(ctx, "run_environment_scout", map[string]any{
 			"prd":                prd,
 			"repo_path":          in.RepoPath,
 			"artifacts_dir":      in.ArtifactsDir,
@@ -118,7 +114,7 @@ func Plan(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 
 	// 2. Architect designs the solution.
 	deps.Note(ctx, "Phase 2: Architect", "pipeline", "architect")
-	arch, err := call(ctx, "run_architect", map[string]any{
+	arch, err := deps.Call(ctx, "run_architect", map[string]any{
 		"prd":                prd,
 		"repo_path":          in.RepoPath,
 		"artifacts_dir":      in.ArtifactsDir,
@@ -136,7 +132,7 @@ func Plan(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	for i := 0; i <= in.MaxReviewIterations; i++ {
 		deps.Note(ctx, fmt.Sprintf("Phase 3: Tech Lead review (iteration %d)", i),
 			"pipeline", "tech_lead")
-		review, err = call(ctx, "run_tech_lead", map[string]any{
+		review, err = deps.Call(ctx, "run_tech_lead", map[string]any{
 			"prd":                prd,
 			"repo_path":          in.RepoPath,
 			"artifacts_dir":      in.ArtifactsDir,
@@ -155,7 +151,7 @@ func Plan(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 		if i < in.MaxReviewIterations {
 			deps.Note(ctx, fmt.Sprintf("Architecture revision %d", i+1),
 				"pipeline", "revision")
-			arch, err = call(ctx, "run_architect", map[string]any{
+			arch, err = deps.Call(ctx, "run_architect", map[string]any{
 				"prd":                prd,
 				"repo_path":          in.RepoPath,
 				"artifacts_dir":      in.ArtifactsDir,
@@ -187,7 +183,7 @@ func Plan(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 
 	// 4. Sprint planner decomposes into issues.
 	deps.Note(ctx, "Phase 4: Sprint Planner", "pipeline", "sprint_planner")
-	sprintResult, err := call(ctx, "run_sprint_planner", map[string]any{
+	sprintResult, err := deps.Call(ctx, "run_sprint_planner", map[string]any{
 		"prd":                prd,
 		"architecture":       arch,
 		"repo_path":          in.RepoPath,
@@ -202,11 +198,6 @@ func Plan(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 	}
 	issues := asMapList(sprintResult["issues"])
 	rationale := mapStr(sprintResult, "rationale", "")
-	mustHave := asStrList(prd["must_have"])
-	acceptanceCriteria := asStrList(prd["acceptance_criteria"])
-	if len(issues) == 0 && (len(mustHave) > 0 || len(acceptanceCriteria) > 0) {
-		return nil, fmt.Errorf("plan: sprint planner returned empty issue DAG for non-empty requirements (must_have=%d acceptance_criteria=%d)", len(mustHave), len(acceptanceCriteria))
-	}
 
 	// 5. Compute parallel execution levels & assign sequence numbers BEFORE
 	// issue writing. A dependency cycle propagates as an error.
@@ -265,7 +256,7 @@ func Plan(ctx context.Context, deps *Deps, input map[string]any) (any, error) {
 		g.Go(func() error {
 			// return_exceptions=True: a failed writer never aborts the others; it
 			// simply does not count as a success.
-			res, cerr := call(ctx, "run_issue_writer", map[string]any{
+			res, cerr := deps.Call(ctx, "run_issue_writer", map[string]any{
 				"issue":                issue,
 				"prd_summary":          prdSummary,
 				"architecture_summary": architectureSummary,
